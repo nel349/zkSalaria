@@ -1,0 +1,192 @@
+pragma language_version >= 0.13.0;
+
+import CompactStandardLibrary;
+import "../../pay-commons/PayrollTokens" prefix PT_;
+
+// zkSalaria - Private Payroll System
+// Privacy-preserving payroll with real token operations
+
+export { CoinInfo };
+
+// ========================================
+// LEDGER STATE
+// ========================================
+
+// Identity registries (hash commitments only)
+export ledger company_accounts: Map<Bytes<32>, Bytes<32>>;
+export ledger employee_accounts: Map<Bytes<32>, Bytes<32>>;
+
+// Token balance tracking
+export ledger company_balances: Map<Bytes<32>, Uint<64>>;
+export ledger employee_balances: Map<Bytes<32>, Uint<64>>;
+
+// Token system state
+export ledger nonce: Bytes<32>;
+export ledger token_counter: Counter;
+export ledger total_supply: Uint<64>;
+
+// Counters for metrics
+export ledger total_companies: Counter;
+export ledger total_employees: Counter;
+export ledger total_payments: Counter;
+
+// System state
+export ledger current_timestamp: Uint<32>;
+
+constructor(initNonce: Bytes<32>) {
+  nonce = disclose(initNonce);
+  current_timestamp = 1000000 as Uint<32>;
+  total_supply = 0 as Uint<64>;
+}
+
+// ========================================
+// TOKEN OPERATIONS (Testing/Bootstrap)
+// ========================================
+
+// Mint tokens for testing (will be replaced with real token deposits later)
+export circuit mint_tokens(amount: Uint<64>): [] {
+  assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
+
+  token_counter.increment(1);
+  const newNonce = evolveNonce(token_counter, nonce);
+
+  mintToken(
+    pad(32, "zksalaria_payroll_token"),
+    disclose(amount),
+    newNonce,
+    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
+  );
+
+  total_supply = (total_supply + disclose(amount)) as Uint<64>;
+  nonce = newNonce;
+}
+
+// ========================================
+// COMPANY OPERATIONS
+// ========================================
+
+// Register a new company
+export circuit register_company(
+  company_id: Bytes<32>,
+  company_name: Bytes<64>
+): [] {
+  assert(!company_accounts.member(disclose(company_id)), "Company already exists");
+
+  const company_hash = persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "zksalaria:company:"),
+    company_id
+  ]);
+
+  company_accounts.insert(disclose(company_id), disclose(company_hash));
+  total_companies.increment(1);
+}
+
+// Company deposits funds to treasury (mints payroll tokens)
+export circuit deposit_company_funds(
+  company_id: Bytes<32>,
+  amount: Uint<64>
+): [] {
+  assert(company_accounts.member(disclose(company_id)), "Company not found");
+  assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
+
+  // Evolve nonce for unique token operation
+  token_counter.increment(1);
+  const newNonce = evolveNonce(token_counter, nonce);
+
+  // Mint payroll tokens
+  mintToken(
+    pad(32, "zksalaria_payroll_token"),
+    disclose(amount),
+    newNonce,
+    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
+  );
+
+  // Update company balance
+  const current_balance = company_balances.member(disclose(company_id)) ?
+    company_balances.lookup(disclose(company_id)) : 0 as Uint<64>;
+  const new_balance = (current_balance + disclose(amount)) as Uint<64>;
+  company_balances.insert(disclose(company_id), disclose(new_balance));
+
+  // Update total supply
+  total_supply = (total_supply + disclose(amount)) as Uint<64>;
+  nonce = newNonce;
+}
+
+// ========================================
+// EMPLOYEE OPERATIONS
+// ========================================
+
+// Register a new employee
+export circuit add_employee(
+  company_id: Bytes<32>,
+  employee_id: Bytes<32>
+): [] {
+  assert(company_accounts.member(disclose(company_id)), "Company not found");
+  assert(!employee_accounts.member(disclose(employee_id)), "Employee already exists");
+
+  const employee_hash = persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "zksalaria:employee:"),
+    employee_id
+  ]);
+
+  employee_accounts.insert(disclose(employee_id), disclose(employee_hash));
+  total_employees.increment(1);
+}
+
+// Employee withdraws earned salary (burns payroll tokens)
+export circuit withdraw_employee_salary(
+  employee_id: Bytes<32>,
+  amount: Uint<64>
+): [] {
+  assert(employee_balances.member(disclose(employee_id)), "Employee account not found");
+
+  const current_balance = employee_balances.lookup(disclose(employee_id));
+  assert(PT_has_sufficient_balance(current_balance, disclose(amount)), "Insufficient balance");
+
+  // Update employee balance
+  const new_balance = (current_balance - disclose(amount)) as Uint<64>;
+  employee_balances.insert(disclose(employee_id), disclose(new_balance));
+
+  // Decrease total supply (tokens withdrawn/burned)
+  total_supply = (total_supply - disclose(amount)) as Uint<64>;
+}
+
+// ========================================
+// PAYMENT OPERATIONS
+// ========================================
+
+// Process single salary payment (company -> employee)
+export circuit pay_employee(
+  company_id: Bytes<32>,
+  employee_id: Bytes<32>,
+  salary_amount: Uint<64>
+): [] {
+  assert(company_accounts.member(disclose(company_id)), "Company not found");
+  assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
+  assert(company_balances.member(disclose(company_id)), "Company has no funds");
+
+  const company_balance = company_balances.lookup(disclose(company_id));
+  assert(PT_has_sufficient_balance(company_balance, disclose(salary_amount)), "Insufficient company funds");
+
+  const employee_balance = employee_balances.member(disclose(employee_id)) ?
+    employee_balances.lookup(disclose(employee_id)) : 0 as Uint<64>;
+
+  const new_balances = PT_transfer_salary(company_balance, employee_balance, disclose(salary_amount));
+
+  company_balances.insert(disclose(company_id), disclose(new_balances[0]));
+  employee_balances.insert(disclose(employee_id), disclose(new_balances[1]));
+
+  total_payments.increment(1);
+}
+
+// TODO: Add batch payment processing (requires understanding Compact loop constraints)
+// export circuit batch_pay_employees(...)
+
+// ========================================
+// UTILITY FUNCTIONS
+// ========================================
+
+export circuit update_timestamp(new_timestamp: Uint<32>): [] {
+  assert(new_timestamp > current_timestamp, "Timestamp must be in the future");
+  current_timestamp = disclose(new_timestamp);
+}

@@ -4,10 +4,13 @@
 if [ -f .compile-cache ]; then
   # Check if any .compact file is newer than the cache
   if [ -z "$(find src -name '*.compact' -newer .compile-cache)" ]; then
-    echo "Using cached compilation results"
+    echo "✓ Using cached compilation results (source unchanged)"
     exit 0
+  else
+    echo "→ Source files changed, recompiling..."
   fi
+else
+  echo "→ No cache found, compiling contracts..."
 fi
 
-# Cache doesn't exist or source files have changed
 exit 1

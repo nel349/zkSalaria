@@ -1,13 +1,13 @@
 {
-  "name": "@midnight-pay/workspace",
+  "name": "@zkSalaria/workspace",
   "version": "0.1.0",
-  "description": "Midnight Pay - Privacy-Preserving Payment Gateway Workspace",
+  "description": "Midnight ZkSalaria - Private Payroll System Workspace",
   "author": "Midnight Developer",
   "license": "MIT",
   "private": true,
   "packageManager": "npm@10.0.0",
   "workspaces": [
-    "pay-contract",
+    "payroll-contract",
     "pay-api",
     "pay-ui",
     "pay-commons"
@@ -28,7 +28,7 @@
     "config:local": "cp pay-ui/public/config.local.json pay-ui/public/config.json",
     "build:ui:testnet": "turbo run build --filter=@midnight-pay/pay-api && cd pay-ui && npm run build:testnet",
     "recompile": "turbo run build --filter=@midnight-pay/pay-contract",
-    "update-keys": "cd pay-contract && npm run update-api-resources",
+    "update-keys": "cd payroll-contract && npm run update-api-resources",
     "copy-keys-to-ui": "cd pay-api && npm run copy-keys-to-ui",
     "clean": "turbo run clean"
   },
