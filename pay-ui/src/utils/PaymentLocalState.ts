@@ -2,7 +2,7 @@ export type SavedPaymentGateway = {
   contractAddress: string;
   label?: string;
   createdAt: string; // ISO
-  lastUsedAt?: string; // ISO
+  lastUsedAt?: string | null; // ISO
 };
 
 export type SavedPaymentUser = {
@@ -11,7 +11,7 @@ export type SavedPaymentUser = {
   entityType: 'merchant' | 'customer';
   label?: string;
   createdAt: string; // ISO
-  lastUsedAt?: string; // ISO
+  lastUsedAt?: string | null; // ISO
 };
 
 const PAYMENT_GATEWAYS_KEY = 'payment-ui.gateways';
