@@ -9,11 +9,12 @@ export enum PaymentType {
 }
 
 // Payment record structure (matches PayrollCommons.compact PaymentRecord)
+// NOTE: All numeric types use bigint to match Compact runtime expectations
 export interface PaymentRecord {
-  timestamp: number;
-  amount: bigint;
-  company_id: Uint8Array;
-  payment_type: number; // PaymentType enum
+  timestamp: bigint;  // Uint<32> in Compact
+  amount: bigint;     // Uint<64> in Compact
+  company_id: Uint8Array; // Bytes<32> in Compact
+  payment_type: bigint;   // Uint<8> in Compact (0=salary, 1=advance, 2=bonus)
 }
 
 // Private state structure for payroll system

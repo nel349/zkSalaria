@@ -28,24 +28,18 @@ export const payrollWitnesses = {
   employee_payment_history: (
     { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
     employeeId: Uint8Array
-  ): [PayrollPrivateState, PaymentRecord[]] => {
+  ): [PayrollPrivateState, any] => {
     const employeeIdStr = Buffer.from(employeeId).toString('hex');
-    const history = privateState.employeePaymentHistory.get(employeeIdStr) || [];
+    const history = privateState.employeePaymentHistory.get(employeeIdStr);
 
-    // Return last 12 payments (for credit scoring)
-    const last12 = history.slice(-12);
-
-    // Pad to 12 records if fewer (zeros)
-    while (last12.length < 12) {
-      last12.unshift({
-        timestamp: 0,
-        amount: 0n,
-        company_id: new Uint8Array(32),
-        payment_type: 0
-      });
+    // If no history exists, return what was previously stored or let the setter handle initialization
+    if (!history) {
+      // Return an empty vector - the circuit should have set this via set_employee_payment_history first
+      return [privateState, []];
     }
 
-    return [privateState, last12];
+    // Return the history as-is (it should already be in the correct format from the setter)
+    return [privateState, history];
   },
 
   // Witness: Set employee payment history

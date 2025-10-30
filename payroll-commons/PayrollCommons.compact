@@ -31,6 +31,22 @@ module PayrollCommons {
     };
   }
 
+  // Helper to create empty payment history (for new employees)
+  export pure circuit create_empty_history(): Vector<12, PaymentRecord> {
+    const empty_record = PaymentRecord {
+      timestamp: 0 as Uint<32>,
+      amount: 0 as Uint<64>,
+      company_id: pad(32, ""),
+      payment_type: 0 as Uint<8>
+    };
+
+    return [
+      empty_record, empty_record, empty_record, empty_record,
+      empty_record, empty_record, empty_record, empty_record,
+      empty_record, empty_record, empty_record, empty_record
+    ];
+  }
+
   // Helper to append payment to history (shifts old records, adds new one)
   export pure circuit append_to_history(
     history: Vector<12, PaymentRecord>,

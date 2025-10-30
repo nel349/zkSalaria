@@ -179,37 +179,30 @@ export class PayrollTestSetup {
     return this.getLedgerState().total_supply;
   }
 
-  // Helper: Get company balance (from public ledger - will be removed after witness migration)
+  // Helper: Get company balance (from PRIVATE STATE - witnesses)
   getCompanyBalance(companyId: string): bigint {
+    const privateState = this.getPrivateState();
+    // Convert string to bytes then to hex to match witness encoding
     const companyIdBytes = this.stringToBytes32(companyId);
-    const ledgerState = this.getLedgerState();
-
-    const balancesMap = ledgerState.company_balances;
-    for (const [key, value] of balancesMap) {
-      if (Array.from(key).every((byte, i) => byte === companyIdBytes[i])) {
-        return value;
-      }
-    }
-    return 0n;
+    const companyIdHex = Buffer.from(companyIdBytes).toString('hex');
+    return privateState.companyBalances.get(companyIdHex) || 0n;
   }
 
-  // Helper: Get employee balance (from public ledger - will be removed after witness migration)
+  // Helper: Get employee balance (from PRIVATE STATE - witnesses)
   getEmployeeBalance(employeeId: string): bigint {
+    const privateState = this.getPrivateState();
+    // Convert string to bytes then to hex to match witness encoding
     const employeeIdBytes = this.stringToBytes32(employeeId);
-    const ledgerState = this.getLedgerState();
-
-    const balancesMap = ledgerState.employee_balances;
-    for (const [key, value] of balancesMap) {
-      if (Array.from(key).every((byte, i) => byte === employeeIdBytes[i])) {
-        return value;
-      }
-    }
-    return 0n;
+    const employeeIdHex = Buffer.from(employeeIdBytes).toString('hex');
+    return privateState.employeeBalances.get(employeeIdHex) || 0n;
   }
 
   // Helper: Get employee payment history (from private state - witness)
   getEmployeePaymentHistory(employeeId: string): PaymentRecord[] {
-    return this.turnContext.currentPrivateState.employeePaymentHistory.get(employeeId) || [];
+    // Convert string to bytes then to hex to match witness encoding
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdHex = Buffer.from(employeeIdBytes).toString('hex');
+    return this.turnContext.currentPrivateState.employeePaymentHistory.get(employeeIdHex) || [];
   }
 
   // Debug helper: Print current payroll state
