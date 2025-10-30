@@ -1,7 +1,7 @@
 pragma language_version >= 0.13.0;
 
 import CompactStandardLibrary;
-import "../../pay-commons/PayrollTokens" prefix PT_;
+import "../../payroll-commons/PayrollTokens" prefix PT_;
 
 // zkSalaria - Private Payroll System
 // Privacy-preserving payroll with real token operations
