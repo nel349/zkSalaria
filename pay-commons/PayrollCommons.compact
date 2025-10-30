@@ -1,0 +1,75 @@
+pragma language_version >= 0.13.0;
+
+module PayrollCommons {
+  import CompactStandardLibrary;
+
+  // Payment types for categorization
+  export pure circuit PAYMENT_TYPE_SALARY(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit PAYMENT_TYPE_ADVANCE(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit PAYMENT_TYPE_BONUS(): Uint<8> { return 2 as Uint<8>; }
+
+  // Payment record for history tracking (used by ZKML credit scoring)
+  export struct PaymentRecord {
+    timestamp: Uint<32>;      // When payment was made
+    amount: Uint<64>;         // Payment amount
+    company_id: Bytes<32>;    // Which company paid
+    payment_type: Uint<8>;    // 0=salary, 1=advance, 2=bonus
+  }
+
+  // Helper to create a new payment record
+  export pure circuit create_payment_record(
+    timestamp: Uint<32>,
+    amount: Uint<64>,
+    company_id: Bytes<32>,
+    payment_type: Uint<8>
+  ): PaymentRecord {
+    return PaymentRecord {
+      timestamp: timestamp,
+      amount: amount,
+      company_id: company_id,
+      payment_type: payment_type
+    };
+  }
+
+  // Helper to append payment to history (shifts old records, adds new one)
+  export pure circuit append_to_history(
+    history: Vector<12, PaymentRecord>,
+    new_record: PaymentRecord
+  ): Vector<12, PaymentRecord> {
+    // Shift all records left (oldest drops off)
+    // Add new record at the end
+    return [
+      history[1],
+      history[2],
+      history[3],
+      history[4],
+      history[5],
+      history[6],
+      history[7],
+      history[8],
+      history[9],
+      history[10],
+      history[11],
+      new_record
+    ];
+  }
+
+  // Note: ML feature calculations (consistency score, average payment, variance, etc.)
+  // are done LOCALLY using Python/EZKL, NOT in the smart contract.
+  // The contract only stores payment history and verifies ZKML proofs.
+
+  // Hash function for domain separation
+  export pure circuit hash_employee_id(employee_id: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([
+      pad(32, "zksalaria:employee:"),
+      employee_id
+    ]);
+  }
+
+  export pure circuit hash_company_id(company_id: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>([
+      pad(32, "zksalaria:company:"),
+      company_id
+    ]);
+  }
+}
