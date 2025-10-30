@@ -1,5 +1,5 @@
-import { type Ledger, ledger } from '../managed/pay/contract/index.cjs';
-import { Contract, type PaymentPrivateState, createPaymentPrivateState, paymentWitnesses } from '../index.js';
+import { type Ledger, ledger } from '../managed/payroll/contract/index.cjs';
+import { Contract, type PayrollPrivateState, createPayrollPrivateState, payrollWitnesses, PaymentRecord } from '../index.js';
 import {
   CircuitContext,
   constructorContext,
@@ -7,35 +7,29 @@ import {
   QueryContext,
 } from '@midnight-ntwrk/compact-runtime';
 
-// Local transaction record for payments (user maintains this separately)
-interface PaymentTransactionRecord {
-  type: 'register_merchant' | 'create_subscription' | 'pause_subscription' | 'resume_subscription' | 'cancel_subscription' | 'process_payment';
-  amount?: bigint;
-  timestamp: Date;
-  merchantId?: string;
-  customerId?: string;
-  subscriptionId?: string;
-  frequency?: number;
-}
-
-// Test setup class for payment gateway contract
-export class PaymentTestSetup {
-  private contract: Contract<PaymentPrivateState, typeof paymentWitnesses>;
-  private turnContext: CircuitContext<PaymentPrivateState>;
+// Test setup class for payroll contract
+export class PayrollTestSetup {
+  private contract: Contract<PayrollPrivateState, typeof payrollWitnesses>;
+  private turnContext: CircuitContext<PayrollPrivateState>;
   private contractAddress: string;
-  private localTransactionLogs: Map<string, PaymentTransactionRecord[]> = new Map();
 
-  constructor() {
-    // Initialize payment contract with witnesses
-    this.contract = new Contract(paymentWitnesses);
+  constructor(initNonce: string = '0'.repeat(64)) {
+    // Initialize payroll contract with witnesses
+    this.contract = new Contract(payrollWitnesses);
     this.contractAddress = sampleContractAddress();
 
-    // Initialize with empty payment private state
-    const initialPrivateState = createPaymentPrivateState();
+    // Initialize with empty payroll private state
+    const initialPrivateState = createPayrollPrivateState();
+
+    // Convert init nonce to Uint8Array for constructor
+    const nonceBytes = this.hexToBytes32(initNonce);
 
     // Get initial state from contract
-    const { currentPrivateState, currentContractState, currentZswapLocalState } = this.contract.initialState(
-      constructorContext(initialPrivateState, '0'.repeat(64))
+    // Note: payroll.compact constructor takes initNonce: Bytes<32>
+    // Pass constructor args separately: (context, ...constructorArgs)
+    const { currentPrivateState, currentContractState, currentZswapLocalState} = this.contract.initialState(
+      constructorContext(initialPrivateState, initNonce),
+      nonceBytes
     );
 
     // Set up turn context
@@ -46,7 +40,7 @@ export class PaymentTestSetup {
       transactionContext: new QueryContext(currentContractState.data, sampleContractAddress()),
     };
 
-    console.log('💳 Payment Gateway initialized with empty state');
+    console.log('💼 Payroll system initialized');
   }
 
   // Helper to convert string to Bytes<32>
@@ -58,12 +52,21 @@ export class PaymentTestSetup {
     return bytes;
   }
 
-  // Helper to convert string to Bytes<64> for business names
+  // Helper to convert string to Bytes<64>
   private stringToBytes64(str: string): Uint8Array {
     const bytes = new Uint8Array(64);
     const encoder = new TextEncoder();
     const encoded = encoder.encode(str);
     bytes.set(encoded.slice(0, Math.min(encoded.length, 64)));
+    return bytes;
+  }
+
+  // Helper to convert hex string to Bytes<32>
+  private hexToBytes32(hex: string): Uint8Array {
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < Math.min(hex.length, 64); i += 2) {
+      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
     return bytes;
   }
 
@@ -73,192 +76,65 @@ export class PaymentTestSetup {
     return ledger(this.turnContext.transactionContext.state);
   }
 
-  // Helper to record transaction
-  private recordTransaction(entityId: string, record: PaymentTransactionRecord): void {
-    if (!this.localTransactionLogs.has(entityId)) {
-      this.localTransactionLogs.set(entityId, []);
-    }
-    this.localTransactionLogs.get(entityId)!.push(record);
+  // Test method: Register company
+  registerCompany(companyId: string, companyName: string): Ledger {
+    console.log(`🏢 Registering company ${companyId}: ${companyName}`);
+
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const companyNameBytes = this.stringToBytes64(companyName);
+
+    const results = this.contract.impureCircuits.register_company(this.turnContext, companyIdBytes, companyNameBytes);
+    return this.updateStateAndGetLedger(results);
   }
 
-  // Test method: Register merchant
-  registerMerchant(merchantId: string, businessName: string): Ledger {
-    console.log(`🏪 Registering merchant ${merchantId} with business name: ${businessName}`);
+  // Test method: Add employee
+  addEmployee(companyId: string, employeeId: string): Ledger {
+    console.log(`👤 Adding employee ${employeeId} to company ${companyId}`);
 
-    const merchantIdBytes = this.stringToBytes32(merchantId);
-    const businessNameBytes = this.stringToBytes64(businessName);
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const employeeIdBytes = this.stringToBytes32(employeeId);
 
-    const results = this.contract.impureCircuits.register_merchant(this.turnContext, merchantIdBytes, businessNameBytes);
-    const ledger = this.updateStateAndGetLedger(results);
-
-    this.recordTransaction(merchantId, {
-      type: 'register_merchant',
-      timestamp: new Date(),
-      merchantId: merchantId
-    });
-
-    return ledger;
+    const results = this.contract.impureCircuits.add_employee(this.turnContext, companyIdBytes, employeeIdBytes);
+    return this.updateStateAndGetLedger(results);
   }
 
-  // Test method: Create subscription
-  createSubscription(
-    merchantId: string,
-    customerId: string,
-    amount: bigint,
-    maxAmount: bigint,
-    frequencyDays: number
-  ): { ledger: Ledger, subscriptionId: Uint8Array } {
-    console.log(`📝 Creating subscription: customer ${customerId} → merchant ${merchantId}, $${amount} every ${frequencyDays} days`);
+  // Test method: Mint tokens (for testing)
+  mintTokens(amount: bigint): Ledger {
+    console.log(`🪙 Minting ${amount} tokens for testing`);
 
-    const merchantIdBytes = this.stringToBytes32(merchantId);
-    const customerIdBytes = this.stringToBytes32(customerId);
-    const frequencyDaysBigInt = BigInt(frequencyDays);
-
-    const results = this.contract.impureCircuits.create_subscription(
-      this.turnContext,
-      merchantIdBytes,
-      customerIdBytes,
-      amount,
-      maxAmount,
-      frequencyDaysBigInt
-    );
-
-    const ledger = this.updateStateAndGetLedger(results);
-    const subscriptionId = results.result;
-
-    // Convert subscriptionId to string for logging
-    let subscriptionIdStr = 'unknown';
-    if (subscriptionId && typeof subscriptionId.slice === 'function') {
-      subscriptionIdStr = Array.from(subscriptionId.slice(0, 8) as Uint8Array)
-        .map((b: number) => b.toString(16).padStart(2, '0'))
-        .join('');
-    } else if (subscriptionId) {
-      subscriptionIdStr = 'output_exists_but_no_slice';
-    }
-
-    this.recordTransaction(customerId, {
-      type: 'create_subscription',
-      amount: amount,
-      timestamp: new Date(),
-      merchantId: merchantId,
-      customerId: customerId,
-      subscriptionId: subscriptionIdStr,
-      frequency: frequencyDays
-    });
-
-    return { ledger, subscriptionId };
+    const results = this.contract.impureCircuits.mint_tokens(this.turnContext, amount);
+    return this.updateStateAndGetLedger(results);
   }
 
-  // Test method: Pause subscription
-  pauseSubscription(subscriptionId: Uint8Array, customerId: string): Ledger {
-    console.log(`⏸️ Customer ${customerId} pausing subscription`);
+  // Test method: Deposit company funds
+  depositCompanyFunds(companyId: string, amount: bigint): Ledger {
+    console.log(`💰 Company ${companyId} depositing ${amount} tokens`);
 
-    const customerIdBytes = this.stringToBytes32(customerId);
+    const companyIdBytes = this.stringToBytes32(companyId);
 
-    const results = this.contract.impureCircuits.pause_subscription(this.turnContext, subscriptionId, customerIdBytes);
-    const ledger = this.updateStateAndGetLedger(results);
-
-    const subscriptionIdStr = subscriptionId && typeof subscriptionId.slice === 'function'
-      ? Array.from(subscriptionId.slice(0, 8) as Uint8Array)
-          .map((b: number) => b.toString(16).padStart(2, '0'))
-          .join('')
-      : 'unknown';
-
-    this.recordTransaction(customerId, {
-      type: 'pause_subscription',
-      timestamp: new Date(),
-      customerId: customerId,
-      subscriptionId: subscriptionIdStr
-    });
-
-    return ledger;
+    const results = this.contract.impureCircuits.deposit_company_funds(this.turnContext, companyIdBytes, amount);
+    return this.updateStateAndGetLedger(results);
   }
 
-  // Test method: Resume subscription
-  resumeSubscription(subscriptionId: Uint8Array, customerId: string): Ledger {
-    console.log(`▶️ Customer ${customerId} resuming subscription`);
+  // Test method: Pay employee
+  payEmployee(companyId: string, employeeId: string, amount: bigint): Ledger {
+    console.log(`💸 Company ${companyId} paying employee ${employeeId}: ${amount} tokens`);
 
-    const customerIdBytes = this.stringToBytes32(customerId);
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const employeeIdBytes = this.stringToBytes32(employeeId);
 
-    const results = this.contract.impureCircuits.resume_subscription(this.turnContext, subscriptionId, customerIdBytes);
-    const ledger = this.updateStateAndGetLedger(results);
-
-    const subscriptionIdStr = subscriptionId && typeof subscriptionId.slice === 'function'
-      ? Array.from(subscriptionId.slice(0, 8) as Uint8Array)
-          .map((b: number) => b.toString(16).padStart(2, '0'))
-          .join('')
-      : 'unknown';
-
-    this.recordTransaction(customerId, {
-      type: 'resume_subscription',
-      timestamp: new Date(),
-      customerId: customerId,
-      subscriptionId: subscriptionIdStr
-    });
-
-    return ledger;
+    const results = this.contract.impureCircuits.pay_employee(this.turnContext, companyIdBytes, employeeIdBytes, amount);
+    return this.updateStateAndGetLedger(results);
   }
 
-  // Test method: Cancel subscription
-  cancelSubscription(subscriptionId: Uint8Array, customerId: string): Ledger {
-    console.log(`❌ Customer ${customerId} cancelling subscription`);
+  // Test method: Withdraw employee salary
+  withdrawEmployeeSalary(employeeId: string, amount: bigint): Ledger {
+    console.log(`💵 Employee ${employeeId} withdrawing ${amount} tokens`);
 
-    const customerIdBytes = this.stringToBytes32(customerId);
+    const employeeIdBytes = this.stringToBytes32(employeeId);
 
-    const results = this.contract.impureCircuits.cancel_subscription(this.turnContext, subscriptionId, customerIdBytes);
-    const ledger = this.updateStateAndGetLedger(results);
-
-    const subscriptionIdStr = subscriptionId && typeof subscriptionId.slice === 'function'
-      ? Array.from(subscriptionId.slice(0, 8) as Uint8Array)
-          .map((b: number) => b.toString(16).padStart(2, '0'))
-          .join('')
-      : 'unknown';
-
-    this.recordTransaction(customerId, {
-      type: 'cancel_subscription',
-      timestamp: new Date(),
-      customerId: customerId,
-      subscriptionId: subscriptionIdStr
-    });
-
-    return ledger;
-  }
-
-  // Test method: Process subscription payment
-  processSubscriptionPayment(subscriptionId: Uint8Array, serviceProof: string): Ledger {
-    console.log(`💰 Processing subscription payment`);
-
-    const serviceProofBytes = this.stringToBytes32(serviceProof);
-
-    const results = this.contract.impureCircuits.process_subscription_payment(this.turnContext, subscriptionId, serviceProofBytes);
-    const ledger = this.updateStateAndGetLedger(results);
-
-    const subscriptionIdStr = subscriptionId && typeof subscriptionId.slice === 'function'
-      ? Array.from(subscriptionId.slice(0, 8) as Uint8Array)
-          .map((b: number) => b.toString(16).padStart(2, '0'))
-          .join('')
-      : 'unknown';
-
-    this.recordTransaction('system', {
-      type: 'process_payment',
-      timestamp: new Date(),
-      subscriptionId: subscriptionIdStr
-    });
-
-    return ledger;
-  }
-
-  // Test method: Prove active subscriptions count
-  proveActiveSubscriptionsCount(customerId: string, threshold: number): boolean {
-    console.log(`🔍 Checking if customer ${customerId} has at least ${threshold} active subscriptions`);
-
-    const customerIdBytes = this.stringToBytes32(customerId);
-    const thresholdBigInt = BigInt(threshold);
-
-    const results = this.contract.impureCircuits.prove_active_subscriptions_count(this.turnContext, customerIdBytes, thresholdBigInt);
-    this.updateStateAndGetLedger(results);
-
-    return results.result;
+    const results = this.contract.impureCircuits.withdraw_employee_salary(this.turnContext, employeeIdBytes, amount);
+    return this.updateStateAndGetLedger(results);
   }
 
   // Test method: Update timestamp
@@ -274,7 +150,7 @@ export class PaymentTestSetup {
     return ledger(this.turnContext.transactionContext.state);
   }
 
-  getPrivateState(): PaymentPrivateState {
+  getPrivateState(): PayrollPrivateState {
     return this.turnContext.currentPrivateState;
   }
 
@@ -283,119 +159,67 @@ export class PaymentTestSetup {
     return Number(this.getLedgerState().current_timestamp);
   }
 
-  // Helper: Get total merchants
-  getTotalMerchants(): bigint {
-    return this.getLedgerState().total_merchants;
+  // Helper: Get total companies
+  getTotalCompanies(): bigint {
+    return this.getLedgerState().total_companies;
   }
 
-  // Helper: Get total subscriptions
-  getTotalSubscriptions(): bigint {
-    return this.getLedgerState().total_subscriptions;
+  // Helper: Get total employees
+  getTotalEmployees(): bigint {
+    return this.getLedgerState().total_employees;
   }
 
-  // Test method: Deposit customer funds
-  depositCustomerFunds(customerId: string, amount: bigint): Ledger {
-    console.log(`💰 Depositing ${amount} tokens for customer ${customerId}`);
-
-    const customerIdBytes = this.stringToBytes32(customerId);
-
-    const results = this.contract.impureCircuits.deposit_customer_funds(this.turnContext, customerIdBytes, amount);
-    return this.updateStateAndGetLedger(results);
+  // Helper: Get total payments
+  getTotalPayments(): bigint {
+    return this.getLedgerState().total_payments;
   }
 
-  // Test method: Withdraw customer funds
-  withdrawCustomerFunds(customerId: string, amount: bigint): Ledger {
-    console.log(`💸 Withdrawing ${amount} tokens for customer ${customerId}`);
-
-    const customerIdBytes = this.stringToBytes32(customerId);
-
-    const results = this.contract.impureCircuits.withdraw_customer_funds(this.turnContext, customerIdBytes, amount);
-    return this.updateStateAndGetLedger(results);
+  // Helper: Get total supply
+  getTotalSupply(): bigint {
+    return this.getLedgerState().total_supply;
   }
 
-  // Helper: Get customer balance
-  getCustomerBalance(customerId: string): bigint {
-    const customerIdBytes = this.stringToBytes32(customerId);
-    const ledger = this.getLedgerState();
+  // Helper: Get company balance (from public ledger - will be removed after witness migration)
+  getCompanyBalance(companyId: string): bigint {
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const ledgerState = this.getLedgerState();
 
-    // Check if customer has balance
-    const balancesMap = ledger.customer_balances;
+    const balancesMap = ledgerState.company_balances;
     for (const [key, value] of balancesMap) {
-      if (Array.from(key).every((byte, i) => byte === customerIdBytes[i])) {
+      if (Array.from(key).every((byte, i) => byte === companyIdBytes[i])) {
         return value;
       }
     }
     return 0n;
   }
 
-  // Helper: Get merchant balance
-  getMerchantBalance(merchantId: string): bigint {
-    const merchantIdBytes = this.stringToBytes32(merchantId);
-    const ledger = this.getLedgerState();
+  // Helper: Get employee balance (from public ledger - will be removed after witness migration)
+  getEmployeeBalance(employeeId: string): bigint {
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const ledgerState = this.getLedgerState();
 
-    // Check if merchant has balance
-    const balancesMap = ledger.merchant_balances;
+    const balancesMap = ledgerState.employee_balances;
     for (const [key, value] of balancesMap) {
-      if (Array.from(key).every((byte, i) => byte === merchantIdBytes[i])) {
+      if (Array.from(key).every((byte, i) => byte === employeeIdBytes[i])) {
         return value;
       }
     }
     return 0n;
   }
 
-  // Helper: Get customer active subscription count
-  getCustomerActiveCount(customerId: string): bigint {
-    const customerData = this.turnContext.currentPrivateState.customerData.get(customerId);
-
-    if (!customerData) {
-      return 0n;
-    }
-
-    // Count active subscriptions
-    let activeCount = 0;
-    customerData.subscriptions.forEach((subId: string) => {
-      const subscription = this.turnContext.currentPrivateState.subscriptionData.get(subId);
-      if (subscription && subscription.status === 'active') {
-        activeCount++;
-      }
-    });
-
-    return BigInt(activeCount);
+  // Helper: Get employee payment history (from private state - witness)
+  getEmployeePaymentHistory(employeeId: string): PaymentRecord[] {
+    return this.turnContext.currentPrivateState.employeePaymentHistory.get(employeeId) || [];
   }
 
-  // Debug helper: Print current payment gateway state
-  printPaymentGatewayState(): void {
-    console.log('\n📊 Payment Gateway State:');
-    console.log('├─ Total Merchants:', this.getTotalMerchants().toString());
-    console.log('├─ Total Subscriptions:', this.getTotalSubscriptions().toString());
-    console.log('├─ Current Timestamp:', this.getCurrentTimestamp());
-    console.log('└─ Active Entities:', Array.from(this.localTransactionLogs.keys()).join(', '));
+  // Debug helper: Print current payroll state
+  printPayrollState(): void {
+    console.log('\n📊 Payroll System State:');
+    console.log('├─ Total Companies:', this.getTotalCompanies().toString());
+    console.log('├─ Total Employees:', this.getTotalEmployees().toString());
+    console.log('├─ Total Payments:', this.getTotalPayments().toString());
+    console.log('├─ Total Supply:', this.getTotalSupply().toString());
+    console.log('└─ Current Timestamp:', this.getCurrentTimestamp());
     console.log('');
-  }
-
-  // Helper: Get entity transaction history
-  getEntityTransactionHistory(entityId: string): PaymentTransactionRecord[] {
-    return [...(this.localTransactionLogs.get(entityId) || [])];
-  }
-
-  // Helper: Print entity's detailed transaction history
-  printEntityDetailedHistory(entityId: string): void {
-    const history = this.localTransactionLogs.get(entityId) || [];
-    console.log(`\n📜 ${entityId} Transaction History:`);
-    history.forEach((tx, index) => {
-      const amountStr = tx.amount ? `$${tx.amount}` : 'N/A';
-      const details = [];
-      if (tx.merchantId) details.push(`merchant: ${tx.merchantId}`);
-      if (tx.customerId) details.push(`customer: ${tx.customerId}`);
-      if (tx.frequency) details.push(`frequency: ${tx.frequency}d`);
-      const detailsStr = details.length > 0 ? ` (${details.join(', ')})` : '';
-      console.log(`├─ [${index}] ${tx.type.toUpperCase()}: ${amountStr}${detailsStr} (${tx.timestamp.toLocaleTimeString()})`);
-    });
-    console.log('');
-  }
-
-  // Helper: Get all entities with transaction history
-  getAllEntities(): string[] {
-    return Array.from(this.localTransactionLogs.keys());
   }
 }

@@ -2,6 +2,7 @@ pragma language_version >= 0.13.0;
 
 import CompactStandardLibrary;
 import "../../payroll-commons/PayrollTokens" prefix PT_;
+import "../../payroll-commons/PayrollCommons" prefix PC_;
 
 // zkSalaria - Private Payroll System
 // Privacy-preserving payroll with real token operations
@@ -9,7 +10,7 @@ import "../../payroll-commons/PayrollTokens" prefix PT_;
 export { CoinInfo };
 
 // ========================================
-// LEDGER STATE
+// LEDGER STATE (Public)
 // ========================================
 
 // Identity registries (hash commitments only)
@@ -38,6 +39,21 @@ constructor(initNonce: Bytes<32>) {
   current_timestamp = 1000000 as Uint<32>;
   total_supply = 0 as Uint<64>;
 }
+
+// ========================================
+// WITNESSES (Private State - Local Only)
+// ========================================
+
+// Employee payment history (for ZKML credit scoring)
+witness employee_payment_history(employee_id: Bytes<32>): Vector<12, PC_PaymentRecord>;
+witness set_employee_payment_history(employee_id: Bytes<32>, history: Vector<12, PC_PaymentRecord>): [];
+
+// Private balance tracking
+witness employee_balance(employee_id: Bytes<32>): Uint<64>;
+witness set_employee_balance(employee_id: Bytes<32>, balance: Uint<64>): [];
+
+witness company_balance(company_id: Bytes<32>): Uint<64>;
+witness set_company_balance(company_id: Bytes<32>, balance: Uint<64>): [];
 
 // ========================================
 // TOKEN OPERATIONS (Testing/Bootstrap)
