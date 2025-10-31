@@ -101,84 +101,116 @@
 - [x] Burn/transfer real tokens
 - [x] Update public ledger: only `total_supply` (aggregate)
 
-**Step 5: Add Selective Disclosure Circuits (Using Bank.compact's Shared Key Pattern)**
+**Step 5: Add Selective Disclosure Circuits (COMPLETED ✅)**
 
-**Overview**: Adopt bank.compact's `TransferAuthorization` pattern with shared encryption keys for selective disclosure
+**Overview**: Adopted bank.compact's `TransferAuthorization` pattern with shared encryption keys for selective disclosure
 
-**Add Ledger State**:
-- [ ] Add struct `DisclosureAuthorization` (similar to bank's `TransferAuthorization`):
-  ```compact
-  struct DisclosureAuthorization {
-    grantor_id: Bytes<32>,              // Employee/company granting access
-    grantee_id: Bytes<32>,              // Lender/landlord/auditor receiving access
-    shared_encryption_key: Bytes<32>,   // Key stored on ledger for both parties
-    threshold: Uint<64>,                // For range checks (e.g., "income >= $5k")
-    created_at: Uint<32>,
-    last_updated: Uint<32>,
-    permission_type: Uint<8>,           // 0=INCOME_RANGE, 1=EMPLOYMENT, 2=CREDIT_SCORE, 3=AUDIT
-    expires_at: Uint<32>                // 0=never expires, >0=expiration timestamp
-  }
-  ```
-- [ ] Add `export ledger disclosure_authorizations: Map<Bytes<32>, DisclosureAuthorization>`
-- [ ] Add `export ledger shared_payment_history: Map<Bytes<32>, Bytes<32>>`  // disclosure_id -> shared_encrypted_history
+**🚨 CRITICAL ARCHITECTURE CLARIFICATION - ZKML Design:**
 
-**Implement Grant Circuits**:
-- [ ] `grant_income_disclosure(employee_id, lender_id, min_threshold, expires_in)`:
-  - Generate shared key: `hash([employee_id, lender_id, "income"])`
-  - Create DisclosureAuthorization with shared key stored on ledger
-  - Re-encrypt payment history with shared key
-  - Store in shared_payment_history map
-  - Employee grants lender permission to verify income range
+```
+OFF-CHAIN (Employee's Computer):
+1. Read payment history from blockchain (txids)
+2. Decrypt amounts with private key
+3. Run ML model locally (XGBoost credit scoring) ← EZKL
+4. Generate ZK proof: "Score > 680" ← EZKL
+5. Submit proof + txids to smart contract
 
-- [ ] `grant_employment_disclosure(employee_id, verifier_id, company_id, expires_in)`:
-  - Generate shared key: `hash([employee_id, verifier_id, "employment"])`
-  - Create authorization for employment verification
-  - Verifier can prove: employee works at company (YES/NO), duration, without salary
+ON-CHAIN (Smart Contract):
+1. Verify transactions exist on blockchain ✓
+2. Verify Merkle root matches txids ✓
+3. Verify ZK proof is valid ✓
+4. Store approval (YES/NO result)
 
-- [ ] `grant_audit_disclosure(company_id, auditor_id, audit_type, expires_in)`:
-  - Generate shared key: `hash([company_id, auditor_id, "audit"])`
-  - For pay equity audits / compliance checks
-  - Auditor can verify aggregate metrics without individual salaries
+LENDER:
+1. Read approval from ledger
+2. No access to payment amounts or exact score
+```
 
-**Implement Verify Circuits**:
-- [ ] `verify_income_threshold(disclosure_id) -> Boolean`:
-  - Verifier reads DisclosureAuthorization from ledger
-  - Gets shared_encryption_key from authorization
-  - Decrypts shared_payment_history using shared key
-  - Calculates average income from payment history
-  - Returns: income >= threshold (YES/NO), not exact amount
-  - Checks expiration: `current_timestamp <= expires_at`
+**What Contract DOES:**
+- ✅ Store disclosure authorizations (grant/revoke)
+- ✅ Verify ZK proofs from EZKL (Phase 2)
+- ✅ Track authorization expiration
+- ✅ Store approval results
 
-- [ ] `verify_employment(disclosure_id) -> Boolean`:
-  - Reads authorization and shared key from ledger
-  - Verifies employee registered at company
-  - Returns: employed (YES/NO), duration (>6 months), without salary info
+**What Contract DOES NOT DO:**
+- ❌ Calculate credit scores (done OFF-CHAIN with EZKL)
+- ❌ Calculate averages (done OFF-CHAIN)
+- ❌ Run ML models (done OFF-CHAIN)
+- ❌ Do ANY computation on payment amounts
 
-- [ ] `revoke_disclosure(grantor_id, disclosure_id)`:
-  - Allows employee/company to revoke permission early
-  - Deletes authorization from ledger
-  - Clears shared_payment_history entry
+**Ledger State:**
+- [x] Added struct `DisclosureAuthorization` in PayrollCommons.compact
+- [x] Added `export ledger disclosure_authorizations: Map<Bytes<32>, DisclosureAuthorization>`
+- [x] Added `export ledger shared_payment_history: Map<Bytes<32>, Bytes<32>>`
 
-**Test Scenarios**:
-- [ ] Test: Employee grants lender income disclosure, lender verifies threshold
+**Implemented Circuits (11 total):**
+- [x] `grant_income_disclosure(employee_id, lender_id, min_threshold, expires_in)`:
+  - Stores authorization on ledger
+  - Grants lender permission to submit ZKML proofs
+  - NOTE: Actual credit score calculation happens OFF-CHAIN (EZKL in Phase 2)
+
+- [x] `grant_employment_disclosure(employee_id, verifier_id, company_id, expires_in)`:
+  - Stores authorization for employment verification
+  - Landlord/verifier can submit ZKML proofs to verify employment
+  - Company ID validated but stored separately (threshold not used)
+
+- [x] `grant_audit_disclosure(company_id, auditor_id, expires_in)`:
+  - Stores authorization for compliance/pay equity audits
+  - Auditor can submit ZKML proofs for fairness analysis
+  - Company grants permission for aggregate analysis
+
+- [x] `revoke_disclosure(grantor_id, grantee_id, permission_type)`:
+  - Allows employee/company to revoke access early
+  - Removes authorization from ledger
+  - Removes shared payment history
+
+**Deferred to Phase 2 (ZKML Integration):**
+- [ ] `verify_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`:
+  - Verifies transactions exist on blockchain
+  - Verifies Merkle root consistency
+  - Verifies ZK proof from EZKL
+  - Stores approval result
+  - See ZKML_TECHNICAL_DEEP_DIVE.md for full implementation
+
+- [ ] Employee generates ZKML credit score proof locally (EZKL + Python)
+- [ ] Test end-to-end: payment history → ML → EZKL proof → verification
+
+**Test Scenarios:**
+- [x] Test: Employee grants lender income disclosure (stores auth)
 - [ ] Test: Authorization expires after time limit
-- [ ] Test: Employee revokes disclosure before expiration
-- [ ] Test: Mock landlord verifies employment without seeing salary
-- [ ] Test: Mock auditor verifies pay equity using company disclosure
+- [x] Test: Employee revokes disclosure before expiration
+- [ ] Test: ZKML proof generation and verification (Phase 2)
+- [ ] Test: Merkle proof verification (Phase 2)
+- [ ] Test: Transaction existence verification (Phase 2)
 
-**Key Benefits of This Pattern** (from bank.compact):
-- ✅ Shared key stored on PUBLIC ledger (privacy via obscurity of disclosure_id)
-- ✅ Both parties can independently access without coordination
+**Key Benefits:**
+- ✅ Shared key stored on PUBLIC ledger (privacy via disclosure_id)
 - ✅ Automatic expiration via timestamp checks
 - ✅ Revocable by grantor at any time
-- ✅ Threshold checks reveal YES/NO, not exact values
+- ✅ Ready for ZKML integration (Phase 2)
 - ✅ Multi-party safe (no witness isolation issues)
+- ✅ Follows bank.compact proven patterns
 
-**Important Notes**:
-- ❌ **NO WITNESSES NEEDED**: Keys computed on-demand from participant IDs, not stored in witnesses
-- ❌ **NO PIN NEEDED**: Authentication happens at API layer (company/employee login), not contract layer
-- ✅ **Shared keys on LEDGER**: Following bank.compact pattern - keys stored in DisclosureAuthorization struct on public ledger
-- ✅ **Wallet signature sufficient**: Midnight wallet proves identity, contract derives keys from participant_id
+**Compilation Status:**
+- ✅ 11 circuits compiling successfully:
+  1. mint_tokens
+  2. register_company
+  3. deposit_company_funds
+  4. add_employee
+  5. withdraw_employee_salary
+  6. pay_employee
+  7. update_timestamp
+  8. **grant_income_disclosure** ← NEW (Phase 0 Step 5)
+  9. **grant_employment_disclosure** ← NEW (Phase 0 Step 5)
+  10. **grant_audit_disclosure** ← NEW (Phase 0 Step 5)
+  11. **revoke_disclosure** ← NEW (Phase 0 Step 5)
+
+**Important Architecture Notes:**
+- ❌ **NO IN-CONTRACT COMPUTATION**: Smart contract does NOT calculate averages, scores, or run ML models
+- ✅ **OFF-CHAIN ML**: All ML inference happens locally on employee's computer using EZKL
+- ✅ **ON-CHAIN VERIFICATION**: Smart contract only verifies ZK proofs, doesn't run models
+- ✅ **PHASE 2 FOCUS**: Credit score verification circuit will be added in Phase 2 ZKML integration
+- See **ZKML_TECHNICAL_DEEP_DIVE.md** for complete architecture and implementation details
 
 **Step 6: Split Contracts (If Time Permits)**
 - [ ] Extract PayrollRegistry.compact (registration only)

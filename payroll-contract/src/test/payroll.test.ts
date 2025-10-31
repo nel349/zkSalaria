@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollTestSetup } from './payroll-setup.js';
+import { EmploymentStatus } from '../types.js';
 
 describe('zkSalaria Payroll Tests (Encrypted Balance System)', () => {
   let payroll: PayrollTestSetup;
@@ -385,6 +386,245 @@ describe('zkSalaria Payroll Tests (Encrypted Balance System)', () => {
 
       console.log('✅ Complex workflow test passed');
       payroll.printPayrollState();
+    });
+  });
+
+  describe('Employment Verification System', () => {
+    test('should create employment record when adding employee', () => {
+      // Arrange
+      const companyId = 'COMP100';
+      const employeeId = 'EMP100';
+
+      // Act
+      payroll.registerCompany(companyId, 'Employment Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Assert
+      // Employment record is created with ACTIVE status
+      // We'll verify this through the verify_employment circuit after granting disclosure
+      expect(payroll.getTotalEmployees()).toBe(1n);
+      console.log('✅ Employment record creation test passed');
+    });
+
+    test('should grant employment disclosure and verify active employment', () => {
+      // Arrange
+      const companyId = 'COMP101';
+      const employeeId = 'EMP101';
+      const verifierId = 'LANDLORD001';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Acme Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Act
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0); // 0 = never expires
+
+      // Verify employment
+      const result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert
+      // Result should be 0x01 (employed and active)
+      expect(result[0]).toBe(1);
+      console.log('✅ Employment disclosure and verification test passed');
+    });
+
+    test('should update employment status to inactive', () => {
+      // Arrange
+      const companyId = 'COMP102';
+      const employeeId = 'EMP102';
+      const verifierId = 'LANDLORD002';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Status Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Verify initially active
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(1); // Active
+
+      // Act - Update status to INACTIVE
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.INACTIVE);
+
+      // Verify now inactive
+      result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(0); // Inactive
+      console.log('✅ Employment status update test passed');
+    });
+
+    test('should update employment status to terminated', () => {
+      // Arrange
+      const companyId = 'COMP103';
+      const employeeId = 'EMP103';
+      const verifierId = 'LANDLORD003';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Termination Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Verify initially active
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(1); // Active
+
+      // Act - Update status to TERMINATED
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.TERMINATED);
+
+      // Verify now terminated
+      result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(0); // Not active (terminated)
+      console.log('✅ Employment termination test passed');
+    });
+
+    test('should update employment status to on_leave', () => {
+      // Arrange
+      const companyId = 'COMP104';
+      const employeeId = 'EMP104';
+      const verifierId = 'LANDLORD004';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Leave Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Act - Update status to ON_LEAVE
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.ON_LEAVE);
+
+      // Verify
+      const result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(0); // Not active (on leave)
+      console.log('✅ Employment on_leave test passed');
+    });
+
+    test('should fail to verify employment without disclosure permission', () => {
+      // Arrange
+      const companyId = 'COMP105';
+      const employeeId = 'EMP105';
+      const verifierId = 'LANDLORD005';
+
+      // Setup
+      payroll.registerCompany(companyId, 'No Disclosure Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Act & Assert - Try to verify without disclosure (should fail)
+      expect(() => {
+        payroll.verifyEmployment(employeeId, companyId, verifierId);
+      }).toThrow(); // Should fail "No disclosure permission"
+
+      console.log('✅ No disclosure permission test passed');
+    });
+
+    test('should fail to update status for non-existent employment record', () => {
+      // Arrange
+      const companyId = 'COMP106';
+      const employeeId = 'EMP106';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Act & Assert - Try to update status for wrong company
+      expect(() => {
+        payroll.updateEmploymentStatus('WRONGCOMPANY', employeeId, EmploymentStatus.INACTIVE);
+      }).toThrow(); // Should fail "Company not found" or "Employment record not found"
+
+      console.log('✅ Invalid employment update test passed');
+    });
+
+    test('should handle employment verification with expiration', () => {
+      // Arrange
+      const companyId = 'COMP107';
+      const employeeId = 'EMP107';
+      const verifierId = 'LANDLORD007';
+      const currentTime = payroll.getCurrentTimestamp();
+      const expirationDelta = 3600; // 1 hour in seconds
+
+      // Setup
+      payroll.registerCompany(companyId, 'Expiration Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Grant disclosure with expiration
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, expirationDelta);
+
+      // Verify - should work before expiration
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(1); // Active
+
+      // Act - Advance time past expiration
+      payroll.updateTimestamp(currentTime + expirationDelta + 1);
+
+      // Assert - Should fail after expiration
+      expect(() => {
+        payroll.verifyEmployment(employeeId, companyId, verifierId);
+      }).toThrow(); // Should fail "Authorization expired"
+
+      console.log('✅ Employment disclosure expiration test passed');
+    });
+
+    test('should handle multiple employees at same company', () => {
+      // Arrange
+      const companyId = 'COMP108';
+      const employee1 = 'EMP108';
+      const employee2 = 'EMP109';
+      const verifierId = 'LANDLORD008';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Multi Employee Corp');
+      payroll.addEmployee(companyId, employee1);
+      payroll.addEmployee(companyId, employee2);
+
+      // Grant disclosures
+      payroll.grantEmploymentDisclosure(employee1, verifierId, companyId, 0);
+      payroll.grantEmploymentDisclosure(employee2, verifierId, companyId, 0);
+
+      // Verify both employed
+      let result1 = payroll.verifyEmployment(employee1, companyId, verifierId);
+      let result2 = payroll.verifyEmployment(employee2, companyId, verifierId);
+
+      expect(result1[0]).toBe(1); // Active
+      expect(result2[0]).toBe(1); // Active
+
+      // Act - Terminate employee1, keep employee2 active
+      payroll.updateEmploymentStatus(companyId, employee1, EmploymentStatus.TERMINATED);
+
+      // Assert
+      result1 = payroll.verifyEmployment(employee1, companyId, verifierId);
+      result2 = payroll.verifyEmployment(employee2, companyId, verifierId);
+
+      expect(result1[0]).toBe(0); // Terminated
+      expect(result2[0]).toBe(1); // Still active
+
+      console.log('✅ Multiple employee status test passed');
+    });
+
+    test('should handle re-activation of employee', () => {
+      // Arrange
+      const companyId = 'COMP109';
+      const employeeId = 'EMP110';
+      const verifierId = 'LANDLORD009';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Reactivation Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Act - Deactivate then reactivate
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.INACTIVE);
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(0); // Inactive
+
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.ACTIVE);
+      result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(1); // Active again
+      console.log('✅ Employee re-activation test passed');
     });
   });
 });

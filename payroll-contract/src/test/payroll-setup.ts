@@ -213,4 +213,64 @@ export class PayrollTestSetup {
     console.log('└─ Current Timestamp:', this.getCurrentTimestamp());
     console.log('');
   }
+
+  // ========================================
+  // EMPLOYMENT VERIFICATION METHODS
+  // ========================================
+
+  // Test method: Grant employment disclosure
+  grantEmploymentDisclosure(employeeId: string, verifierId: string, companyId: string, expiresIn: number): Ledger {
+    console.log(`🔐 Employee ${employeeId} granting employment disclosure to ${verifierId} for company ${companyId}`);
+
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const verifierIdBytes = this.stringToBytes32(verifierId);
+    const companyIdBytes = this.stringToBytes32(companyId);
+
+    const results = this.contract.impureCircuits.grant_employment_disclosure(
+      this.turnContext,
+      employeeIdBytes,
+      verifierIdBytes,
+      companyIdBytes,
+      BigInt(expiresIn)
+    );
+    return this.updateStateAndGetLedger(results);
+  }
+
+  // Test method: Update employment status
+  updateEmploymentStatus(companyId: string, employeeId: string, newStatus: number): Ledger {
+    console.log(`📝 Company ${companyId} updating employment status for ${employeeId} to ${newStatus}`);
+
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+
+    const results = this.contract.impureCircuits.update_employment_status(
+      this.turnContext,
+      companyIdBytes,
+      employeeIdBytes,
+      BigInt(newStatus)
+    );
+    return this.updateStateAndGetLedger(results);
+  }
+
+  // Test method: Verify employment
+  verifyEmployment(employeeId: string, companyId: string, verifierId: string): Uint8Array {
+    console.log(`✅ Verifier ${verifierId} checking employment of ${employeeId} at ${companyId}`);
+
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const verifierIdBytes = this.stringToBytes32(verifierId);
+
+    const results = this.contract.impureCircuits.verify_employment(
+      this.turnContext,
+      employeeIdBytes,
+      companyIdBytes,
+      verifierIdBytes
+    );
+
+    // Update state from circuit execution
+    this.turnContext = results.context;
+
+    // Return the result (Bytes<1>: 0x01 = employed, 0x00 = not employed)
+    return results.result;
+  }
 }

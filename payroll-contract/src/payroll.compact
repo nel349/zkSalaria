@@ -40,6 +40,15 @@ export ledger current_timestamp: Uint<32>;
 // NOTE: Following bank.compact pattern - history on ledger, not witnesses
 export ledger employee_payment_history: Map<Bytes<32>, Vector<12, PC_PaymentRecord>>;
 
+// Selective disclosure system (Bank Contract Pattern)
+// Stores disclosure authorizations and shared keys on public ledger
+export ledger disclosure_authorizations: Map<Bytes<32>, PC_DisclosureAuthorization>; // disclosure_id -> authorization
+export ledger shared_payment_history: Map<Bytes<32>, Bytes<32>>;  // disclosure_id -> encrypted_history
+
+// Employment status tracking (independent of payment history)
+// Key: hash(company_id + employee_id)
+export ledger employment_records: Map<Bytes<32>, PC_EmploymentRecord>;
+
 constructor(initNonce: Bytes<32>) {
   nonce = disclose(initNonce);
   current_timestamp = 1000000 as Uint<32>;
@@ -185,6 +194,22 @@ export circuit add_employee(
   // Initialize empty payment history on ledger for new employee
   const empty_history = PC_create_empty_history();
   employee_payment_history.insert(disclose(employee_id), empty_history);
+
+  // Create employment record with active status
+  const employment_record_id = PC_generate_employment_record_id(
+    disclose(company_id),
+    disclose(employee_id)
+  );
+
+  const employment_record = PC_EmploymentRecord {
+    company_id: disclose(company_id),
+    employee_id: disclose(employee_id),
+    status: PC_EMPLOYMENT_STATUS_ACTIVE(),
+    hire_date: current_timestamp,
+    last_updated: current_timestamp
+  };
+
+  employment_records.insert(employment_record_id, employment_record);
 }
 
 // Employee withdraws earned salary (burns payroll tokens)
@@ -300,6 +325,291 @@ export circuit pay_employee(
 
 // TODO: Add batch payment processing (requires understanding Compact loop constraints)
 // export circuit batch_pay_employees(...)
+
+// ========================================
+// SELECTIVE DISCLOSURE CIRCUITS
+// ========================================
+
+// Grant income disclosure to lender/verifier
+// Employee grants permission for lender to verify income using ZKML
+// NOTE: Actual verification happens OFF-CHAIN with ZK proofs (EZKL)
+// This circuit just stores the authorization on ledger
+export circuit grant_income_disclosure(
+  employee_id: Bytes<32>,
+  lender_id: Bytes<32>,
+  min_threshold: Uint<64>,
+  expires_in: Uint<32>  // 0 = never expires, >0 = seconds until expiration
+): [] {
+  // Verify employee exists on public ledger
+  assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
+
+  // Generate unique disclosure ID
+  const permission_type = PC_PERMISSION_TYPE_INCOME_RANGE();
+  const disclosure_id = PC_generate_disclosure_id(
+    disclose(employee_id),
+    disclose(lender_id),
+    permission_type
+  );
+
+  // Generate shared encryption key (stored on ledger for both parties)
+  const shared_key = PC_generate_shared_disclosure_key(
+    disclose(employee_id),
+    disclose(lender_id),
+    permission_type
+  );
+
+  // Calculate expiration timestamp (disclose expires_in as it's not sensitive)
+  const expiration = (disclose(expires_in) == 0 as Uint<32>) ?
+    0 as Uint<32> :
+    (current_timestamp + disclose(expires_in)) as Uint<32>;
+
+  // Create disclosure authorization
+  const authorization = PC_DisclosureAuthorization {
+    grantor_id: disclose(employee_id),
+    grantee_id: disclose(lender_id),
+    shared_encryption_key: shared_key,
+    threshold: disclose(min_threshold),
+    created_at: current_timestamp,
+    last_updated: current_timestamp,
+    permission_type: permission_type,
+    expires_at: expiration
+  };
+
+  // Store authorization on public ledger
+  disclosure_authorizations.insert(disclosure_id, authorization);
+
+  // Read employee payment history from ledger
+  const payment_history = employee_payment_history.lookup(disclose(employee_id));
+
+  // Encrypt payment history with shared key for grantee access
+  const history_hash = persistentHash<Vector<2, Bytes<32>>>([
+    persistentHash<Vector<12, PC_PaymentRecord>>(payment_history),
+    shared_key
+  ]);
+
+  // Store shared encrypted history on ledger
+  shared_payment_history.insert(disclosure_id, history_hash);
+}
+
+// Grant employment disclosure to verifier (landlord, background check, etc.)
+// Stores authorization for verifier to verify employment status using ZKML
+// NOTE: Actual verification happens OFF-CHAIN with ZK proofs (EZKL)
+export circuit grant_employment_disclosure(
+  employee_id: Bytes<32>,
+  verifier_id: Bytes<32>,
+  company_id: Bytes<32>,
+  expires_in: Uint<32>
+): [] {
+  // Verify employee and company exist on public ledger
+  assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
+  assert(company_accounts.member(disclose(company_id)), "Company not found");
+
+  // Generate unique disclosure ID
+  const permission_type = PC_PERMISSION_TYPE_EMPLOYMENT();
+  const disclosure_id = PC_generate_disclosure_id(
+    disclose(employee_id),
+    disclose(verifier_id),
+    permission_type
+  );
+
+  // Generate shared encryption key
+  const shared_key = PC_generate_shared_disclosure_key(
+    disclose(employee_id),
+    disclose(verifier_id),
+    permission_type
+  );
+
+  // Calculate expiration timestamp
+  const expiration = (disclose(expires_in) == 0 as Uint<32>) ?
+    0 as Uint<32> :
+    (current_timestamp + disclose(expires_in)) as Uint<32>;
+
+  // Create authorization (company_id stored separately if needed)
+  const authorization = PC_DisclosureAuthorization {
+    grantor_id: disclose(employee_id),
+    grantee_id: disclose(verifier_id),
+    shared_encryption_key: shared_key,
+    threshold: 0 as Uint<64>,  // Not used for employment disclosures
+    created_at: current_timestamp,
+    last_updated: current_timestamp,
+    permission_type: permission_type,
+    expires_at: expiration
+  };
+
+  // Store authorization on public ledger
+  disclosure_authorizations.insert(disclosure_id, authorization);
+}
+
+// Grant audit disclosure to auditor (compliance checks, pay equity analysis)
+// Stores authorization for auditor to access company payroll data using ZKML
+// NOTE: Actual analysis happens OFF-CHAIN with ZK proofs (EZKL)
+export circuit grant_audit_disclosure(
+  company_id: Bytes<32>,
+  auditor_id: Bytes<32>,
+  expires_in: Uint<32>
+): [] {
+  // Verify company exists on public ledger
+  assert(company_accounts.member(disclose(company_id)), "Company not found");
+
+  // Generate unique disclosure ID
+  const permission_type = PC_PERMISSION_TYPE_AUDIT();
+  const disclosure_id = PC_generate_disclosure_id(
+    disclose(company_id),
+    disclose(auditor_id),
+    permission_type
+  );
+
+  // Generate shared encryption key
+  const shared_key = PC_generate_shared_disclosure_key(
+    disclose(company_id),
+    disclose(auditor_id),
+    permission_type
+  );
+
+  // Calculate expiration timestamp
+  const expiration = (disclose(expires_in) == 0 as Uint<32>) ?
+    0 as Uint<32> :
+    (current_timestamp + disclose(expires_in)) as Uint<32>;
+
+  // Create authorization
+  const authorization = PC_DisclosureAuthorization {
+    grantor_id: disclose(company_id),
+    grantee_id: disclose(auditor_id),
+    shared_encryption_key: shared_key,
+    threshold: 0 as Uint<64>,  // Not used for audit disclosures
+    created_at: current_timestamp,
+    last_updated: current_timestamp,
+    permission_type: permission_type,
+    expires_at: expiration
+  };
+
+  // Store authorization on public ledger
+  disclosure_authorizations.insert(disclosure_id, authorization);
+}
+
+// Revoke disclosure authorization
+// Allows employee to revoke lender's access to payment history
+export circuit revoke_disclosure(
+  grantor_id: Bytes<32>,
+  grantee_id: Bytes<32>,
+  permission_type: Uint<8>
+): [] {
+  // Generate disclosure ID (disclose permission_type as it's not sensitive)
+  const disclosure_id = PC_generate_disclosure_id(
+    disclose(grantor_id),
+    disclose(grantee_id),
+    disclose(permission_type)
+  );
+
+  // Verify disclosure exists
+  assert(disclosure_authorizations.member(disclosure_id), "Disclosure not found");
+  const auth = disclosure_authorizations.lookup(disclosure_id);
+
+  // Verify caller is the grantor (employee who granted access)
+  assert(auth.grantor_id == disclose(grantor_id), "Only grantor can revoke");
+
+  // Remove authorization from ledger
+  disclosure_authorizations.remove(disclosure_id);
+
+  // Remove shared payment history
+  if (shared_payment_history.member(disclosure_id)) {
+    shared_payment_history.remove(disclosure_id);
+  }
+}
+
+// ========================================
+// EMPLOYMENT STATUS MANAGEMENT
+// ========================================
+
+// Update employee's employment status (company only)
+// Allows company to mark employee as active, inactive, terminated, or on leave
+export circuit update_employment_status(
+  company_id: Bytes<32>,
+  employee_id: Bytes<32>,
+  new_status: Uint<8>
+): [] {
+  // Verify company exists
+  assert(company_accounts.member(disclose(company_id)), "Company not found");
+
+  // Verify employee exists
+  assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
+
+  // Generate employment record ID
+  const employment_record_id = PC_generate_employment_record_id(
+    disclose(company_id),
+    disclose(employee_id)
+  );
+
+  // Verify employment record exists
+  assert(employment_records.member(employment_record_id), "Employment record not found");
+
+  // Get existing record
+  const existing_record = employment_records.lookup(employment_record_id);
+
+  // Verify caller is the company (only company can update status)
+  assert(existing_record.company_id == disclose(company_id), "Only company can update status");
+
+  // Update record with new status
+  const updated_record = PC_EmploymentRecord {
+    company_id: existing_record.company_id,
+    employee_id: existing_record.employee_id,
+    status: disclose(new_status),
+    hire_date: existing_record.hire_date,
+    last_updated: current_timestamp
+  };
+
+  employment_records.insert(employment_record_id, updated_record);
+}
+
+// Verify employment status for disclosure (grantee can check)
+// Returns 1 if employee is actively employed, 0 otherwise
+export circuit verify_employment(
+  employee_id: Bytes<32>,
+  company_id: Bytes<32>,
+  verifier_id: Bytes<32>
+): Bytes<1> {
+  // 1. Check disclosure authorization exists and is valid
+  const permission_type = PC_PERMISSION_TYPE_EMPLOYMENT();
+  const disclosure_id = PC_generate_disclosure_id(
+    disclose(employee_id),
+    disclose(verifier_id),
+    permission_type
+  );
+
+  assert(disclosure_authorizations.member(disclosure_id), "No disclosure permission");
+  const auth = disclosure_authorizations.lookup(disclosure_id);
+
+  // Verify caller is the authorized verifier
+  assert(auth.grantee_id == disclose(verifier_id), "Not authorized verifier");
+
+  // Check authorization hasn't expired
+  assert(
+    auth.expires_at == (0 as Uint<32>) || auth.expires_at > current_timestamp,
+    "Authorization expired"
+  );
+
+  // 2. Get employment record
+  const employment_record_id = PC_generate_employment_record_id(
+    disclose(company_id),
+    disclose(employee_id)
+  );
+
+  // If no employment record exists, return 0 (not employed)
+  if (!employment_records.member(employment_record_id)) {
+    return pad(1, "\x00");
+  }
+
+  const employment_record = employment_records.lookup(employment_record_id);
+
+  // 3. Check if status is ACTIVE
+  const is_active = employment_record.status == PC_EMPLOYMENT_STATUS_ACTIVE();
+
+  if (is_active) {
+    return pad(1, "\x01");
+  } else {
+    return pad(1, "\x00");
+  }
+}
 
 // ========================================
 // UTILITY FUNCTIONS

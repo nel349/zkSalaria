@@ -8,6 +8,22 @@ export enum PaymentType {
   BONUS = 2
 }
 
+// Employment status (matches PayrollCommons.compact)
+export enum EmploymentStatus {
+  INACTIVE = 0,
+  ACTIVE = 1,
+  TERMINATED = 2,
+  ON_LEAVE = 3
+}
+
+// Permission types for selective disclosure (matches PayrollCommons.compact)
+export enum PermissionType {
+  INCOME_RANGE = 0,
+  EMPLOYMENT = 1,
+  CREDIT_SCORE = 2,
+  AUDIT = 3
+}
+
 // Payment record structure (matches PayrollCommons.compact PaymentRecord)
 // NOTE: All numeric types use bigint to match Compact runtime expectations
 export interface PaymentRecord {
@@ -80,5 +96,12 @@ export enum CircuitName {
   WITHDRAW_EMPLOYEE_SALARY = 'withdraw_employee_salary',
   PAY_EMPLOYEE = 'pay_employee',
   UPDATE_TIMESTAMP = 'update_timestamp',
-  MINT_TOKENS = 'mint_tokens'
+  MINT_TOKENS = 'mint_tokens',
+  // Employment verification circuits
+  GRANT_INCOME_DISCLOSURE = 'grant_income_disclosure',
+  GRANT_EMPLOYMENT_DISCLOSURE = 'grant_employment_disclosure',
+  GRANT_AUDIT_DISCLOSURE = 'grant_audit_disclosure',
+  REVOKE_DISCLOSURE = 'revoke_disclosure',
+  UPDATE_EMPLOYMENT_STATUS = 'update_employment_status',
+  VERIFY_EMPLOYMENT = 'verify_employment'
 }

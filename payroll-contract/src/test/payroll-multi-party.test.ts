@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
+import { EmploymentStatus } from '../types.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
   let payroll: PayrollMultiPartyTestSetup;
@@ -311,6 +312,225 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       console.log('✅ Complex multi-party workflow with payment history on ledger');
       payroll.printMultiPartyState();
+    });
+  });
+
+  describe('Multi-Party Employment Verification', () => {
+    test('should allow employee to grant disclosure to verifier (landlord)', () => {
+      // Setup: 3 participants - company, employee, verifier
+      const companyId = 'COMP001';
+      const employeeId = 'EMP001';
+      const verifierId = 'LANDLORD001';
+
+      // Company registers and adds employee
+      payroll.registerCompany(companyId, 'Acme Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Employee grants employment disclosure to verifier
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Verifier checks employment status
+      const result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert: Employee is active (0x01)
+      expect(result[0]).toBe(1);
+
+      // Verify participants registered
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants).toContain(companyId);
+      expect(participants).toContain(employeeId);
+      expect(participants).toContain(verifierId);
+
+      console.log('✅ Multi-party employment verification: employee → verifier grant successful');
+    });
+
+    test('should allow company to update employment status independently', () => {
+      // Setup: 3 participants
+      const companyId = 'COMP002';
+      const employeeId = 'EMP002';
+      const verifierId = 'LANDLORD002';
+
+      // Company registers and adds employee
+      payroll.registerCompany(companyId, 'Status Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Employee grants disclosure
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Verify initially active
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(1);
+
+      // Company updates status to TERMINATED
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.TERMINATED);
+
+      // Verifier checks again
+      result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+
+      // Assert: Employee is no longer active (0x00)
+      expect(result[0]).toBe(0);
+
+      console.log('✅ Multi-party employment status update: company → employee status change');
+    });
+
+    test('should handle multiple verifiers for same employee', () => {
+      // Setup: 1 company, 1 employee, 2 verifiers (landlord + bank)
+      const companyId = 'COMP003';
+      const employeeId = 'EMP003';
+      const landlord = 'LANDLORD003';
+      const bank = 'BANK003';
+
+      payroll.registerCompany(companyId, 'Multi Verifier Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Employee grants disclosure to both verifiers
+      payroll.grantEmploymentDisclosure(employeeId, landlord, companyId, 0);
+      payroll.grantEmploymentDisclosure(employeeId, bank, companyId, 0);
+
+      // Both verifiers check employment
+      const landlordResult = payroll.verifyEmployment(employeeId, companyId, landlord);
+      const bankResult = payroll.verifyEmployment(employeeId, companyId, bank);
+
+      // Both should see active employment
+      expect(landlordResult[0]).toBe(1);
+      expect(bankResult[0]).toBe(1);
+
+      // Company terminates employee
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.TERMINATED);
+
+      // Both verifiers should now see terminated
+      const landlordResult2 = payroll.verifyEmployment(employeeId, companyId, landlord);
+      const bankResult2 = payroll.verifyEmployment(employeeId, companyId, bank);
+
+      expect(landlordResult2[0]).toBe(0);
+      expect(bankResult2[0]).toBe(0);
+
+      console.log('✅ Multi-party: multiple verifiers see consistent employment status');
+    });
+
+    test('should maintain separate employment records for different employees', () => {
+      // Setup: 2 companies with different employees
+      const comp1 = 'COMP004';
+      const comp2 = 'COMP005';
+      const emp1 = 'EMP004';
+      const emp2 = 'EMP005';
+      const verifier = 'LANDLORD004';
+
+      // Both companies register with different employees
+      payroll.registerCompany(comp1, 'Company A');
+      payroll.registerCompany(comp2, 'Company B');
+      payroll.addEmployee(comp1, emp1);
+      payroll.addEmployee(comp2, emp2);
+
+      // Employees grant disclosure
+      payroll.grantEmploymentDisclosure(emp1, verifier, comp1, 0);
+      payroll.grantEmploymentDisclosure(emp2, verifier, comp2, 0);
+
+      // Verify both employed at their respective companies
+      const emp1Result = payroll.verifyEmployment(emp1, comp1, verifier);
+      const emp2Result = payroll.verifyEmployment(emp2, comp2, verifier);
+
+      expect(emp1Result[0]).toBe(1);
+      expect(emp2Result[0]).toBe(1);
+
+      // Company 1 terminates emp1
+      payroll.updateEmploymentStatus(comp1, emp1, EmploymentStatus.TERMINATED);
+
+      // Verify emp1 terminated, emp2 still active
+      const emp1Result2 = payroll.verifyEmployment(emp1, comp1, verifier);
+      const emp2Result2 = payroll.verifyEmployment(emp2, comp2, verifier);
+
+      expect(emp1Result2[0]).toBe(0); // Terminated at Company 1
+      expect(emp2Result2[0]).toBe(1); // Still active at Company 2
+
+      console.log('✅ Multi-party: employment status independent across companies');
+    });
+
+    test('should enforce disclosure permission - verifier needs grant', () => {
+      // Setup: company, employee, unauthorized verifier
+      const companyId = 'COMP006';
+      const employeeId = 'EMP006';
+      const unauthorizedVerifier = 'HACKER001';
+
+      payroll.registerCompany(companyId, 'Secure Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Verifier tries to check without disclosure grant (should fail)
+      expect(() => {
+        payroll.verifyEmployment(employeeId, companyId, unauthorizedVerifier);
+      }).toThrow();
+
+      console.log('✅ Multi-party: unauthorized verifier blocked (no disclosure grant)');
+    });
+
+    test('should handle employment verification with time-based expiration', () => {
+      // Setup
+      const companyId = 'COMP007';
+      const employeeId = 'EMP007';
+      const verifierId = 'LANDLORD007';
+      const currentTime = payroll.getCurrentTimestamp();
+      const expirationDelta = 3600; // 1 hour
+
+      payroll.registerCompany(companyId, 'Expiration Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Grant disclosure with expiration
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, expirationDelta);
+
+      // Verify works before expiration
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(1);
+
+      // Advance time past expiration
+      payroll.updateTimestamp(currentTime + expirationDelta + 1);
+
+      // Verification should fail after expiration
+      expect(() => {
+        payroll.verifyEmployment(employeeId, companyId, verifierId);
+      }).toThrow();
+
+      console.log('✅ Multi-party: employment disclosure expires after time limit');
+    });
+
+    test('should demonstrate complete 3-party workflow', () => {
+      const companyId = 'COMP008';
+      const employeeId = 'EMP008';
+      const landlordId = 'LANDLORD008';
+
+      console.log('\n👥 Multi-Party Employment Verification Workflow:');
+      console.log('├─ Step 1: Company registers and hires employee');
+      payroll.registerCompany(companyId, 'Workflow Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      console.log('├─ Step 2: Employee grants employment disclosure to landlord');
+      payroll.grantEmploymentDisclosure(employeeId, landlordId, companyId, 0);
+
+      console.log('├─ Step 3: Landlord verifies employment status (ACTIVE)');
+      let result = payroll.verifyEmployment(employeeId, companyId, landlordId);
+      expect(result[0]).toBe(1);
+
+      console.log('├─ Step 4: Company updates employee status to ON_LEAVE');
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.ON_LEAVE);
+
+      console.log('├─ Step 5: Landlord re-verifies employment (NOT ACTIVE)');
+      result = payroll.verifyEmployment(employeeId, companyId, landlordId);
+      expect(result[0]).toBe(0);
+
+      console.log('├─ Step 6: Company reactivates employee (ACTIVE)');
+      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.ACTIVE);
+
+      console.log('└─ Step 7: Landlord verifies again (ACTIVE)');
+      result = payroll.verifyEmployment(employeeId, companyId, landlordId);
+      expect(result[0]).toBe(1);
+
+      console.log('\n✅ Complete 3-party workflow: company ↔ employee ↔ verifier');
+
+      // Verify all participants registered
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants.length).toBeGreaterThanOrEqual(3);
+      expect(participants).toContain(companyId);
+      expect(participants).toContain(employeeId);
+      expect(participants).toContain(landlordId);
     });
   });
 });

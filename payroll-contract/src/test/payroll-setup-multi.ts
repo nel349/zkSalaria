@@ -18,14 +18,14 @@ interface Participant {
 // But they all share the same public ledger (encrypted balances)
 export class PayrollMultiPartyTestSetup {
   private contract: Contract<PayrollPrivateState, typeof payrollWitnesses>;
-  private contractAddress: string;
+  // private contractAddress: string;
   private sharedContractState: any; // Shared public ledger
   private sharedZswapState: any;
   private participants: Map<string, Participant> = new Map(); // Per-participant private state
 
   constructor(initNonce: string = '0'.repeat(64)) {
     this.contract = new Contract(payrollWitnesses);
-    this.contractAddress = sampleContractAddress();
+    // this.contractAddress = sampleContractAddress();
 
     // Initialize with empty private state
     const initialPrivateState = createPayrollPrivateState();
@@ -325,5 +325,69 @@ export class PayrollMultiPartyTestSetup {
     console.log(`\n📊 Participant ${participantId} Private State:`);
     console.log('├─ Payment History Records:', participant.privateState.employeePaymentHistory.size);
     console.log('');
+  }
+
+  // ========================================
+  // EMPLOYMENT VERIFICATION METHODS
+  // ========================================
+
+  // Test method: Grant employment disclosure (executed by employee participant)
+  grantEmploymentDisclosure(employeeId: string, verifierId: string, companyId: string, expiresIn: number): Ledger {
+    console.log(`🔐 ${employeeId} granting employment disclosure to ${verifierId} for company ${companyId}`);
+
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const verifierIdBytes = this.stringToBytes32(verifierId);
+    const companyIdBytes = this.stringToBytes32(companyId);
+
+    this.executeAsParticipant(
+      employeeId,
+      (ctx, eidBytes, vidBytes, cidBytes, expiresInBigInt) =>
+        this.contract.impureCircuits.grant_employment_disclosure(ctx, eidBytes, vidBytes, cidBytes, expiresInBigInt),
+      employeeIdBytes,
+      verifierIdBytes,
+      companyIdBytes,
+      BigInt(expiresIn)
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Test method: Update employment status (executed by company participant)
+  updateEmploymentStatus(companyId: string, employeeId: string, newStatus: number): Ledger {
+    console.log(`📝 ${companyId} updating employment status for ${employeeId} to ${newStatus}`);
+
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+
+    this.executeAsParticipant(
+      companyId,
+      (ctx, cidBytes, eidBytes, statusBigInt) =>
+        this.contract.impureCircuits.update_employment_status(ctx, cidBytes, eidBytes, statusBigInt),
+      companyIdBytes,
+      employeeIdBytes,
+      BigInt(newStatus)
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Test method: Verify employment (executed by verifier participant)
+  verifyEmployment(employeeId: string, companyId: string, verifierId: string): Uint8Array {
+    console.log(`✅ ${verifierId} checking employment of ${employeeId} at ${companyId}`);
+
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const verifierIdBytes = this.stringToBytes32(verifierId);
+
+    const result = this.executeAsParticipant(
+      verifierId,
+      (ctx, eidBytes, cidBytes, vidBytes) =>
+        this.contract.impureCircuits.verify_employment(ctx, eidBytes, cidBytes, vidBytes),
+      employeeIdBytes,
+      companyIdBytes,
+      verifierIdBytes
+    );
+
+    return result;
   }
 }
