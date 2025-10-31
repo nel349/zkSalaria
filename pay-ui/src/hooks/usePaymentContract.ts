@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { PaymentAPI } from '@midnight-pay/pay-api';
+import { PaymentAPI } from '../../../payroll-api/dist';
 import { usePaymentWallet } from '../components/PaymentWallet';
 import {
   getCurrentPaymentGateway,

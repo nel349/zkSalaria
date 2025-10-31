@@ -4,7 +4,7 @@ import { useRuntimeConfiguration } from '../config/RuntimeConfiguration';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
-import type { PaymentProviders, PaymentCircuitKeys } from '@midnight-pay/pay-api';
+import type { PaymentProviders, PaymentCircuitKeys } from '../../../payroll-api/dist';
 import type { PaymentPrivateState } from '@midnight-pay/pay-contract';
 import type { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types/dist/private-state-provider';
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types/dist/public-data-provider';

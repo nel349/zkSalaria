@@ -29,7 +29,7 @@ import {
   Download,
 } from '@mui/icons-material';
 import { usePaymentWallet } from '../components/PaymentWallet';
-import { PaymentAPI, MERCHANT_TIER } from '@midnight-pay/pay-api';
+import { PaymentAPI, MERCHANT_TIER } from '../../../payroll-api/dist';
 import { usePaymentContract } from '../hooks/usePaymentContract';
 import { take } from 'rxjs/operators';
 import {

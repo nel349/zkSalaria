@@ -41,7 +41,7 @@ import {
   ShoppingCart,
 } from '@mui/icons-material';
 import { usePaymentWallet } from '../components/PaymentWallet';
-import { PaymentAPI, SUBSCRIPTION_STATUS } from '@midnight-pay/pay-api';
+import { PaymentAPI, SUBSCRIPTION_STATUS } from '../../../payroll-api/dist';
 import { usePaymentContract } from '../hooks/usePaymentContract';
 import { findExistingCustomer, savePaymentUser } from '../utils/PaymentLocalState';
 import { take } from 'rxjs/operators';

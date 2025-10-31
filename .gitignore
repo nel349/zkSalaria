@@ -40,3 +40,4 @@ venv/
 package-lock.json
 yarn.lock
 .turbo/
+payroll-api/public/

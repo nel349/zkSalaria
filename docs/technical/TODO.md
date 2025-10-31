@@ -203,8 +203,109 @@
 - [ ] Complete Phase 0 privacy fixes before proceeding
 
 ### API Layer
-- [ ] Update pay-api to work with new payroll contracts
-- [ ] Test private payroll with local deployment
+**Goal:** Create payroll-api following bank-api patterns
+
+**Structure (following @midnight-bank/bank-api):**
+- [ ] Create payroll-api package structure:
+  - package.json (dependencies: @midnight-ntwrk SDKs, rxjs, pino)
+  - tsconfig.json
+  - src/index.ts (main exports)
+  - src/common-types.ts (type definitions)
+  - src/payroll-api.ts (main API class)
+  - src/utils/index.ts (helper functions)
+  - src/test/commons.ts (test setup with Docker)
+  - src/test/payroll-api.test.ts (integration tests)
+
+**Types to Define (src/common-types.ts):**
+- [ ] `PayrollContract` type (Contract with payrollWitnesses)
+- [ ] `PayrollProviders` type (MidnightProviders for circuits)
+- [ ] `DeployedPayrollContract` type (FoundContract)
+- [ ] `PayrollDerivedState` interface (reactive state with company/employee data)
+- [ ] `PayrollCircuitKeys` type (union of circuit names)
+- [ ] `AccountId` type alias
+- [ ] `UserAction` interface (for transaction tracking)
+- [ ] `emptyPayrollState` factory function
+
+**Main API Class (src/payroll-api.ts):**
+- [ ] `PayrollAPI` class with private constructor
+- [ ] Static `deploy()` method:
+  - Uses `deployContract()` from @midnight-ntwrk/midnight-js-contracts
+  - Retry logic with backoff (like bank-api)
+  - Returns ContractAddress
+- [ ] Static `connect()` method:
+  - Uses `findDeployedContract()` for existing contracts
+  - Per-user private state handling
+  - Returns DeployedPayrollAPI instance
+- [ ] RxJS state$ observable:
+  - Combines ledger state (public data provider)
+  - Combines private state (private state provider)
+  - Combines user actions (local subject)
+  - Uses combineLatest + scan for reactive updates
+- [ ] Company operations:
+  - `registerCompany(companyId, companyName): Promise<void>`
+  - `depositCompanyFunds(companyId, amount): Promise<void>`
+  - `getCompanyBalance(companyId, pin): Promise<bigint>`
+- [ ] Employee operations:
+  - `addEmployee(companyId, employeeId): Promise<void>`
+  - `withdrawEmployeeSalary(employeeId, amount): Promise<void>`
+  - `getEmployeeBalance(employeeId, pin): Promise<bigint>`
+- [ ] Payment operations:
+  - `payEmployee(companyId, employeeId, amount): Promise<void>`
+  - `getEmployeePaymentHistory(employeeId): Promise<PaymentRecord[]>`
+
+**Utilities (src/utils/index.ts):**
+- [ ] `formatBalance(balance: bigint): string` - Convert to decimal
+- [ ] `parseAmount(amount: string): bigint` - Convert from decimal
+- [ ] `pad(s: string, n: number): Uint8Array` - String padding
+- [ ] `randomBytes(size: number): Uint8Array` - Secure random
+
+**Test Setup (src/test/commons.ts):**
+- [ ] `TestEnvironment` class:
+  - Docker Compose setup (indexer, node, proof-server)
+  - Wallet creation with test seed
+  - Provider initialization (publicDataProvider, privateStateProvider, proofProvider)
+- [ ] `TestWallet` wrapper class
+- [ ] In-memory private state provider (for testing)
+- [ ] Test configuration management
+
+**Integration Tests (src/test/payroll-api.test.ts):**
+- [ ] Test: Deploy payroll contract
+- [ ] Test: Register company via API
+- [ ] Test: Deposit company funds via API
+- [ ] Test: Add employee via API
+- [ ] Test: Pay employee salary via API (encrypted balance transfer)
+- [ ] Test: Withdraw employee salary via API
+- [ ] Test: Get encrypted balances via API
+- [ ] Test: Get payment history via API (for ZKML)
+- [ ] Test: Multi-company workflow
+- [ ] Test: Error handling (insufficient funds, etc.)
+
+**Docker Setup:**
+- [ ] Create docker-compose.yml or use standalone.yml
+- [ ] Configure midnight-node service
+- [ ] Configure midnight-indexer service
+- [ ] Configure midnight-proof-server service
+- [ ] Health checks and wait strategies
+
+**Dependencies to Add:**
+- [ ] @midnight-ntwrk/midnight-js-types
+- [ ] @midnight-ntwrk/midnight-js-contracts
+- [ ] @midnight-ntwrk/midnight-js-indexer-public-data-provider
+- [ ] @midnight-ntwrk/midnight-js-http-client-proof-provider
+- [ ] @midnight-ntwrk/midnight-js-network-id
+- [ ] @midnight-ntwrk/midnight-js-node-zk-config-provider
+- [ ] @midnight-ntwrk/wallet
+- [ ] @midnight-ntwrk/wallet-api
+- [ ] rxjs (reactive streams)
+- [ ] pino (logging)
+- [ ] testcontainers (for integration tests)
+
+**Notes:**
+- Follow bank-api patterns exactly (proven working implementation)
+- Use RxJS for reactive state management (not simple context updates)
+- Integrate with full Midnight SDK (not test-only implementation)
+- Support both local testing (Docker) and deployed contracts
+- Encrypted balances require proper provider setup
 
 ---
 
@@ -256,51 +357,70 @@
 - ✅ Removed old witness balance functions
 - ✅ Updated TypeScript types and witness providers
 - ✅ Contract compiles successfully with encrypted balances
-- ✅ Payment history stored in witnesses (for ZKML)
+- ✅ Payment history moved to PUBLIC LEDGER (not witnesses)
+  - Following bank.compact pattern: history on ledger for ZKML accessibility
+  - Company can write payments, anyone can read for credit scoring
+  - Multi-party safe: separate history per employee on ledger
+- ✅ Multi-party testing completed:
+  - All 31 tests passing (22 basic + 9 multi-party)
+  - Verified separate private states per participant
+  - Verified encrypted balance transfers work correctly
+  - Verified payment history isolation per employee
 
 **Next Steps:**
-1. Update pay-api to work with encrypted balance contracts
+1. **Phase 1: API Integration** (NOT STARTED - see detailed checklist in Phase 1 section)
+   - Create payroll-api package following @midnight-bank/bank-api patterns
+   - Implement PayrollAPI class with RxJS reactive state management
+   - Set up Midnight SDK providers (wallet, indexer, proof)
+   - Create Docker test environment with midnight-node, indexer, proof-server
+   - Write integration tests for encrypted balance operations
+   - Test end-to-end: deploy → register → deposit → pay → withdraw
 2. Test private payroll with local deployment
 3. Verify balances are encrypted (not readable on blockchain explorer)
-4. Add selective disclosure circuits (prove_employment, prove_income_range)
+4. Add selective disclosure circuits (Step 5 - documented but not implemented)
 
 **Blockers:**
 - Batch payments blocked by Compact loop constraints (deferred to Phase 2)
 
 **Timeline:**
-- ✅ Phase 0 completed in 1 session (faster than expected!)
+- ✅ Phase 0 completed in 2 sessions
 - On track for 3-week hackathon timeline
-- Priority: Test encrypted balances work end-to-end
+- Priority: API integration and local deployment testing
 
 ---
 
 ## Architectural Decision: Encrypted Ledger vs Witnesses
 
 **Date:** Nov 2025
-**Decision:** Use bank.compact's encrypted balance pattern instead of witness-only approach
+**Decision:** Use bank.compact's encrypted balance pattern with payment history on public ledger
 
 **Why the change?**
-- Original plan: Store balances in witnesses (private local storage)
-- Problem: Witnesses are local to each participant - company circuit can't update employee's witness
+- Original plan: Store balances AND payment history in witnesses (private local storage)
+- Problem discovered: Witnesses are local to each participant - company circuit can't update employee's witness
 - Solution discovered: Bank contract uses encrypted balances on PUBLIC ledger
   - Balances encrypted with participant keys
   - Contract can update any participant's encrypted balance
   - True token ownership (not just company IOU)
   - Proven pattern (already working in bank.compact)
 
-**What stays in witnesses?**
-- Payment history for ZKML (Vector<12, PaymentRecord>)
-- This data is for ML training only, not for transfers
-- Employee controls their payment history locally
-
-**What moves to encrypted ledger?**
-- Company balances (encrypted with company key)
-- Employee balances (encrypted with employee key)
+**What's on PUBLIC LEDGER?**
+- Company balances (ENCRYPTED with company key)
+- Employee balances (ENCRYPTED with employee key)
 - Balance mappings (encrypted_balance → actual_amount)
+- Payment history (ON LEDGER - for ZKML accessibility)
+  - `export ledger employee_payment_history: Map<Bytes<32>, Vector<12, PaymentRecord>>`
+  - Company can write when paying employee
+  - Anyone can read for credit scoring (intentional for ZKML)
+
+**What stays in witnesses?**
+- NOTHING (all removed)
+- Payment history moved to public ledger following bank.compact pattern
+- Private states are now empty (no witness functions needed)
 
 **Benefits:**
 1. ✅ Solves multi-party state update problem
 2. ✅ True ownership (employee controls encrypted balance)
-3. ✅ Privacy preserved (encryption prevents blockchain snooping)
-4. ✅ Enables authorization system (like bank's disclosure permissions)
-5. ✅ Proven architecture (reuses bank.compact patterns)
+3. ✅ Privacy preserved for balances (encryption prevents blockchain snooping)
+4. ✅ ZKML accessibility (payment history readable for credit scoring)
+5. ✅ Enables authorization system (like bank's disclosure permissions)
+6. ✅ Proven architecture (reuses bank.compact patterns)
