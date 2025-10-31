@@ -184,12 +184,23 @@ export class PayrollTestSetup {
   // In production, you would need the participant's encryption key to decrypt balances
   // For testing, we track balances through transaction flow (deposits, payments, withdrawals)
 
-  // Helper: Get employee payment history (from private state - witness)
+  // Helper: Get employee payment history (from PUBLIC LEDGER - not witness)
+  // NOTE: Following bank.compact pattern - payment history stored on ledger
   getEmployeePaymentHistory(employeeId: string): PaymentRecord[] {
-    // Convert string to bytes then to hex to match witness encoding
+    const ledgerState = this.getLedgerState();
     const employeeIdBytes = this.stringToBytes32(employeeId);
-    const employeeIdHex = Buffer.from(employeeIdBytes).toString('hex');
-    return this.turnContext.currentPrivateState.employeePaymentHistory.get(employeeIdHex) || [];
+
+    // The Map from Compact Runtime has methods: member(), lookup(), size, isEmpty
+    const historyMap = ledgerState.employee_payment_history as any;
+
+    // Check if employee has payment history using member() method
+    if (historyMap.member(employeeIdBytes)) {
+      // Use lookup() method to get the history
+      const history = historyMap.lookup(employeeIdBytes);
+      return history as PaymentRecord[];
+    }
+
+    return [];
   }
 
   // Debug helper: Print current payroll state

@@ -16,50 +16,18 @@ export type Contract<T, W extends Witnesses<T> = Witnesses<T>> = ContractType<T,
 export * from './types';
 
 // Create initial private state for payroll
-// NOTE: Only payment history stored privately (for ZKML)
-// Balances are now encrypted on public ledger
+// NOTE: Payment history now stored on public ledger (not witnesses) following bank.compact pattern
+// Balances are encrypted on public ledger
+// Private state is now empty - all data on ledger
 export const createPayrollPrivateState = (): PayrollPrivateState => ({
   employeePaymentHistory: new Map()
 });
 
 // Payroll witness functions
+// NOTE: All witness functions removed - following bank.compact pattern
+// Payment history is stored on public ledger so company can update when paying employee
 export const payrollWitnesses = {
-  // Witness: Get employee payment history (for ZKML)
-  employee_payment_history: (
-    { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
-    employeeId: Uint8Array
-  ): [PayrollPrivateState, any] => {
-    const employeeIdStr = Buffer.from(employeeId).toString('hex');
-    const history = privateState.employeePaymentHistory.get(employeeIdStr);
-
-    // If no history exists, return what was previously stored or let the setter handle initialization
-    if (!history) {
-      // Return an empty vector - the circuit should have set this via set_employee_payment_history first
-      return [privateState, []];
-    }
-
-    // Return the history as-is (it should already be in the correct format from the setter)
-    return [privateState, history];
-  },
-
-  // Witness: Set employee payment history
-  set_employee_payment_history: (
-    { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
-    employeeId: Uint8Array,
-    history: PaymentRecord[]
-  ): [PayrollPrivateState, []] => {
-    const employeeIdStr = Buffer.from(employeeId).toString('hex');
-    const updatedHistory = new Map(privateState.employeePaymentHistory);
-    updatedHistory.set(employeeIdStr, history);
-
-    return [{
-      ...privateState,
-      employeePaymentHistory: updatedHistory
-    }, []];
-  }
-
-  // NOTE: Balance witnesses removed - balances now stored as encrypted values on public ledger
-  // Only payment history (for ZKML) remains in witness (private local storage)
+  // No witnesses needed - all data on ledger (encrypted balances + payment history)
 };
 
 // Utility functions
