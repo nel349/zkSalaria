@@ -18,30 +18,46 @@ interface Participant {
 // But they all share the same public ledger (encrypted balances)
 export class PayrollMultiPartyTestSetup {
   private contract: Contract<PayrollPrivateState, typeof payrollWitnesses>;
-  // private contractAddress: string;
   private sharedContractState: any; // Shared public ledger
   private sharedZswapState: any;
   private participants: Map<string, Participant> = new Map(); // Per-participant private state
+  private companyId: string;
+  private companyName: string;
 
-  constructor(initNonce: string = '0'.repeat(64)) {
+  // Manual balance tracking (since actual balances are encrypted on ledger)
+  private companyBalanceTracker: bigint = 0n;
+  private employeeBalanceTrackers: Map<string, bigint> = new Map();
+
+  constructor(
+    companyId: string,
+    companyName: string,
+    initNonce: string = '0'.repeat(64)
+  ) {
+    this.companyId = companyId;
+    this.companyName = companyName;
     this.contract = new Contract(payrollWitnesses);
-    // this.contractAddress = sampleContractAddress();
 
     // Initialize with empty private state
     const initialPrivateState = createPayrollPrivateState();
+
+    // Convert parameters for constructor
     const nonceBytes = this.hexToBytes32(initNonce);
+    const companyIdBytes = this.stringToBytes32(companyId);
+    const companyNameBytes = this.stringToBytes64(companyName);
 
     // Get initial shared contract state
     const { currentPrivateState, currentContractState, currentZswapLocalState } = this.contract.initialState(
       constructorContext(initialPrivateState, initNonce),
-      nonceBytes
+      nonceBytes,
+      companyIdBytes,
+      companyNameBytes
     );
 
     // Store shared public ledger state
     this.sharedContractState = currentContractState;
     this.sharedZswapState = currentZswapLocalState;
 
-    console.log('💼 Multi-party Payroll system initialized');
+    console.log(`💼 Multi-party Payroll contract initialized for company: ${companyName} (${companyId})`);
   }
 
   // Register a participant (company or employee) with their own private state
@@ -124,63 +140,34 @@ export class PayrollMultiPartyTestSetup {
     return bytes;
   }
 
-  // Test method: Register company (executed by company participant)
-  registerCompany(companyId: string, companyName: string): Ledger {
-    console.log(`🏢 ${companyId} registering as company: ${companyName}`);
-
-    const companyIdBytes = this.stringToBytes32(companyId);
-    const companyNameBytes = this.stringToBytes64(companyName);
-
-    this.executeAsParticipant(
-      companyId,
-      (ctx, cidBytes, cnameBytes) => this.contract.impureCircuits.register_company(ctx, cidBytes, cnameBytes),
-      companyIdBytes,
-      companyNameBytes
-    );
-
-    return this.getLedgerState();
-  }
-
   // Test method: Add employee (executed by company participant)
-  addEmployee(companyId: string, employeeId: string): Ledger {
-    console.log(`👤 ${companyId} adding employee ${employeeId}`);
+  addEmployee(employeeId: string): Ledger {
+    console.log(`👤 ${this.companyName} adding employee ${employeeId}`);
 
-    const companyIdBytes = this.stringToBytes32(companyId);
     const employeeIdBytes = this.stringToBytes32(employeeId);
 
+    // Initialize employee balance tracker
+    this.employeeBalanceTrackers.set(employeeId, 0n);
+
     this.executeAsParticipant(
-      companyId,
-      (ctx, cidBytes, eidBytes) => this.contract.impureCircuits.add_employee(ctx, cidBytes, eidBytes),
-      companyIdBytes,
+      this.companyId,
+      (ctx, eidBytes) => this.contract.impureCircuits.add_employee(ctx, eidBytes),
       employeeIdBytes
     );
 
     return this.getLedgerState();
   }
 
-  // Test method: Mint tokens (executed by system/admin)
-  mintTokens(amount: bigint): Ledger {
-    console.log(`🪙 System minting ${amount} tokens`);
-
-    this.executeAsParticipant(
-      'SYSTEM',
-      (ctx, amt) => this.contract.impureCircuits.mint_tokens(ctx, amt),
-      amount
-    );
-
-    return this.getLedgerState();
-  }
-
   // Test method: Deposit company funds (executed by company participant)
-  depositCompanyFunds(companyId: string, amount: bigint): Ledger {
-    console.log(`💰 ${companyId} depositing ${amount} tokens`);
+  depositCompanyFunds(amount: bigint): Ledger {
+    console.log(`💰 ${this.companyName} depositing ${amount} tokens`);
 
-    const companyIdBytes = this.stringToBytes32(companyId);
+    // Track company balance increase
+    this.companyBalanceTracker += amount;
 
     this.executeAsParticipant(
-      companyId,
-      (ctx, cidBytes, amt) => this.contract.impureCircuits.deposit_company_funds(ctx, cidBytes, amt),
-      companyIdBytes,
+      this.companyId,
+      (ctx, amt) => this.contract.impureCircuits.deposit_company_funds(ctx, amt),
       amount
     );
 
@@ -188,16 +175,19 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Test method: Pay employee (executed by company participant)
-  payEmployee(companyId: string, employeeId: string, amount: bigint): Ledger {
-    console.log(`💸 ${companyId} paying employee ${employeeId}: ${amount} tokens`);
+  payEmployee(employeeId: string, amount: bigint): Ledger {
+    console.log(`💸 ${this.companyName} paying employee ${employeeId}: ${amount} tokens`);
 
-    const companyIdBytes = this.stringToBytes32(companyId);
     const employeeIdBytes = this.stringToBytes32(employeeId);
 
+    // Track balance transfer: company -> employee
+    this.companyBalanceTracker -= amount;
+    const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
+    this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance + amount);
+
     this.executeAsParticipant(
-      companyId,
-      (ctx, cidBytes, eidBytes, amt) => this.contract.impureCircuits.pay_employee(ctx, cidBytes, eidBytes, amt),
-      companyIdBytes,
+      this.companyId,
+      (ctx, eidBytes, amt) => this.contract.impureCircuits.pay_employee(ctx, eidBytes, amt),
       employeeIdBytes,
       amount
     );
@@ -210,6 +200,10 @@ export class PayrollMultiPartyTestSetup {
     console.log(`💵 ${employeeId} withdrawing ${amount} tokens`);
 
     const employeeIdBytes = this.stringToBytes32(employeeId);
+
+    // Track employee balance decrease
+    const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
+    this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance - amount);
 
     this.executeAsParticipant(
       employeeId,
@@ -277,6 +271,35 @@ export class PayrollMultiPartyTestSetup {
     return null; // Cannot decrypt - no mapping found
   }
 
+  // Helper: Get ACTUAL employee balance from ledger (decrypt from encrypted balance)
+  // Uses encrypted_employee_balances + balance_mappings to decrypt
+  getActualEmployeeBalance(employeeId: string): bigint | null {
+    const ledgerState = this.getLedgerState();
+    const employeeIdBytes = this.stringToBytes32(employeeId);
+
+    const encryptedBalances = ledgerState.encrypted_employee_balances as any;
+    const balanceMappings = ledgerState.balance_mappings as any;
+
+    // Look up employee's encrypted balance
+    if (!encryptedBalances.member(employeeIdBytes)) {
+      return null; // Employee has no balance entry
+    }
+
+    const encryptedBalance = encryptedBalances.lookup(employeeIdBytes);
+
+    // Decrypt using balance_mappings
+    if (!balanceMappings.member(encryptedBalance)) {
+      return null; // Cannot decrypt - no mapping found
+    }
+
+    return balanceMappings.lookup(encryptedBalance) as bigint;
+  }
+
+  // Helper: Get company balance (token reserve = company balance)
+  getActualCompanyBalance(): bigint {
+    return this.getTokenReserveBalance();
+  }
+
   // Helper: Payment history access (now on public ledger)
   // NOTE: Payment history is on PUBLIC ledger (not witnesses) following bank.compact pattern
   // This allows company to write when paying, and anyone to read for credit scoring
@@ -292,9 +315,9 @@ export class PayrollMultiPartyTestSetup {
     return Number(this.getLedgerState().current_timestamp);
   }
 
-  // Helper: Get total companies
+  // Helper: Get total companies (always 1 for single-company-per-contract architecture)
   getTotalCompanies(): bigint {
-    return this.getLedgerState().total_companies;
+    return 1n; // Each contract represents exactly one company
   }
 
   // Helper: Get total employees
@@ -310,6 +333,23 @@ export class PayrollMultiPartyTestSetup {
   // Helper: Get total supply
   getTotalSupply(): bigint {
     return this.getLedgerState().total_supply;
+  }
+
+  // Helper: Get token reserve balance (actual tokens in reserve)
+  getTokenReserveBalance(): bigint {
+    const ledgerState = this.getLedgerState();
+    // QualifiedCoinInfo has a 'value' field with the token amount
+    return ledgerState.token_reserve.value;
+  }
+
+  // Helper: Get expected company balance (tracked through transaction flow)
+  getExpectedCompanyBalance(): bigint {
+    return this.companyBalanceTracker;
+  }
+
+  // Helper: Get expected employee balance (tracked through transaction flow)
+  getExpectedEmployeeBalance(employeeId: string): bigint {
+    return this.employeeBalanceTrackers.get(employeeId) || 0n;
   }
 
   // Helper: List all registered participants
@@ -346,20 +386,18 @@ export class PayrollMultiPartyTestSetup {
   // ========================================
 
   // Test method: Grant employment disclosure (executed by employee participant)
-  grantEmploymentDisclosure(employeeId: string, verifierId: string, companyId: string, expiresIn: number): Ledger {
-    console.log(`🔐 ${employeeId} granting employment disclosure to ${verifierId} for company ${companyId}`);
+  grantEmploymentDisclosure(employeeId: string, verifierId: string, expiresIn: number): Ledger {
+    console.log(`🔐 Employee ${employeeId} granting employment disclosure to ${verifierId} for company ${this.companyId}`);
 
     const employeeIdBytes = this.stringToBytes32(employeeId);
     const verifierIdBytes = this.stringToBytes32(verifierId);
-    const companyIdBytes = this.stringToBytes32(companyId);
 
     this.executeAsParticipant(
       employeeId,
-      (ctx, eidBytes, vidBytes, cidBytes, expiresInBigInt) =>
-        this.contract.impureCircuits.grant_employment_disclosure(ctx, eidBytes, vidBytes, cidBytes, expiresInBigInt),
+      (ctx, eidBytes, vidBytes, expiresInBigInt) =>
+        this.contract.impureCircuits.grant_employment_disclosure(ctx, eidBytes, vidBytes, expiresInBigInt),
       employeeIdBytes,
       verifierIdBytes,
-      companyIdBytes,
       BigInt(expiresIn)
     );
 
@@ -367,17 +405,15 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Test method: Update employment status (executed by company participant)
-  updateEmploymentStatus(companyId: string, employeeId: string, newStatus: number): Ledger {
-    console.log(`📝 ${companyId} updating employment status for ${employeeId} to ${newStatus}`);
+  updateEmploymentStatus(employeeId: string, newStatus: number): Ledger {
+    console.log(`📝 Company ${this.companyId} updating employment status for ${employeeId} to ${newStatus}`);
 
-    const companyIdBytes = this.stringToBytes32(companyId);
     const employeeIdBytes = this.stringToBytes32(employeeId);
 
     this.executeAsParticipant(
-      companyId,
-      (ctx, cidBytes, eidBytes, statusBigInt) =>
-        this.contract.impureCircuits.update_employment_status(ctx, cidBytes, eidBytes, statusBigInt),
-      companyIdBytes,
+      this.companyId,
+      (ctx, eidBytes, statusBigInt) =>
+        this.contract.impureCircuits.update_employment_status(ctx, eidBytes, statusBigInt),
       employeeIdBytes,
       BigInt(newStatus)
     );
@@ -386,19 +422,17 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Test method: Verify employment (executed by verifier participant)
-  verifyEmployment(employeeId: string, companyId: string, verifierId: string): Uint8Array {
-    console.log(`✅ ${verifierId} checking employment of ${employeeId} at ${companyId}`);
+  verifyEmployment(employeeId: string, verifierId: string): Uint8Array {
+    console.log(`✅ Verifier ${verifierId} checking employment of ${employeeId} at ${this.companyId}`);
 
     const employeeIdBytes = this.stringToBytes32(employeeId);
-    const companyIdBytes = this.stringToBytes32(companyId);
     const verifierIdBytes = this.stringToBytes32(verifierId);
 
     const result = this.executeAsParticipant(
       verifierId,
-      (ctx, eidBytes, cidBytes, vidBytes) =>
-        this.contract.impureCircuits.verify_employment(ctx, eidBytes, cidBytes, vidBytes),
+      (ctx, eidBytes, vidBytes) =>
+        this.contract.impureCircuits.verify_employment(ctx, eidBytes, vidBytes),
       employeeIdBytes,
-      companyIdBytes,
       verifierIdBytes
     );
 

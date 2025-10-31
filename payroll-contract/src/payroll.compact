@@ -11,24 +11,27 @@ export { CoinInfo };
 // ========================================
 // LEDGER STATE (Public)
 // ========================================
+// NOTE: One contract instance per company (battleship pattern)
 
-// Identity registries (hash commitments only - PUBLIC)
-export ledger company_accounts: Map<Bytes<32>, Bytes<32>>;
-export ledger employee_accounts: Map<Bytes<32>, Bytes<32>>;
+// Company identity (this contract represents ONE company)
+export ledger company_id: Bytes<32>;         // This company's ID
+export ledger company_name: Bytes<64>;       // This company's name
+
+// Employee registry (hash commitments only - PUBLIC)
+export ledger employee_accounts: Map<Bytes<32>, Bytes<32>>;  // employee_id -> hash commitment
 
 // ENCRYPTED BALANCE SYSTEM (Bank Contract Pattern)
-// Balances are encrypted on public ledger, only decryptable with proper keys
-export ledger encrypted_company_balances: Map<Bytes<32>, Bytes<32>>;   // company_id -> encrypted_balance
+// Employee balances encrypted on ledger, only decryptable with proper keys
 export ledger encrypted_employee_balances: Map<Bytes<32>, Bytes<32>>; // employee_id -> encrypted_balance
 export ledger balance_mappings: Map<Bytes<32>, Uint<64>>;             // encrypted_balance -> actual_amount
 
 // Token system state (PUBLIC)
 export ledger nonce: Bytes<32>;
 export ledger token_counter: Counter;
-export ledger total_supply: Uint<64>;
+export ledger total_supply: Uint<64>;                         // Total tokens in this company's contract
+export ledger token_reserve: QualifiedCoinInfo;                // This company's token reserve
 
 // Counters for metrics
-export ledger total_companies: Counter;
 export ledger total_employees: Counter;
 export ledger total_payments: Counter;
 
@@ -49,8 +52,14 @@ export ledger shared_payment_history: Map<Bytes<32>, Bytes<32>>;  // disclosure_
 // Key: hash(company_id + employee_id)
 export ledger employment_records: Map<Bytes<32>, PC_EmploymentRecord>;
 
-constructor(initNonce: Bytes<32>) {
+constructor(
+  initNonce: Bytes<32>,
+  companyId: Bytes<32>,
+  companyName: Bytes<64>
+) {
   nonce = disclose(initNonce);
+  company_id = disclose(companyId);
+  company_name = disclose(companyName);
   current_timestamp = 1000000 as Uint<32>;
   total_supply = 0 as Uint<64>;
 }
@@ -105,68 +114,41 @@ export circuit mint_tokens(amount: Uint<64>): [] {
 // ========================================
 // COMPANY OPERATIONS
 // ========================================
-
-// Register a new company
-export circuit register_company(
-  company_id: Bytes<32>,
-  company_name: Bytes<64>
-): [] {
-  assert(!company_accounts.member(disclose(company_id)), "Company already exists");
-
-  const company_hash = persistentHash<Vector<2, Bytes<32>>>([
-    pad(32, "zksalaria:company:"),
-    company_id
-  ]);
-
-  company_accounts.insert(disclose(company_id), disclose(company_hash));
-  total_companies.increment(1);
-}
+// NOTE: No registration needed - company created in constructor
 
 // Company deposits funds to treasury (mints payroll tokens)
-// NOTE: Balance now ENCRYPTED on ledger (bank contract pattern)
+// NOTE: Only this contract's company can deposit (enforced at API layer)
 export circuit deposit_company_funds(
-  company_id: Bytes<32>,
   amount: Uint<64>
 ): [] {
-  assert(company_accounts.member(disclose(company_id)), "Company not found");
   assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
 
   // Evolve nonce for unique token operation
   token_counter.increment(1);
   const newNonce = evolveNonce(token_counter, nonce);
 
-  // Mint payroll tokens
-  mintToken(
+  // Mint payroll tokens and send to contract (real token creation)
+  const minted_coin = mintToken(
     pad(32, "zksalaria_payroll_token"),
-    disclose(amount),
+    disclose(amount),  // Uint<64> - CoinInfo.value is actually Uint<128> but mintToken parameter is Uint<64>
     newNonce,
-    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())  // Send to contract itself
   );
 
-  // Generate encryption key for company
-  const company_key = generate_balance_key(company_id);
+  // Receive the minted coin into contract
+  receive(disclose(minted_coin));
 
-  // Get current encrypted balance (or 0 if new)
-  const current_encrypted = encrypted_company_balances.member(disclose(company_id)) ?
-    encrypted_company_balances.lookup(disclose(company_id)) : encrypt_balance(0 as Uint<64>, company_key);
+  // Merge with existing reserve or create new reserve
+  if (total_supply > 0 as Uint<64>) {
+    // Merge new coin with existing reserve
+    const merged_coin = mergeCoinImmediate(token_reserve, disclose(minted_coin));
+    token_reserve.writeCoin(merged_coin, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+  } else {
+    // First deposit - create new reserve
+    token_reserve.writeCoin(disclose(minted_coin), right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+  }
 
-  // Decrypt to get actual amount
-  const current_balance = balance_mappings.member(current_encrypted) ?
-    balance_mappings.lookup(current_encrypted) : 0 as Uint<64>;
-
-  // Add deposit amount
-  const new_balance = (current_balance + disclose(amount)) as Uint<64>;
-
-  // Encrypt new balance
-  const new_encrypted = encrypt_balance(new_balance, company_key);
-
-  // Update encrypted balance on ledger
-  encrypted_company_balances.insert(disclose(company_id), new_encrypted);
-
-  // Update balance mapping for decryption
-  balance_mappings.insert(new_encrypted, new_balance);
-
-  // Update total supply (public - aggregate metric)
+  // Update total supply (company balance = token_reserve value)
   total_supply = (total_supply + disclose(amount)) as Uint<64>;
   nonce = newNonce;
 }
@@ -176,11 +158,10 @@ export circuit deposit_company_funds(
 // ========================================
 
 // Register a new employee
+// NOTE: Only this contract's company can add employees (enforced at API layer)
 export circuit add_employee(
-  company_id: Bytes<32>,
   employee_id: Bytes<32>
 ): [] {
-  assert(company_accounts.member(disclose(company_id)), "Company not found");
   assert(!employee_accounts.member(disclose(employee_id)), "Employee already exists");
 
   const employee_hash = persistentHash<Vector<2, Bytes<32>>>([
@@ -247,6 +228,22 @@ export circuit withdraw_employee_salary(
   // Update balance mapping for decryption
   balance_mappings.insert(new_encrypted, new_balance);
 
+  // Send payroll tokens from contract reserve to employee (REAL token transfer)
+  assert(total_supply >= disclose(amount), "Insufficient token reserve");
+
+  // Send tokens to employee (ownPublicKey = caller = employee)
+  const send_result = send(
+    token_reserve,
+    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey()),
+    disclose(amount) as Uint<128>
+  );
+
+  // Update reserve with change
+  if (send_result.change.is_some) {
+    token_reserve.writeCoin(send_result.change.value, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
+  }
+  // Note: If no change, reserve is fully spent but will be replenished on next deposit
+
   // Decrease total supply (public - aggregate metric)
   total_supply = (total_supply - disclose(amount)) as Uint<64>;
 }
@@ -256,28 +253,21 @@ export circuit withdraw_employee_salary(
 // ========================================
 
 // Process single salary payment (company -> employee)
-// NOTE: Balances now ENCRYPTED on ledger (bank contract pattern)
+// NOTE: Employee balances ENCRYPTED on ledger, company balance = token_reserve
+// NOTE: Only this contract's company can pay (enforced at API layer)
 export circuit pay_employee(
-  company_id: Bytes<32>,
   employee_id: Bytes<32>,
   salary_amount: Uint<64>
 ): [] {
-  // Verify company and employee exist on public ledger
-  assert(company_accounts.member(disclose(company_id)), "Company not found");
+  // Verify employee exists
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
   assert(disclose(salary_amount) > 0 as Uint<64>, "Amount must be positive");
 
-  // Generate encryption keys for both parties
-  const company_key = generate_balance_key(company_id);
+  // Verify company has sufficient balance in token reserve
+  assert(total_supply >= disclose(salary_amount), "Insufficient company funds");
+
+  // Generate encryption key for employee
   const employee_key = generate_balance_key(employee_id);
-
-  // Decrypt company balance
-  assert(encrypted_company_balances.member(disclose(company_id)), "Company has no balance");
-  const company_encrypted = encrypted_company_balances.lookup(disclose(company_id));
-  const company_balance = balance_mappings.lookup(company_encrypted);
-
-  // Verify sufficient balance
-  assert(company_balance >= disclose(salary_amount), "Insufficient company funds");
 
   // Decrypt employee balance (or initialize to 0 if new)
   const employee_encrypted = encrypted_employee_balances.member(disclose(employee_id)) ?
@@ -285,20 +275,16 @@ export circuit pay_employee(
   const employee_balance = balance_mappings.member(employee_encrypted) ?
     balance_mappings.lookup(employee_encrypted) : 0 as Uint<64>;
 
-  // Perform transfer: company pays, employee receives
-  const new_company_balance = (company_balance - disclose(salary_amount)) as Uint<64>;
+  // Add payment to employee balance
   const new_employee_balance = (employee_balance + disclose(salary_amount)) as Uint<64>;
 
-  // Re-encrypt both balances
-  const new_company_encrypted = encrypt_balance(new_company_balance, company_key);
+  // Re-encrypt employee balance
   const new_employee_encrypted = encrypt_balance(new_employee_balance, employee_key);
 
-  // Update encrypted balances on ledger
-  encrypted_company_balances.insert(disclose(company_id), new_company_encrypted);
+  // Update encrypted employee balance on ledger
   encrypted_employee_balances.insert(disclose(employee_id), new_employee_encrypted);
 
-  // Update balance mappings for decryption
-  balance_mappings.insert(new_company_encrypted, new_company_balance);
+  // Update balance mapping for decryption
   balance_mappings.insert(new_employee_encrypted, new_employee_balance);
 
   // Read employee payment history from LEDGER (for ZKML tracking)
@@ -316,7 +302,7 @@ export circuit pay_employee(
   const new_payment = PC_create_payment_record(
     current_timestamp,
     encrypted_payment_amount,  // Encrypted amount (not plain text!)
-    disclose(company_id),  // Company ID already disclosed for account check
+    company_id,  // This contract's company ID (from ledger)
     PC_PAYMENT_TYPE_SALARY()
   );
 
@@ -401,15 +387,14 @@ export circuit grant_income_disclosure(
 // Grant employment disclosure to verifier (landlord, background check, etc.)
 // Stores authorization for verifier to verify employment status using ZKML
 // NOTE: Actual verification happens OFF-CHAIN with ZK proofs (EZKL)
+// NOTE: Employee grants disclosure for THIS contract's company (company_id from ledger)
 export circuit grant_employment_disclosure(
   employee_id: Bytes<32>,
   verifier_id: Bytes<32>,
-  company_id: Bytes<32>,
   expires_in: Uint<32>
 ): [] {
-  // Verify employee and company exist on public ledger
+  // Verify employee exists
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
-  assert(company_accounts.member(disclose(company_id)), "Company not found");
 
   // Generate unique disclosure ID
   const permission_type = PC_PERMISSION_TYPE_EMPLOYMENT();
@@ -448,27 +433,26 @@ export circuit grant_employment_disclosure(
 }
 
 // Grant audit disclosure to auditor (compliance checks, pay equity analysis)
-// Stores authorization for auditor to access company payroll data using ZKML
+// Stores authorization for auditor to access THIS company's payroll data using ZKML
 // NOTE: Actual analysis happens OFF-CHAIN with ZKML proofs (python/ezkl)
+// NOTE: Only this contract's company can grant audit disclosure (enforced at API layer)
 export circuit grant_audit_disclosure(
-  company_id: Bytes<32>,
   auditor_id: Bytes<32>,
   expires_in: Uint<32>
 ): [] {
-  // Verify company exists on public ledger
-  assert(company_accounts.member(disclose(company_id)), "Company not found");
+  // No company verification needed - this contract IS the company
 
   // Generate unique disclosure ID
   const permission_type = PC_PERMISSION_TYPE_AUDIT();
   const disclosure_id = PC_generate_disclosure_id(
-    disclose(company_id),
+    company_id,  // This contract's company ID
     disclose(auditor_id),
     permission_type
   );
 
   // Generate shared encryption key
   const shared_key = PC_generate_shared_disclosure_key(
-    disclose(company_id),
+    company_id,  // This contract's company ID
     disclose(auditor_id),
     permission_type
   );
@@ -480,7 +464,7 @@ export circuit grant_audit_disclosure(
 
   // Create authorization
   const authorization = PC_DisclosureAuthorization {
-    grantor_id: disclose(company_id),
+    grantor_id: company_id,  // This contract's company ID
     grantee_id: disclose(auditor_id),
     shared_encryption_key: shared_key,
     threshold: 0 as Uint<64>,  // Not used for audit disclosures
@@ -529,21 +513,18 @@ export circuit revoke_disclosure(
 // ========================================
 
 // Update employee's employment status (company only)
-// Allows company to mark employee as active, inactive, terminated, or on leave
+// Allows THIS company to mark employee as active, inactive, terminated, or on leave
+// NOTE: Only this contract's company can update status (enforced at API layer)
 export circuit update_employment_status(
-  company_id: Bytes<32>,
   employee_id: Bytes<32>,
   new_status: Uint<8>
 ): [] {
-  // Verify company exists
-  assert(company_accounts.member(disclose(company_id)), "Company not found");
-
   // Verify employee exists
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
 
   // Generate employment record ID
   const employment_record_id = PC_generate_employment_record_id(
-    disclose(company_id),
+    company_id,  // This contract's company ID
     disclose(employee_id)
   );
 
@@ -553,8 +534,8 @@ export circuit update_employment_status(
   // Get existing record
   const existing_record = employment_records.lookup(employment_record_id);
 
-  // Verify caller is the company (only company can update status)
-  assert(existing_record.company_id == disclose(company_id), "Only company can update status");
+  // Verify record belongs to this company (sanity check)
+  assert(existing_record.company_id == company_id, "Employment record mismatch");
 
   // Update record with new status
   const updated_record = PC_EmploymentRecord {
@@ -569,10 +550,10 @@ export circuit update_employment_status(
 }
 
 // Verify employment status for disclosure (grantee can check)
-// Returns 1 if employee is actively employed, 0 otherwise
+// Returns 1 if employee is actively employed at THIS company, 0 otherwise
+// NOTE: Verifies employment at this contract's company
 export circuit verify_employment(
   employee_id: Bytes<32>,
-  company_id: Bytes<32>,
   verifier_id: Bytes<32>
 ): Bytes<1> {
   // 1. Check disclosure authorization exists and is valid
@@ -595,9 +576,9 @@ export circuit verify_employment(
     "Authorization expired"
   );
 
-  // 2. Get employment record
+  // 2. Get employment record for THIS company
   const employment_record_id = PC_generate_employment_record_id(
-    disclose(company_id),
+    company_id,  // This contract's company ID
     disclose(employee_id)
   );
 

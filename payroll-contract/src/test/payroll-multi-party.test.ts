@@ -4,22 +4,24 @@ import { EmploymentStatus } from '../types.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
   let payroll: PayrollMultiPartyTestSetup;
+  const companyId = 'COMP001';
+  const companyName = 'Acme Corp';
 
   beforeEach(() => {
-    payroll = new PayrollMultiPartyTestSetup();
-    console.log('\n🔄 Multi-party payroll system initialized\n');
+    payroll = new PayrollMultiPartyTestSetup(companyId, companyName);
+    console.log('\n🔄 Multi-party payroll contract initialized for company:', companyName, '\n');
   });
 
   describe('Payment History on Public Ledger', () => {
-    test('should create separate private states for each participant (for future use)', () => {
-      // Register multiple participants
-      payroll.registerParticipant('COMP001');
+    test('should create separate private states for each participant', () => {
+      // Register multiple participants (company and employees)
+      payroll.registerParticipant(companyId);
       payroll.registerParticipant('EMP001');
       payroll.registerParticipant('EMP002');
 
       // Verify all participants registered
       const participants = payroll.getRegisteredParticipants();
-      expect(participants).toContain('COMP001');
+      expect(participants).toContain(companyId);
       expect(participants).toContain('EMP001');
       expect(participants).toContain('EMP002');
       expect(participants.length).toBe(3);
@@ -29,18 +31,16 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
     test('should store payment history per employee on public ledger', () => {
       // Setup
-      const companyId = 'COMP001';
       const employee1 = 'EMP001';
       const employee2 = 'EMP002';
 
-      payroll.registerCompany(companyId, 'Test Corp');
-      payroll.addEmployee(companyId, employee1);
-      payroll.addEmployee(companyId, employee2);
-      payroll.depositCompanyFunds(companyId, 100000n);
+      payroll.addEmployee(employee1);
+      payroll.addEmployee(employee2);
+      payroll.depositCompanyFunds(100000n);
 
       // Pay both employees
-      payroll.payEmployee(companyId, employee1, 5000n);
-      payroll.payEmployee(companyId, employee2, 6000n);
+      payroll.payEmployee(employee1, 5000n);
+      payroll.payEmployee(employee2, 6000n);
 
       // Each employee has their own payment history on ledger
       const emp1History = payroll.getEmployeePaymentHistory(employee1);
@@ -66,13 +66,11 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
     });
 
     test('should allow company to write and anyone to read payment history', () => {
-      const companyId = 'COMP001';
       const employeeId = 'EMP001';
 
-      payroll.registerCompany(companyId, 'Test Corp');
-      payroll.addEmployee(companyId, employeeId);
-      payroll.depositCompanyFunds(companyId, 50000n);
-      payroll.payEmployee(companyId, employeeId, 7500n);
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(50000n);
+      payroll.payEmployee(employeeId, 7500n);
 
       // Payment history is on public ledger - accessible for ZKML credit scoring
       expect(payroll.canAccessPaymentHistory(employeeId, employeeId)).toBe(true);
@@ -96,17 +94,15 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
     });
 
     test('should track payment history on ledger per employee', () => {
-      const companyId = 'COMP001';
       const employeeId = 'EMP001';
 
-      payroll.registerCompany(companyId, 'Multi Payment Corp');
-      payroll.addEmployee(companyId, employeeId);
-      payroll.depositCompanyFunds(companyId, 100000n);
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(100000n);
 
       // Make multiple payments to same employee
-      payroll.payEmployee(companyId, employeeId, 5000n);
-      payroll.payEmployee(companyId, employeeId, 6000n);
-      payroll.payEmployee(companyId, employeeId, 7000n);
+      payroll.payEmployee(employeeId, 5000n);
+      payroll.payEmployee(employeeId, 6000n);
+      payroll.payEmployee(employeeId, 7000n);
 
       // Employee's payment history accumulates on public ledger
       const empHistory = payroll.getEmployeePaymentHistory(employeeId);
@@ -131,61 +127,17 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
     });
   });
 
-  describe('Multi-Company Payment History', () => {
-    test('should separate payment history between different companies on ledger', () => {
-      const company1 = 'COMP001';
-      const company2 = 'COMP002';
-      const emp1 = 'EMP001';
-      const emp2 = 'EMP002';
-
-      // Setup two companies with their own employees
-      payroll.registerCompany(company1, 'Company A');
-      payroll.registerCompany(company2, 'Company B');
-      payroll.addEmployee(company1, emp1);
-      payroll.addEmployee(company2, emp2);
-
-      payroll.depositCompanyFunds(company1, 100000n);
-      payroll.depositCompanyFunds(company2, 75000n);
-
-      payroll.payEmployee(company1, emp1, 8000n);
-      payroll.payEmployee(company2, emp2, 7000n);
-
-      // Each employee should only see their own payments
-      const emp1History = payroll.getEmployeePaymentHistory(emp1);
-      const emp2History = payroll.getEmployeePaymentHistory(emp2);
-
-      const emp1Payments = emp1History.filter(r => r.timestamp > 0n);
-      const emp2Payments = emp2History.filter(r => r.timestamp > 0n);
-
-      expect(emp1Payments.length).toBe(1);
-      expect(emp2Payments.length).toBe(1);
-
-      // Decrypt and verify amounts
-      const emp1Amount = payroll.decryptPaymentAmount(emp1Payments[0].encrypted_amount);
-      const emp2Amount = payroll.decryptPaymentAmount(emp2Payments[0].encrypted_amount);
-
-      expect(emp1Amount).toBe(8000n);
-      expect(emp2Amount).toBe(7000n);
-
-      // Each employee's history is separate on ledger
-      expect(emp1Payments.length).toBe(1);
-      expect(emp2Payments.length).toBe(1);
-
-      console.log('✅ Payment histories correctly separated on ledger between companies');
-    });
-
-    test('should maintain separate payment histories for multiple employees per company', () => {
-      const companyId = 'COMP001';
+  describe('Multiple Employee Payment History', () => {
+    test('should maintain separate payment histories for multiple employees', () => {
       const employees = ['EMP001', 'EMP002', 'EMP003'];
 
-      payroll.registerCompany(companyId, 'Big Corp');
-      employees.forEach(emp => payroll.addEmployee(companyId, emp));
-      payroll.depositCompanyFunds(companyId, 500000n);
+      employees.forEach(emp => payroll.addEmployee(emp));
+      payroll.depositCompanyFunds(500000n);
 
       // Pay each employee different amounts
-      payroll.payEmployee(companyId, employees[0], 10000n);
-      payroll.payEmployee(companyId, employees[1], 12000n);
-      payroll.payEmployee(companyId, employees[2], 15000n);
+      payroll.payEmployee(employees[0], 10000n);
+      payroll.payEmployee(employees[1], 12000n);
+      payroll.payEmployee(employees[2], 15000n);
 
       // Each employee should only see their own payment
       const emp1Payments = payroll.getEmployeePaymentHistory(employees[0]).filter(r => r.timestamp > 0n);
@@ -216,30 +168,25 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
   describe('Public Ledger Visibility (Encrypted Balances)', () => {
     test('should share public ledger state across all participants', () => {
-      const company1 = 'COMP001';
-      const company2 = 'COMP002';
       const emp1 = 'EMP001';
       const emp2 = 'EMP002';
 
       // All participants perform operations
-      payroll.registerCompany(company1, 'Company A');
-      payroll.registerCompany(company2, 'Company B');
-      payroll.addEmployee(company1, emp1);
-      payroll.addEmployee(company2, emp2);
+      payroll.addEmployee(emp1);
+      payroll.addEmployee(emp2);
 
       // All participants should see same public ledger state
-      expect(payroll.getTotalCompanies()).toBe(2n);
+      expect(payroll.getTotalCompanies()).toBe(1n); // This contract represents one company
       expect(payroll.getTotalEmployees()).toBe(2n);
       expect(payroll.getTotalPayments()).toBe(0n);
 
-      payroll.depositCompanyFunds(company1, 100000n);
-      payroll.depositCompanyFunds(company2, 75000n);
+      payroll.depositCompanyFunds(100000n);
 
       // Public ledger state visible to all
-      expect(payroll.getTotalSupply()).toBe(175000n);
+      expect(payroll.getTotalSupply()).toBe(100000n);
 
-      payroll.payEmployee(company1, emp1, 8000n);
-      payroll.payEmployee(company2, emp2, 7000n);
+      payroll.payEmployee(emp1, 8000n);
+      payroll.payEmployee(emp2, 7000n);
 
       // Payment counter is public
       expect(payroll.getTotalPayments()).toBe(2n);
@@ -248,12 +195,11 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
     });
 
     test('should demonstrate privacy: encrypted balances + payment history on ledger', () => {
-      const companyId = 'COMP001';
       const employeeId = 'EMP001';
 
       console.log('\n🔒 zkSalaria Privacy Architecture (following bank.compact pattern):');
       console.log('├─ PUBLIC LEDGER (shared by all):');
-      console.log('│  ├─ Encrypted company balances (hash encrypted - PRIVATE)');
+      console.log('│  ├─ Encrypted company balance (hash encrypted - PRIVATE)');
       console.log('│  ├─ Encrypted employee balances (hash encrypted - PRIVATE)');
       console.log('│  ├─ Payment history per employee (for ZKML - PUBLIC)');
       console.log('│  ├─ Total supply (aggregate only)');
@@ -264,10 +210,9 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('│  └─ Company can write payments, employee decrypts locally for ZKML');
       console.log('└─ MULTI-PARTY SAFE: Company can pay employees, history tracked on ledger ✅');
 
-      payroll.registerCompany(companyId, 'Privacy Corp');
-      payroll.addEmployee(companyId, employeeId);
-      payroll.depositCompanyFunds(companyId, 100000n);
-      payroll.payEmployee(companyId, employeeId, 8000n);
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(100000n);
+      payroll.payEmployee(employeeId, 8000n);
 
       // Public ledger shows aggregates only (balances encrypted)
       expect(payroll.getTotalSupply()).toBe(100000n);
@@ -289,56 +234,39 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
   describe('Complex Multi-Party Scenarios', () => {
     test('should handle complex workflow with proper isolation', () => {
-      // Setup: 2 companies, 5 employees total
-      const comp1 = 'COMP001';
-      const comp2 = 'COMP002';
-      const comp1Employees = ['EMP001', 'EMP002', 'EMP003'];
-      const comp2Employees = ['EMP004', 'EMP005'];
-
-      // Register companies
-      payroll.registerCompany(comp1, 'Big Corp');
-      payroll.registerCompany(comp2, 'Small Inc');
+      // Setup: 1 company, 5 employees total
+      const allEmployees = ['EMP001', 'EMP002', 'EMP003', 'EMP004', 'EMP005'];
 
       // Register employees
-      comp1Employees.forEach(emp => payroll.addEmployee(comp1, emp));
-      comp2Employees.forEach(emp => payroll.addEmployee(comp2, emp));
+      allEmployees.forEach(emp => payroll.addEmployee(emp));
 
       // Deposit funds
-      payroll.depositCompanyFunds(comp1, 500000n);
-      payroll.depositCompanyFunds(comp2, 200000n);
+      payroll.depositCompanyFunds(500000n);
 
       // Process payments
-      payroll.payEmployee(comp1, comp1Employees[0], 10000n);
-      payroll.payEmployee(comp1, comp1Employees[1], 12000n);
-      payroll.payEmployee(comp1, comp1Employees[2], 15000n);
-      payroll.payEmployee(comp2, comp2Employees[0], 8000n);
-      payroll.payEmployee(comp2, comp2Employees[1], 9000n);
+      payroll.payEmployee(allEmployees[0], 10000n);
+      payroll.payEmployee(allEmployees[1], 12000n);
+      payroll.payEmployee(allEmployees[2], 15000n);
+      payroll.payEmployee(allEmployees[3], 8000n);
+      payroll.payEmployee(allEmployees[4], 9000n);
 
       // Verify public ledger
-      expect(payroll.getTotalCompanies()).toBe(2n);
+      expect(payroll.getTotalCompanies()).toBe(1n); // This contract represents one company
       expect(payroll.getTotalEmployees()).toBe(5n);
       expect(payroll.getTotalPayments()).toBe(5n);
-      expect(payroll.getTotalSupply()).toBe(700000n);
+      expect(payroll.getTotalSupply()).toBe(500000n);
 
       // Verify each employee only sees their own payment
       // NOTE: Amounts are ENCRYPTED - we can only verify records exist, not read amounts
-      comp1Employees.forEach((emp, idx) => {
+      allEmployees.forEach((emp, idx) => {
         const history = payroll.getEmployeePaymentHistory(emp);
         const payments = history.filter(r => r.timestamp > 0n);
         expect(payments.length).toBe(1);
       });
 
-      comp2Employees.forEach((emp, idx) => {
-        const history = payroll.getEmployeePaymentHistory(emp);
-        const payments = history.filter(r => r.timestamp > 0n);
-        expect(payments.length).toBe(1);
-      });
-
-      // Companies don't have payment history - only employees do
-      const comp1History = payroll.getEmployeePaymentHistory(comp1);
-      const comp2History = payroll.getEmployeePaymentHistory(comp2);
-      expect(comp1History.filter(r => r.timestamp > 0n).length).toBe(0);
-      expect(comp2History.filter(r => r.timestamp > 0n).length).toBe(0);
+      // Company doesn't have payment history - only employees do
+      const compHistory = payroll.getEmployeePaymentHistory(companyId);
+      expect(compHistory.filter(r => r.timestamp > 0n).length).toBe(0);
 
       console.log('✅ Complex multi-party workflow with payment history on ledger');
       payroll.printMultiPartyState();
@@ -348,19 +276,17 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
   describe('Multi-Party Employment Verification', () => {
     test('should allow employee to grant disclosure to verifier (landlord)', () => {
       // Setup: 3 participants - company, employee, verifier
-      const companyId = 'COMP001';
       const employeeId = 'EMP001';
       const verifierId = 'LANDLORD001';
 
-      // Company registers and adds employee
-      payroll.registerCompany(companyId, 'Acme Corp');
-      payroll.addEmployee(companyId, employeeId);
+      // Company adds employee
+      payroll.addEmployee(employeeId);
 
       // Employee grants employment disclosure to verifier
-      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
 
       // Verifier checks employment status
-      const result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      const result = payroll.verifyEmployment(employeeId, verifierId);
 
       // Assert: Employee is active (0x01)
       expect(result[0]).toBe(1);
@@ -376,26 +302,24 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
     test('should allow company to update employment status independently', () => {
       // Setup: 3 participants
-      const companyId = 'COMP002';
       const employeeId = 'EMP002';
       const verifierId = 'LANDLORD002';
 
-      // Company registers and adds employee
-      payroll.registerCompany(companyId, 'Status Corp');
-      payroll.addEmployee(companyId, employeeId);
+      // Company adds employee
+      payroll.addEmployee(employeeId);
 
       // Employee grants disclosure
-      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
 
       // Verify initially active
-      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      let result = payroll.verifyEmployment(employeeId, verifierId);
       expect(result[0]).toBe(1);
 
       // Company updates status to TERMINATED
-      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.TERMINATED);
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.TERMINATED);
 
       // Verifier checks again
-      result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      result = payroll.verifyEmployment(employeeId, verifierId);
 
       // Assert: Employee is no longer active (0x00)
       expect(result[0]).toBe(0);
@@ -405,32 +329,30 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
     test('should handle multiple verifiers for same employee', () => {
       // Setup: 1 company, 1 employee, 2 verifiers (landlord + bank)
-      const companyId = 'COMP003';
       const employeeId = 'EMP003';
       const landlord = 'LANDLORD003';
       const bank = 'BANK003';
 
-      payroll.registerCompany(companyId, 'Multi Verifier Corp');
-      payroll.addEmployee(companyId, employeeId);
+      payroll.addEmployee(employeeId);
 
       // Employee grants disclosure to both verifiers
-      payroll.grantEmploymentDisclosure(employeeId, landlord, companyId, 0);
-      payroll.grantEmploymentDisclosure(employeeId, bank, companyId, 0);
+      payroll.grantEmploymentDisclosure(employeeId, landlord, 0);
+      payroll.grantEmploymentDisclosure(employeeId, bank, 0);
 
       // Both verifiers check employment
-      const landlordResult = payroll.verifyEmployment(employeeId, companyId, landlord);
-      const bankResult = payroll.verifyEmployment(employeeId, companyId, bank);
+      const landlordResult = payroll.verifyEmployment(employeeId, landlord);
+      const bankResult = payroll.verifyEmployment(employeeId, bank);
 
       // Both should see active employment
       expect(landlordResult[0]).toBe(1);
       expect(bankResult[0]).toBe(1);
 
       // Company terminates employee
-      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.TERMINATED);
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.TERMINATED);
 
       // Both verifiers should now see terminated
-      const landlordResult2 = payroll.verifyEmployment(employeeId, companyId, landlord);
-      const bankResult2 = payroll.verifyEmployment(employeeId, companyId, bank);
+      const landlordResult2 = payroll.verifyEmployment(employeeId, landlord);
+      const bankResult2 = payroll.verifyEmployment(employeeId, bank);
 
       expect(landlordResult2[0]).toBe(0);
       expect(bankResult2[0]).toBe(0);
@@ -439,55 +361,49 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
     });
 
     test('should maintain separate employment records for different employees', () => {
-      // Setup: 2 companies with different employees
-      const comp1 = 'COMP004';
-      const comp2 = 'COMP005';
+      // Setup: 1 company with different employees
       const emp1 = 'EMP004';
       const emp2 = 'EMP005';
       const verifier = 'LANDLORD004';
 
-      // Both companies register with different employees
-      payroll.registerCompany(comp1, 'Company A');
-      payroll.registerCompany(comp2, 'Company B');
-      payroll.addEmployee(comp1, emp1);
-      payroll.addEmployee(comp2, emp2);
+      // Company adds employees
+      payroll.addEmployee(emp1);
+      payroll.addEmployee(emp2);
 
       // Employees grant disclosure
-      payroll.grantEmploymentDisclosure(emp1, verifier, comp1, 0);
-      payroll.grantEmploymentDisclosure(emp2, verifier, comp2, 0);
+      payroll.grantEmploymentDisclosure(emp1, verifier, 0);
+      payroll.grantEmploymentDisclosure(emp2, verifier, 0);
 
-      // Verify both employed at their respective companies
-      const emp1Result = payroll.verifyEmployment(emp1, comp1, verifier);
-      const emp2Result = payroll.verifyEmployment(emp2, comp2, verifier);
+      // Verify both employed
+      const emp1Result = payroll.verifyEmployment(emp1, verifier);
+      const emp2Result = payroll.verifyEmployment(emp2, verifier);
 
       expect(emp1Result[0]).toBe(1);
       expect(emp2Result[0]).toBe(1);
 
-      // Company 1 terminates emp1
-      payroll.updateEmploymentStatus(comp1, emp1, EmploymentStatus.TERMINATED);
+      // Company terminates emp1
+      payroll.updateEmploymentStatus(emp1, EmploymentStatus.TERMINATED);
 
       // Verify emp1 terminated, emp2 still active
-      const emp1Result2 = payroll.verifyEmployment(emp1, comp1, verifier);
-      const emp2Result2 = payroll.verifyEmployment(emp2, comp2, verifier);
+      const emp1Result2 = payroll.verifyEmployment(emp1, verifier);
+      const emp2Result2 = payroll.verifyEmployment(emp2, verifier);
 
-      expect(emp1Result2[0]).toBe(0); // Terminated at Company 1
-      expect(emp2Result2[0]).toBe(1); // Still active at Company 2
+      expect(emp1Result2[0]).toBe(0); // Terminated
+      expect(emp2Result2[0]).toBe(1); // Still active
 
-      console.log('✅ Multi-party: employment status independent across companies');
+      console.log('✅ Multi-party: employment status independent across employees');
     });
 
     test('should enforce disclosure permission - verifier needs grant', () => {
       // Setup: company, employee, unauthorized verifier
-      const companyId = 'COMP006';
       const employeeId = 'EMP006';
       const unauthorizedVerifier = 'HACKER001';
 
-      payroll.registerCompany(companyId, 'Secure Corp');
-      payroll.addEmployee(companyId, employeeId);
+      payroll.addEmployee(employeeId);
 
       // Verifier tries to check without disclosure grant (should fail)
       expect(() => {
-        payroll.verifyEmployment(employeeId, companyId, unauthorizedVerifier);
+        payroll.verifyEmployment(employeeId, unauthorizedVerifier);
       }).toThrow();
 
       console.log('✅ Multi-party: unauthorized verifier blocked (no disclosure grant)');
@@ -495,20 +411,18 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
     test('should handle employment verification with time-based expiration', () => {
       // Setup
-      const companyId = 'COMP007';
       const employeeId = 'EMP007';
       const verifierId = 'LANDLORD007';
       const currentTime = payroll.getCurrentTimestamp();
       const expirationDelta = 3600; // 1 hour
 
-      payroll.registerCompany(companyId, 'Expiration Corp');
-      payroll.addEmployee(companyId, employeeId);
+      payroll.addEmployee(employeeId);
 
       // Grant disclosure with expiration
-      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, expirationDelta);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, expirationDelta);
 
       // Verify works before expiration
-      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      let result = payroll.verifyEmployment(employeeId, verifierId);
       expect(result[0]).toBe(1);
 
       // Advance time past expiration
@@ -516,41 +430,39 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       // Verification should fail after expiration
       expect(() => {
-        payroll.verifyEmployment(employeeId, companyId, verifierId);
+        payroll.verifyEmployment(employeeId, verifierId);
       }).toThrow();
 
       console.log('✅ Multi-party: employment disclosure expires after time limit');
     });
 
     test('should demonstrate complete 3-party workflow', () => {
-      const companyId = 'COMP008';
       const employeeId = 'EMP008';
       const landlordId = 'LANDLORD008';
 
       console.log('\n👥 Multi-Party Employment Verification Workflow:');
-      console.log('├─ Step 1: Company registers and hires employee');
-      payroll.registerCompany(companyId, 'Workflow Corp');
-      payroll.addEmployee(companyId, employeeId);
+      console.log('├─ Step 1: Company hires employee');
+      payroll.addEmployee(employeeId);
 
       console.log('├─ Step 2: Employee grants employment disclosure to landlord');
-      payroll.grantEmploymentDisclosure(employeeId, landlordId, companyId, 0);
+      payroll.grantEmploymentDisclosure(employeeId, landlordId, 0);
 
       console.log('├─ Step 3: Landlord verifies employment status (ACTIVE)');
-      let result = payroll.verifyEmployment(employeeId, companyId, landlordId);
+      let result = payroll.verifyEmployment(employeeId, landlordId);
       expect(result[0]).toBe(1);
 
       console.log('├─ Step 4: Company updates employee status to ON_LEAVE');
-      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.ON_LEAVE);
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.ON_LEAVE);
 
       console.log('├─ Step 5: Landlord re-verifies employment (NOT ACTIVE)');
-      result = payroll.verifyEmployment(employeeId, companyId, landlordId);
+      result = payroll.verifyEmployment(employeeId, landlordId);
       expect(result[0]).toBe(0);
 
       console.log('├─ Step 6: Company reactivates employee (ACTIVE)');
-      payroll.updateEmploymentStatus(companyId, employeeId, EmploymentStatus.ACTIVE);
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.ACTIVE);
 
       console.log('└─ Step 7: Landlord verifies again (ACTIVE)');
-      result = payroll.verifyEmployment(employeeId, companyId, landlordId);
+      result = payroll.verifyEmployment(employeeId, landlordId);
       expect(result[0]).toBe(1);
 
       console.log('\n✅ Complete 3-party workflow: company ↔ employee ↔ verifier');
@@ -561,6 +473,179 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(participants).toContain(companyId);
       expect(participants).toContain(employeeId);
       expect(participants).toContain(landlordId);
+    });
+  });
+
+  describe('Balance Decryption from Ledger (Multi-Party)', () => {
+    test('should decrypt employee balance with separate participant private states', () => {
+      // Arrange - Each participant has their own private state
+      const employeeId = 'EMP_DECRYPT_TEST';
+      const depositAmount = 100000n;
+      const salaryAmount = 7500n;
+
+      // Setup - Company and employee are separate participants
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(depositAmount);
+      payroll.payEmployee(employeeId, salaryAmount);
+
+      // Act - Decrypt employee balance from shared public ledger
+      const actualBalance = payroll.getActualEmployeeBalance(employeeId);
+
+      // Assert - Balance can be decrypted from encrypted_employee_balances + balance_mappings
+      expect(actualBalance).not.toBeNull();
+      expect(actualBalance).toBe(salaryAmount);
+
+      // Also verify it matches manually tracked balance
+      expect(actualBalance).toBe(payroll.getExpectedEmployeeBalance(employeeId));
+
+      console.log('✅ Multi-party: Employee balance decrypted from shared ledger despite separate private states!');
+    });
+
+    test('should decrypt company balance from token reserve (multi-party)', () => {
+      // Arrange
+      const depositAmount = 75000n;
+
+      // Act - Company deposits (company participant's private state)
+      payroll.depositCompanyFunds(depositAmount);
+      const actualCompanyBalance = payroll.getActualCompanyBalance();
+
+      // Assert - Company balance = token reserve (not affected by separate private states)
+      expect(actualCompanyBalance).toBe(depositAmount);
+
+      console.log('✅ Multi-party: Company balance = token_reserve works with separate private states!');
+    });
+
+    test('should return null for employee with no balance entry (multi-party)', () => {
+      // Arrange - Create employee but don't pay them
+      const employeeId = 'EMP_NO_BALANCE';
+      payroll.addEmployee(employeeId);
+
+      // Act
+      const actualBalance = payroll.getActualEmployeeBalance(employeeId);
+
+      // Assert - Should return null (no balance entry yet)
+      expect(actualBalance).toBeNull();
+
+      console.log('✅ Multi-party: No balance entry returns null correctly');
+    });
+
+    test('should decrypt multiple employee balances independently (multi-party)', () => {
+      // Arrange - Each employee has their own participant private state
+      const emp1 = 'EMP_MULTI_1';
+      const emp2 = 'EMP_MULTI_2';
+      const emp3 = 'EMP_MULTI_3';
+
+      payroll.addEmployee(emp1);
+      payroll.addEmployee(emp2);
+      payroll.addEmployee(emp3);
+
+      payroll.depositCompanyFunds(500000n);
+
+      // Pay different amounts to each employee (each uses their own private state)
+      payroll.payEmployee(emp1, 10000n);
+      payroll.payEmployee(emp2, 15000n);
+      payroll.payEmployee(emp3, 20000n);
+
+      // Act - Decrypt all balances from shared public ledger
+      const balance1 = payroll.getActualEmployeeBalance(emp1);
+      const balance2 = payroll.getActualEmployeeBalance(emp2);
+      const balance3 = payroll.getActualEmployeeBalance(emp3);
+
+      // Assert - Each employee has correct independent balance
+      expect(balance1).toBe(10000n);
+      expect(balance2).toBe(15000n);
+      expect(balance3).toBe(20000n);
+
+      // Verify company balance (token reserve) unchanged - payments are internal
+      expect(payroll.getActualCompanyBalance()).toBe(500000n);
+
+      console.log('✅ Multi-party: Each employee balance encrypted independently on shared ledger!');
+    });
+
+    test('should track balance changes through payment and withdrawal (multi-party)', () => {
+      // Arrange - Employee participant has their own private state
+      const employeeId = 'EMP_FLOW_TEST';
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(200000n);
+
+      // Act & Assert - Track balance through workflow with separate participant states
+      // 1. Initial payment (company → employee, different private states)
+      payroll.payEmployee(employeeId, 10000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(10000n);
+
+      // 2. Second payment
+      payroll.payEmployee(employeeId, 5000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(15000n);
+
+      // 3. Withdrawal (employee participant withdraws from their balance)
+      payroll.withdrawEmployeeSalary(employeeId, 7000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(8000n);
+
+      // 4. Another payment
+      payroll.payEmployee(employeeId, 3000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(11000n);
+
+      console.log('✅ Multi-party: Balance flow tracking works across separate participant private states!');
+    });
+
+    test('should handle employee withdrawal reducing both encrypted balance and token reserve', () => {
+      // Arrange
+      const employeeId = 'EMP_WITHDRAW_TEST';
+      const depositAmount = 100000n;
+      const salaryAmount = 7500n;
+      const withdrawAmount = 5000n;
+
+      // Setup - Each action executed by different participant
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(depositAmount);
+      const reserveAfterDeposit = payroll.getTokenReserveBalance();
+      payroll.payEmployee(employeeId, salaryAmount);
+
+      // Act - Employee withdraws (employee participant's private state)
+      payroll.withdrawEmployeeSalary(employeeId, withdrawAmount);
+
+      // Assert - Verify both balances updated correctly
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(salaryAmount - withdrawAmount);
+      expect(payroll.getTokenReserveBalance()).toBe(reserveAfterDeposit - withdrawAmount);
+
+      console.log('✅ Multi-party: Withdrawal reduces both encrypted balance and token reserve!');
+    });
+
+    test('should demonstrate privacy: balances encrypted despite multi-party access to ledger', () => {
+      // Arrange - Multiple participants interacting with shared ledger
+      const emp1 = 'EMP_PRIVACY_1';
+      const emp2 = 'EMP_PRIVACY_2';
+
+      console.log('\n🔒 Multi-Party Privacy Test:');
+      console.log('├─ Public ledger shared by all participants');
+      console.log('├─ Each employee balance encrypted independently');
+      console.log('├─ Company can pay, employees can withdraw');
+      console.log('└─ Balance decryption uses encrypted_employee_balances + balance_mappings');
+
+      payroll.addEmployee(emp1);
+      payroll.addEmployee(emp2);
+      payroll.depositCompanyFunds(200000n);
+
+      // Pay employees different amounts
+      payroll.payEmployee(emp1, 8000n);
+      payroll.payEmployee(emp2, 12000n);
+
+      // Act - Decrypt balances from shared ledger
+      const balance1 = payroll.getActualEmployeeBalance(emp1);
+      const balance2 = payroll.getActualEmployeeBalance(emp2);
+
+      // Assert - Each balance is correctly decrypted
+      expect(balance1).toBe(8000n);
+      expect(balance2).toBe(12000n);
+
+      // Verify company balance unchanged (internal transfers)
+      expect(payroll.getActualCompanyBalance()).toBe(200000n);
+
+      console.log('\n💡 Privacy achieved: Balances encrypted on shared ledger!');
+      console.log('💡 Each participant has separate private state');
+      console.log('💡 Decryption works via balance_mappings map');
+
+      console.log('\n✅ Multi-party: Privacy preserved with encrypted balances on shared ledger!');
     });
   });
 });

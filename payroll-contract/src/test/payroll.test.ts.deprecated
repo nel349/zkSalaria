@@ -1,0 +1,734 @@
+import { describe, test, expect, beforeEach } from 'vitest';
+import { PayrollTestSetup } from './payroll-setup.js';
+import { EmploymentStatus, PermissionType } from '../types.js';
+
+describe('zkSalaria Payroll Tests (Encrypted Balance System)', () => {
+  let payroll: PayrollTestSetup;
+  const companyId = 'COMP001';
+  const companyName = 'Acme Corp';
+
+  beforeEach(() => {
+    payroll = new PayrollTestSetup(companyId, companyName);
+    console.log('\n🔄 Payroll contract initialized for company:', companyName, '\n');
+  });
+
+  describe('Contract Initialization', () => {
+    test('should initialize contract with company info', () => {
+      // Assert - Contract created with 1 company (this contract instance)
+      expect(payroll.getTotalCompanies()).toBe(1n);
+      expect(payroll.getTotalEmployees()).toBe(0n);
+      expect(payroll.getTotalPayments()).toBe(0n);
+      expect(payroll.getTotalSupply()).toBe(0n);
+      console.log('✅ Contract initialization test passed');
+    });
+  });
+
+  describe('Employee Management', () => {
+    test('should add employee to company', () => {
+      // Arrange
+      const employeeId = 'EMP001';
+
+      // Act
+      payroll.addEmployee(employeeId);
+
+      // Assert
+      expect(payroll.getTotalEmployees()).toBe(1n);
+      console.log('✅ Employee addition test passed');
+    });
+
+    test('should add multiple employees to company', () => {
+      // Act
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.addEmployee('EMP003');
+
+      // Assert
+      expect(payroll.getTotalEmployees()).toBe(3n);
+      console.log('✅ Multiple employee addition test passed');
+    });
+
+    test('should fail to add duplicate employee', () => {
+      // Arrange
+      const employeeId = 'EMP001';
+
+      // Act
+      payroll.addEmployee(employeeId);
+
+      // Assert
+      expect(() => {
+        payroll.addEmployee(employeeId);
+      }).toThrow(); // Should fail "Employee already exists"
+    });
+  });
+
+  describe('Balance Decryption from Ledger', () => {
+    test('should decrypt employee balance from encrypted ledger data', () => {
+      // Arrange
+      const employeeId = 'EMP_DECRYPT_TEST';
+      const depositAmount = 100000n;
+      const salaryAmount = 7500n;
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(depositAmount);
+      payroll.payEmployee(employeeId, salaryAmount);
+
+      // Act - Decrypt employee balance from ledger
+      const actualBalance = payroll.getActualEmployeeBalance(employeeId);
+
+      // Assert - Verify we can decrypt the balance from ledger
+      expect(actualBalance).not.toBeNull();
+      expect(actualBalance).toBe(salaryAmount);
+
+      // Also verify it matches manually tracked balance
+      expect(actualBalance).toBe(payroll.getExpectedEmployeeBalance(employeeId));
+
+      console.log('✅ Employee balance decryption test passed - encrypted_employee_balances + balance_mappings work!');
+    });
+
+    test('should decrypt company balance from token reserve', () => {
+      // Arrange
+      const depositAmount = 75000n;
+
+      // Act
+      payroll.depositCompanyFunds(depositAmount);
+      const actualCompanyBalance = payroll.getActualCompanyBalance();
+
+      // Assert - Company balance is token reserve
+      expect(actualCompanyBalance).toBe(depositAmount);
+
+      console.log('✅ Company balance decryption test passed - token_reserve = company balance!');
+    });
+
+    test('should return null for employee with no balance entry', () => {
+      // Arrange - Create employee but don't pay them
+      const employeeId = 'EMP_NO_BALANCE';
+      payroll.addEmployee(employeeId);
+
+      // Act
+      const actualBalance = payroll.getActualEmployeeBalance(employeeId);
+
+      // Assert - Should return null (no balance entry yet)
+      expect(actualBalance).toBeNull();
+
+      console.log('✅ No balance entry test passed - returns null correctly');
+    });
+
+    test('should decrypt multiple employee balances independently', () => {
+      // Arrange
+      const emp1 = 'EMP_MULTI_1';
+      const emp2 = 'EMP_MULTI_2';
+      const emp3 = 'EMP_MULTI_3';
+
+      payroll.addEmployee(emp1);
+      payroll.addEmployee(emp2);
+      payroll.addEmployee(emp3);
+
+      payroll.depositCompanyFunds(500000n);
+
+      // Pay different amounts to each employee
+      payroll.payEmployee(emp1, 10000n);
+      payroll.payEmployee(emp2, 15000n);
+      payroll.payEmployee(emp3, 20000n);
+
+      // Act - Decrypt all balances
+      const balance1 = payroll.getActualEmployeeBalance(emp1);
+      const balance2 = payroll.getActualEmployeeBalance(emp2);
+      const balance3 = payroll.getActualEmployeeBalance(emp3);
+
+      // Assert - Each employee has correct independent balance
+      expect(balance1).toBe(10000n);
+      expect(balance2).toBe(15000n);
+      expect(balance3).toBe(20000n);
+
+      // Verify company balance (token reserve) unchanged - payments are internal transfers
+      expect(payroll.getActualCompanyBalance()).toBe(500000n);
+
+      console.log('✅ Multiple employee balance decryption test passed - each encrypted independently!');
+    });
+
+    test('should track balance changes through payment and withdrawal', () => {
+      // Arrange
+      const employeeId = 'EMP_FLOW_TEST';
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(200000n);
+
+      // Act & Assert - Track balance through workflow
+      // 1. Initial payment
+      payroll.payEmployee(employeeId, 10000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(10000n);
+
+      // 2. Second payment
+      payroll.payEmployee(employeeId, 5000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(15000n);
+
+      // 3. Withdrawal
+      payroll.withdrawEmployeeSalary(employeeId, 7000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(8000n);
+
+      // 4. Another payment
+      payroll.payEmployee(employeeId, 3000n);
+      expect(payroll.getActualEmployeeBalance(employeeId)).toBe(11000n);
+
+      console.log('✅ Balance flow tracking test passed - decrypts correctly at each step!');
+    });
+  });
+
+  describe('Token Operations (Real Token Minting)', () => {
+    test('should deposit company funds (mints real tokens)', () => {
+      // Arrange
+      const depositAmount = 50000n;
+      const initialSupply = payroll.getTotalSupply();
+      const initialReserve = payroll.getTokenReserveBalance();
+
+      // Act
+      payroll.depositCompanyFunds(depositAmount);
+
+      // Assert - Check ACTUAL token reserve balance
+      expect(payroll.getTokenReserveBalance()).toBe(initialReserve + depositAmount);
+
+      // Check ACTUAL company balance from ledger (company balance = token reserve)
+      expect(payroll.getActualCompanyBalance()).toBe(depositAmount);
+
+      // Also check total supply counter
+      expect(payroll.getTotalSupply()).toBe(initialSupply + depositAmount);
+
+      console.log('✅ Company deposit test passed - REAL tokens verified in reserve');
+    });
+
+    test('should handle multiple deposits', () => {
+      // Arrange
+      const deposit1 = 50000n;
+      const deposit2 = 75000n;
+
+      // Act
+      payroll.depositCompanyFunds(deposit1);
+      payroll.depositCompanyFunds(deposit2);
+
+      // Assert - Verify ACTUAL reserve balance
+      expect(payroll.getTokenReserveBalance()).toBe(deposit1 + deposit2);
+
+      // Check company balance (encrypted, tracked manually)
+      expect(payroll.getExpectedCompanyBalance()).toBe(deposit1 + deposit2);
+
+      // Total supply should match reserve
+      expect(payroll.getTotalSupply()).toBe(deposit1 + deposit2);
+
+      console.log('✅ Multiple deposits test passed - REAL tokens verified');
+    });
+  });
+
+  describe('Salary Payments (Encrypted Transfer)', () => {
+    test('should pay employee salary (encrypted balance transfer)', () => {
+      // Arrange
+      const employeeId = 'EMP002';
+      const depositAmount = 100000n;
+      const salaryAmount = 7500n;
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(depositAmount);
+      const reserveAfterDeposit = payroll.getTokenReserveBalance();
+
+      // Act
+      payroll.payEmployee(employeeId, salaryAmount);
+
+      // Assert - Tokens should STAY in reserve (internal transfer only updates encrypted balances)
+      expect(payroll.getTokenReserveBalance()).toBe(reserveAfterDeposit); // Reserve unchanged!
+
+      // Check encrypted balances (tracked manually)
+      expect(payroll.getExpectedCompanyBalance()).toBe(depositAmount - salaryAmount);
+      expect(payroll.getExpectedEmployeeBalance(employeeId)).toBe(salaryAmount);
+
+      // Counters
+      expect(payroll.getTotalPayments()).toBe(1n);
+      expect(payroll.getTotalSupply()).toBe(depositAmount); // Supply unchanged
+
+      console.log('✅ Salary payment test passed - tokens remain in reserve (internal transfer)');
+    });
+
+    test('should process multiple salary payments', () => {
+      // Arrange
+      const employee1 = 'EMP003';
+      const employee2 = 'EMP004';
+      const depositAmount = 200000n;
+      const salary1 = 7500n;
+      const salary2 = 8000n;
+
+      // Setup
+      payroll.addEmployee(employee1);
+      payroll.addEmployee(employee2);
+      payroll.depositCompanyFunds(depositAmount);
+
+      // Act
+      payroll.payEmployee(employee1, salary1);
+      payroll.payEmployee(employee2, salary2);
+
+      // Assert - Check encrypted balances (tracked manually)
+      expect(payroll.getExpectedCompanyBalance()).toBe(depositAmount - salary1 - salary2);
+      expect(payroll.getExpectedEmployeeBalance(employee1)).toBe(salary1);
+      expect(payroll.getExpectedEmployeeBalance(employee2)).toBe(salary2);
+
+      // Check PUBLIC ledger counters
+      expect(payroll.getTotalPayments()).toBe(2n);
+      expect(payroll.getTotalSupply()).toBe(depositAmount); // Supply unchanged
+
+      console.log('✅ Multiple payment test passed (encrypted transfers)');
+    });
+
+    test('should fail payment with insufficient company funds', () => {
+      // Arrange
+      const employeeId = 'EMP005';
+
+      // Act
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(5000n); // Small deposit
+
+      // Assert
+      expect(() => {
+        payroll.payEmployee(employeeId, 10000n); // Try to pay more than balance
+      }).toThrow(); // Should fail "Insufficient company funds"
+    });
+
+    test('should fail payment to non-existent employee', () => {
+      // Act
+      payroll.depositCompanyFunds(50000n);
+
+      // Assert
+      expect(() => {
+        payroll.payEmployee('NONEXISTENT', 5000n);
+      }).toThrow(); // Should fail "Employee not found"
+    });
+  });
+
+  describe('Employee Withdrawals (Real Token Sending)', () => {
+    test('should allow employee to withdraw salary (sends real tokens)', () => {
+      // Arrange
+      const employeeId = 'EMP006';
+      const depositAmount = 100000n;
+      const salaryAmount = 7500n;
+      const withdrawAmount = 5000n;
+      const initialSupply = payroll.getTotalSupply();
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(depositAmount);
+      const reserveAfterDeposit = payroll.getTokenReserveBalance();
+      payroll.payEmployee(employeeId, salaryAmount);
+
+      // Act
+      payroll.withdrawEmployeeSalary(employeeId, withdrawAmount);
+
+      // Assert - Verify ACTUAL tokens removed from reserve
+      expect(payroll.getTokenReserveBalance()).toBe(reserveAfterDeposit - withdrawAmount);
+
+      // Check encrypted balances (tracked manually)
+      expect(payroll.getExpectedEmployeeBalance(employeeId)).toBe(salaryAmount - withdrawAmount);
+      expect(payroll.getExpectedCompanyBalance()).toBe(depositAmount - salaryAmount);
+
+      // Total supply counter should also decrease
+      expect(payroll.getTotalSupply()).toBe(initialSupply + depositAmount - withdrawAmount);
+
+      console.log('✅ Employee withdrawal test passed - REAL tokens sent from reserve');
+    });
+
+    test('should fail withdrawal with insufficient employee balance', () => {
+      // Arrange
+      const employeeId = 'EMP007';
+
+      // Act
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(50000n);
+      payroll.payEmployee(employeeId, 5000n); // Employee has 5000
+
+      // Assert
+      expect(() => {
+        payroll.withdrawEmployeeSalary(employeeId, 10000n); // Try to withdraw more
+      }).toThrow(); // Should fail "Insufficient balance"
+    });
+
+    test('should fail withdrawal for non-existent employee', () => {
+      expect(() => {
+        payroll.withdrawEmployeeSalary('NONEXISTENT', 1000n);
+      }).toThrow(); // Should fail "Employee not found"
+    });
+  });
+
+  describe('Payment History (Public Ledger - for ZKML)', () => {
+    test('should track employee payment history', () => {
+      // Arrange
+      const employeeId = 'EMP008';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(100000n);
+
+      // Act - Make 3 payments
+      payroll.payEmployee(employeeId, 5000n);
+      payroll.payEmployee(employeeId, 6000n);
+      payroll.payEmployee(employeeId, 7000n);
+
+      // Assert - Check payment history on ledger (for ZKML)
+      const history = payroll.getEmployeePaymentHistory(employeeId);
+
+      // History should have 3 non-empty records (most recent at end)
+      const nonEmptyPayments = history.filter(record => record.timestamp > 0n);
+      expect(nonEmptyPayments.length).toBe(3);
+
+      // Decrypt and verify amounts using balance_mappings ledger
+      const amount1 = payroll.decryptPaymentAmount(nonEmptyPayments[0].encrypted_amount);
+      const amount2 = payroll.decryptPaymentAmount(nonEmptyPayments[1].encrypted_amount);
+      const amount3 = payroll.decryptPaymentAmount(nonEmptyPayments[2].encrypted_amount);
+
+      expect(amount1).toBe(5000n);
+      expect(amount2).toBe(6000n);
+      expect(amount3).toBe(7000n);
+
+      console.log('✅ Payment history tracking test passed (amounts encrypted but decryptable via balance_mappings)');
+    });
+  });
+
+  describe('System State and Privacy', () => {
+    test('should maintain correct overall state with encrypted balances', () => {
+      // Arrange & Act
+      const employeeId = 'EMP009';
+
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(50000n);
+      payroll.payEmployee(employeeId, 7500n);
+
+      // Assert - Only public ledger values
+      expect(payroll.getTotalCompanies()).toBe(1n);
+      expect(payroll.getTotalEmployees()).toBe(1n);
+      expect(payroll.getTotalPayments()).toBe(1n);
+      expect(payroll.getTotalSupply()).toBe(50000n); // No withdrawals yet
+
+      // Debug output
+      payroll.printPayrollState();
+
+      console.log('✅ System state test passed');
+    });
+
+    test('should demonstrate privacy benefits of encrypted balances', () => {
+      console.log('\n🔒 zkSalaria Encrypted Balance Privacy:');
+      console.log('├─ Company balance encrypted with company key');
+      console.log('├─ Employee balances encrypted with employee keys');
+      console.log('├─ Balance mappings enable decryption with proper keys');
+      console.log('├─ Only total_supply visible on public ledger (aggregate)');
+      console.log('├─ Individual balances hidden from blockchain observers');
+      console.log('└─ Payment history stored on ledger for ZKML credit scoring');
+
+      // Create example scenario
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+
+      payroll.depositCompanyFunds(100000n);
+
+      payroll.payEmployee('EMP001', 8000n);
+      payroll.payEmployee('EMP002', 7500n);
+
+      console.log('\n💡 Even in tests, individual balances are encrypted!');
+      console.log('💡 Total supply: ' + payroll.getTotalSupply().toString() + ' (public aggregate)');
+      console.log('💡 Individual company/employee balances: ENCRYPTED ✅');
+
+      payroll.printPayrollState();
+    });
+
+    test('should handle complex payroll workflow with multiple employees', () => {
+      // Add 5 employees
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.addEmployee('EMP003');
+      payroll.addEmployee('EMP004');
+      payroll.addEmployee('EMP005');
+      payroll.depositCompanyFunds(500000n);
+
+      // Process payments (internal - tokens stay in reserve)
+      payroll.payEmployee('EMP001', 10000n);
+      payroll.payEmployee('EMP002', 12000n);
+      payroll.payEmployee('EMP003', 15000n);
+      payroll.payEmployee('EMP004', 8000n);
+      payroll.payEmployee('EMP005', 9000n);
+
+      // Process withdrawals (tokens actually sent from reserve)
+      payroll.withdrawEmployeeSalary('EMP001', 5000n);
+      payroll.withdrawEmployeeSalary('EMP004', 4000n);
+
+      // Assert final state
+      expect(payroll.getTotalCompanies()).toBe(1n); // This contract represents one company
+      expect(payroll.getTotalEmployees()).toBe(5n);
+      expect(payroll.getTotalPayments()).toBe(5n);
+
+      // Verify ACTUAL reserve balance: deposits (500000) - withdrawals (9000)
+      expect(payroll.getTokenReserveBalance()).toBe(491000n);
+
+      // Verify encrypted balances (tracked manually)
+      const totalPaid = 10000n + 12000n + 15000n + 8000n + 9000n; // 54000n
+      expect(payroll.getExpectedCompanyBalance()).toBe(500000n - totalPaid);
+      expect(payroll.getExpectedEmployeeBalance('EMP001')).toBe(10000n - 5000n); // Withdrew 5000
+      expect(payroll.getExpectedEmployeeBalance('EMP002')).toBe(12000n);
+      expect(payroll.getExpectedEmployeeBalance('EMP003')).toBe(15000n);
+      expect(payroll.getExpectedEmployeeBalance('EMP004')).toBe(8000n - 4000n); // Withdrew 4000
+      expect(payroll.getExpectedEmployeeBalance('EMP005')).toBe(9000n);
+
+      // Total supply should match reserve
+      expect(payroll.getTotalSupply()).toBe(491000n);
+
+      console.log('✅ Complex workflow test passed - REAL token balances verified');
+      payroll.printPayrollState();
+    });
+  });
+
+  describe('Employment Verification System', () => {
+    test('should create employment record when adding employee', () => {
+      // Arrange
+      const employeeId = 'EMP100';
+
+      // Act
+      payroll.addEmployee(employeeId);
+
+      // Assert
+      // Employment record is created with ACTIVE status
+      // We'll verify this through the verify_employment circuit after granting disclosure
+      expect(payroll.getTotalEmployees()).toBe(1n);
+      console.log('✅ Employment record creation test passed');
+    });
+
+    test('should grant employment disclosure and verify active employment', () => {
+      // Arrange
+      const employeeId = 'EMP101';
+      const verifierId = 'LANDLORD001';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+
+      // Act
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0); // 0 = never expires
+
+      // Verify employment
+      const result = payroll.verifyEmployment(employeeId, verifierId);
+
+      // Assert
+      // Result should be 0x01 (employed and active)
+      expect(result[0]).toBe(1);
+      console.log('✅ Employment disclosure and verification test passed');
+    });
+
+    test('should update employment status to inactive', () => {
+      // Arrange
+      const employeeId = 'EMP102';
+      const verifierId = 'LANDLORD002';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
+
+      // Verify initially active
+      let result = payroll.verifyEmployment(employeeId, verifierId);
+      expect(result[0]).toBe(1); // Active
+
+      // Act - Update status to INACTIVE
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.INACTIVE);
+
+      // Verify now inactive
+      result = payroll.verifyEmployment(employeeId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(0); // Inactive
+      console.log('✅ Employment status update test passed');
+    });
+
+    test('should update employment status to terminated', () => {
+      // Arrange
+      const employeeId = 'EMP103';
+      const verifierId = 'LANDLORD003';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
+
+      // Verify initially active
+      let result = payroll.verifyEmployment(employeeId, verifierId);
+      expect(result[0]).toBe(1); // Active
+
+      // Act - Update status to TERMINATED
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.TERMINATED);
+
+      // Verify now terminated
+      result = payroll.verifyEmployment(employeeId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(0); // Not active (terminated)
+      console.log('✅ Employment termination test passed');
+    });
+
+    test('should update employment status to on_leave', () => {
+      // Arrange
+      const employeeId = 'EMP104';
+      const verifierId = 'LANDLORD004';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
+
+      // Act - Update status to ON_LEAVE
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.ON_LEAVE);
+
+      // Verify
+      const result = payroll.verifyEmployment(employeeId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(0); // Not active (on leave)
+      console.log('✅ Employment on_leave test passed');
+    });
+
+    test('should fail to verify employment without disclosure permission', () => {
+      // Arrange
+      const employeeId = 'EMP105';
+      const verifierId = 'LANDLORD005';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+
+      // Act & Assert - Try to verify without disclosure (should fail)
+      expect(() => {
+        payroll.verifyEmployment(employeeId, verifierId);
+      }).toThrow(); // Should fail "No disclosure permission"
+
+      console.log('✅ No disclosure permission test passed');
+    });
+
+    test('should fail to update status for non-existent employee', () => {
+      // Act & Assert - Try to update status for non-existent employee
+      expect(() => {
+        payroll.updateEmploymentStatus('NONEXISTENT', EmploymentStatus.INACTIVE);
+      }).toThrow(); // Should fail "Employment record not found"
+
+      console.log('✅ Invalid employment update test passed');
+    });
+
+    test('should handle employment verification with expiration', () => {
+      // Arrange
+      const employeeId = 'EMP107';
+      const verifierId = 'LANDLORD007';
+      const currentTime = payroll.getCurrentTimestamp();
+      const expirationDelta = 3600; // 1 hour in seconds
+
+      // Setup
+      payroll.addEmployee(employeeId);
+
+      // Grant disclosure with expiration
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, expirationDelta);
+
+      // Verify - should work before expiration
+      let result = payroll.verifyEmployment(employeeId, verifierId);
+      expect(result[0]).toBe(1); // Active
+
+      // Act - Advance time past expiration
+      payroll.updateTimestamp(currentTime + expirationDelta + 1);
+
+      // Assert - Should fail after expiration
+      expect(() => {
+        payroll.verifyEmployment(employeeId, verifierId);
+      }).toThrow(); // Should fail "Authorization expired"
+
+      console.log('✅ Employment disclosure expiration test passed');
+    });
+
+    test('should handle multiple employees at same company', () => {
+      // Arrange
+      const employee1 = 'EMP108';
+      const employee2 = 'EMP109';
+      const verifierId = 'LANDLORD008';
+
+      // Setup
+      payroll.addEmployee(employee1);
+      payroll.addEmployee(employee2);
+
+      // Grant disclosures
+      payroll.grantEmploymentDisclosure(employee1, verifierId, 0);
+      payroll.grantEmploymentDisclosure(employee2, verifierId, 0);
+
+      // Verify both employed
+      let result1 = payroll.verifyEmployment(employee1, verifierId);
+      let result2 = payroll.verifyEmployment(employee2, verifierId);
+
+      expect(result1[0]).toBe(1); // Active
+      expect(result2[0]).toBe(1); // Active
+
+      // Act - Terminate employee1, keep employee2 active
+      payroll.updateEmploymentStatus(employee1, EmploymentStatus.TERMINATED);
+
+      // Assert
+      result1 = payroll.verifyEmployment(employee1, verifierId);
+      result2 = payroll.verifyEmployment(employee2, verifierId);
+
+      expect(result1[0]).toBe(0); // Terminated
+      expect(result2[0]).toBe(1); // Still active
+
+      console.log('✅ Multiple employee status test passed');
+    });
+
+    test('should handle re-activation of employee', () => {
+      // Arrange
+      const employeeId = 'EMP110';
+      const verifierId = 'LANDLORD009';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
+
+      // Act - Deactivate then reactivate
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.INACTIVE);
+      let result = payroll.verifyEmployment(employeeId, verifierId);
+      expect(result[0]).toBe(0); // Inactive
+
+      payroll.updateEmploymentStatus(employeeId, EmploymentStatus.ACTIVE);
+      result = payroll.verifyEmployment(employeeId, verifierId);
+
+      // Assert
+      expect(result[0]).toBe(1); // Active again
+      console.log('✅ Employee re-activation test passed');
+    });
+
+    test('should allow employee to revoke disclosure', () => {
+      // Arrange
+      const employeeId = 'EMP111';
+      const verifierId = 'LANDLORD011';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 0);
+
+      // Verify works before revoke
+      let result = payroll.verifyEmployment(employeeId, verifierId);
+      expect(result[0]).toBe(EmploymentStatus.ACTIVE);
+
+      // Act - Employee revokes disclosure
+      payroll.revokeDisclosure(employeeId, verifierId, PermissionType.EMPLOYMENT);
+
+      // Assert - Verification should now fail
+      expect(() => {
+        payroll.verifyEmployment(employeeId, verifierId);
+      }).toThrow(); // Should fail "Disclosure not found"
+
+      console.log('✅ Disclosure revocation test passed');
+    });
+
+    test('should fail to revoke non-existent disclosure', () => {
+      // Arrange
+      const employeeId = 'EMP112';
+      const verifierId = 'LANDLORD012';
+
+      // Setup - employee exists but never granted disclosure
+      payroll.addEmployee(employeeId);
+
+      // Act & Assert - Try to revoke disclosure that was never granted
+      expect(() => {
+        payroll.revokeDisclosure(employeeId, verifierId, PermissionType.EMPLOYMENT);
+      }).toThrow(); // Should fail "Disclosure not found"
+
+      console.log('✅ Revoke non-existent disclosure test passed');
+    });
+  });
+});
