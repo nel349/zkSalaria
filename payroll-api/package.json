@@ -1,7 +1,7 @@
 {
-  "name": "@midnight-pay/pay-api",
+  "name": "@zksalaria/payroll-api",
   "version": "0.1.0",
-  "description": "MidnightPay - API Layer for Privacy-Preserving Payment Gateway",
+  "description": "zkSalaria - API Layer for Privacy-Preserving Payroll System",
   "author": "Midnight Developer",
   "license": "MIT",
   "private": true,
@@ -17,19 +17,17 @@
   "scripts": {
     "clean": "rm -rf dist/",
     "typecheck": "tsc --noEmit",
-    "typecheck:test": "tsc --noEmit --project tsconfig.test.json",
-    "typecheck:all": "npm run typecheck && npm run typecheck:test",
     "build": "tsc",
+    "build:vercel": "tsc",
     "dev": "tsc --watch",
     "test": "RUN_STANDALONE=true vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
-    "prepack": "npm run build",
-    "copy-keys-to-ui": "mkdir -p ../pay-ui/public/keys ../pay-ui/public/zkir && cp public/keys/* ../pay-ui/public/keys/ 2>/dev/null || true && cp public/zkir/* ../pay-ui/public/zkir/ 2>/dev/null || true && echo 'Payment circuit keys copied from pay-api to pay-ui'"
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "@midnight-pay/pay-contract": "file:../pay-contract",
-    "@midnight-ntwrk/compact-runtime": "^0.8.1",
+    "@zksalaria/payroll-contract": "file:../payroll-contract",
+    "@midnight-ntwrk/compact-runtime": "^0.9.0",
     "ws": "^8.17.1"
   },
   "devDependencies": {
