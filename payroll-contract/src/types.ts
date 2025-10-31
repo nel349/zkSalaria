@@ -18,9 +18,9 @@ export interface PaymentRecord {
 }
 
 // Private state structure for payroll system
+// NOTE: Balances are now encrypted on public ledger (bank contract pattern)
+// Only payment history remains in private state (for ZKML training)
 export interface PayrollPrivateState {
-  readonly companyBalances: Map<string, bigint>;
-  readonly employeeBalances: Map<string, bigint>;
   readonly employeePaymentHistory: Map<string, PaymentRecord[]>;
 }
 

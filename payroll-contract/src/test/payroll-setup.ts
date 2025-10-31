@@ -179,23 +179,10 @@ export class PayrollTestSetup {
     return this.getLedgerState().total_supply;
   }
 
-  // Helper: Get company balance (from PRIVATE STATE - witnesses)
-  getCompanyBalance(companyId: string): bigint {
-    const privateState = this.getPrivateState();
-    // Convert string to bytes then to hex to match witness encoding
-    const companyIdBytes = this.stringToBytes32(companyId);
-    const companyIdHex = Buffer.from(companyIdBytes).toString('hex');
-    return privateState.companyBalances.get(companyIdHex) || 0n;
-  }
-
-  // Helper: Get employee balance (from PRIVATE STATE - witnesses)
-  getEmployeeBalance(employeeId: string): bigint {
-    const privateState = this.getPrivateState();
-    // Convert string to bytes then to hex to match witness encoding
-    const employeeIdBytes = this.stringToBytes32(employeeId);
-    const employeeIdHex = Buffer.from(employeeIdBytes).toString('hex');
-    return privateState.employeeBalances.get(employeeIdHex) || 0n;
-  }
+  // NOTE: Balances are now ENCRYPTED on public ledger (bank contract pattern)
+  // Cannot read balances directly from witnesses - they are encrypted with participant keys
+  // In production, you would need the participant's encryption key to decrypt balances
+  // For testing, we track balances through transaction flow (deposits, payments, withdrawals)
 
   // Helper: Get employee payment history (from private state - witness)
   getEmployeePaymentHistory(employeeId: string): PaymentRecord[] {

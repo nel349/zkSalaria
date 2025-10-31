@@ -1,5 +1,5 @@
 {
-  "name": "@midnight-pay/pay-contract",
+  "name": "@zksalaria/payroll-contract",
   "version": "0.1.0",
   "description": "ZkSalaria - Private Payroll System Smart Contract",
   "author": "Midnight Developer",

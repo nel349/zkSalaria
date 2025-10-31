@@ -16,9 +16,9 @@ export type Contract<T, W extends Witnesses<T> = Witnesses<T>> = ContractType<T,
 export * from './types';
 
 // Create initial private state for payroll
+// NOTE: Only payment history stored privately (for ZKML)
+// Balances are now encrypted on public ledger
 export const createPayrollPrivateState = (): PayrollPrivateState => ({
-  companyBalances: new Map(),
-  employeeBalances: new Map(),
   employeePaymentHistory: new Map()
 });
 
@@ -56,59 +56,10 @@ export const payrollWitnesses = {
       ...privateState,
       employeePaymentHistory: updatedHistory
     }, []];
-  },
-
-  // Witness: Get employee balance
-  employee_balance: (
-    { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
-    employeeId: Uint8Array
-  ): [PayrollPrivateState, bigint] => {
-    const employeeIdStr = Buffer.from(employeeId).toString('hex');
-    const balance = privateState.employeeBalances.get(employeeIdStr) || 0n;
-    return [privateState, balance];
-  },
-
-  // Witness: Set employee balance
-  set_employee_balance: (
-    { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
-    employeeId: Uint8Array,
-    balance: bigint
-  ): [PayrollPrivateState, []] => {
-    const employeeIdStr = Buffer.from(employeeId).toString('hex');
-    const updatedBalances = new Map(privateState.employeeBalances);
-    updatedBalances.set(employeeIdStr, balance);
-
-    return [{
-      ...privateState,
-      employeeBalances: updatedBalances
-    }, []];
-  },
-
-  // Witness: Get company balance
-  company_balance: (
-    { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
-    companyId: Uint8Array
-  ): [PayrollPrivateState, bigint] => {
-    const companyIdStr = Buffer.from(companyId).toString('hex');
-    const balance = privateState.companyBalances.get(companyIdStr) || 0n;
-    return [privateState, balance];
-  },
-
-  // Witness: Set company balance
-  set_company_balance: (
-    { privateState }: WitnessContext<Ledger, PayrollPrivateState>,
-    companyId: Uint8Array,
-    balance: bigint
-  ): [PayrollPrivateState, []] => {
-    const companyIdStr = Buffer.from(companyId).toString('hex');
-    const updatedBalances = new Map(privateState.companyBalances);
-    updatedBalances.set(companyIdStr, balance);
-
-    return [{
-      ...privateState,
-      companyBalances: updatedBalances
-    }, []];
   }
+
+  // NOTE: Balance witnesses removed - balances now stored as encrypted values on public ledger
+  // Only payment history (for ZKML) remains in witness (private local storage)
 };
 
 // Utility functions
