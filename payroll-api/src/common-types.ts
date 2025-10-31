@@ -10,15 +10,8 @@ export type AccountId = string;
 
 export type PayrollContract = Contract<PayrollPrivateState, typeof payrollWitnesses>;
 
-// Circuit keys matching our 7 implemented circuits
-export type PayrollCircuitKeys =
-  | 'register_company'
-  | 'add_employee'
-  | 'deposit_company_funds'
-  | 'withdraw_employee_salary'
-  | 'pay_employee'
-  | 'update_timestamp'
-  | 'mint_tokens';
+// Auto-derive circuit keys from contract (bank-api pattern)
+export type PayrollCircuitKeys = Exclude<keyof PayrollContract['impureCircuits'], number | symbol>;
 
 export type PayrollProviders = MidnightProviders<PayrollCircuitKeys, AccountId, PayrollPrivateState>;
 
