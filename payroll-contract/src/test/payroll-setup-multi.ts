@@ -263,6 +263,20 @@ export class PayrollMultiPartyTestSetup {
     return [];
   }
 
+  // Helper: Decrypt payment amount from encrypted_amount field
+  // Uses balance_mappings ledger to decrypt (bank.compact pattern)
+  decryptPaymentAmount(encryptedAmount: Uint8Array): bigint | null {
+    const ledgerState = this.getLedgerState();
+    const balanceMappings = ledgerState.balance_mappings as any;
+
+    // Check if this encrypted amount has a mapping
+    if (balanceMappings.member(encryptedAmount)) {
+      return balanceMappings.lookup(encryptedAmount) as bigint;
+    }
+
+    return null; // Cannot decrypt - no mapping found
+  }
+
   // Helper: Payment history access (now on public ledger)
   // NOTE: Payment history is on PUBLIC ledger (not witnesses) following bank.compact pattern
   // This allows company to write when paying, and anyone to read for credit scoring

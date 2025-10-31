@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollTestSetup } from './payroll-setup.js';
-import { EmploymentStatus } from '../types.js';
+import { EmploymentStatus, PermissionType } from '../types.js';
 
 describe('zkSalaria Payroll Tests (Encrypted Balance System)', () => {
   let payroll: PayrollTestSetup;
@@ -284,19 +284,23 @@ describe('zkSalaria Payroll Tests (Encrypted Balance System)', () => {
       payroll.payEmployee(companyId, employeeId, 6000n);
       payroll.payEmployee(companyId, employeeId, 7000n);
 
-      // Assert - Check payment history in witness (for ZKML)
+      // Assert - Check payment history on ledger (for ZKML)
       const history = payroll.getEmployeePaymentHistory(employeeId);
 
       // History should have 3 non-empty records (most recent at end)
-      const nonEmptyPayments = history.filter(record => record.amount > 0n);
+      const nonEmptyPayments = history.filter(record => record.timestamp > 0n);
       expect(nonEmptyPayments.length).toBe(3);
 
-      // Verify amounts (should be in order)
-      expect(nonEmptyPayments[0].amount).toBe(5000n);
-      expect(nonEmptyPayments[1].amount).toBe(6000n);
-      expect(nonEmptyPayments[2].amount).toBe(7000n);
+      // Decrypt and verify amounts using balance_mappings ledger
+      const amount1 = payroll.decryptPaymentAmount(nonEmptyPayments[0].encrypted_amount);
+      const amount2 = payroll.decryptPaymentAmount(nonEmptyPayments[1].encrypted_amount);
+      const amount3 = payroll.decryptPaymentAmount(nonEmptyPayments[2].encrypted_amount);
 
-      console.log('✅ Payment history tracking test passed');
+      expect(amount1).toBe(5000n);
+      expect(amount2).toBe(6000n);
+      expect(amount3).toBe(7000n);
+
+      console.log('✅ Payment history tracking test passed (amounts encrypted but decryptable via balance_mappings)');
     });
   });
 
@@ -625,6 +629,50 @@ describe('zkSalaria Payroll Tests (Encrypted Balance System)', () => {
       // Assert
       expect(result[0]).toBe(1); // Active again
       console.log('✅ Employee re-activation test passed');
+    });
+
+    test('should allow employee to revoke disclosure', () => {
+      // Arrange
+      const companyId = 'COMP111';
+      const employeeId = 'EMP111';
+      const verifierId = 'LANDLORD011';
+
+      // Setup
+      payroll.registerCompany(companyId, 'Revoke Test Corp');
+      payroll.addEmployee(companyId, employeeId);
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, companyId, 0);
+
+      // Verify works before revoke
+      let result = payroll.verifyEmployment(employeeId, companyId, verifierId);
+      expect(result[0]).toBe(EmploymentStatus.ACTIVE);
+
+      // Act - Employee revokes disclosure
+      payroll.revokeDisclosure(employeeId, verifierId, PermissionType.EMPLOYMENT);
+
+      // Assert - Verification should now fail
+      expect(() => {
+        payroll.verifyEmployment(employeeId, companyId, verifierId);
+      }).toThrow(); // Should fail "Disclosure not found"
+
+      console.log('✅ Disclosure revocation test passed');
+    });
+
+    test('should fail to revoke non-existent disclosure', () => {
+      // Arrange
+      const companyId = 'COMP112';
+      const employeeId = 'EMP112';
+      const verifierId = 'LANDLORD012';
+
+      // Setup - employee exists but never granted disclosure
+      payroll.registerCompany(companyId, 'No Grant Corp');
+      payroll.addEmployee(companyId, employeeId);
+
+      // Act & Assert - Try to revoke disclosure that was never granted
+      expect(() => {
+        payroll.revokeDisclosure(employeeId, verifierId, PermissionType.EMPLOYMENT);
+      }).toThrow(); // Should fail "Disclosure not found"
+
+      console.log('✅ Revoke non-existent disclosure test passed');
     });
   });
 });

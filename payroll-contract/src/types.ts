@@ -26,9 +26,10 @@ export enum PermissionType {
 
 // Payment record structure (matches PayrollCommons.compact PaymentRecord)
 // NOTE: All numeric types use bigint to match Compact runtime expectations
+// NOTE: Amounts are ENCRYPTED for privacy - employee decrypts locally for ZKML
 export interface PaymentRecord {
   timestamp: bigint;  // Uint<32> in Compact
-  amount: bigint;     // Uint<64> in Compact
+  encrypted_amount: Uint8Array;  // Bytes<32> in Compact (encrypted with employee key)
   company_id: Uint8Array; // Bytes<32> in Compact
   payment_type: bigint;   // Uint<8> in Compact (0=salary, 1=advance, 2=bonus)
 }

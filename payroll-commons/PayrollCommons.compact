@@ -15,11 +15,12 @@ module PayrollCommons {
   export pure circuit PERMISSION_TYPE_AUDIT(): Uint<8> { return 3 as Uint<8>; }
 
   // Payment record for history tracking (used by ZKML credit scoring)
+  // NOTE: Amounts are ENCRYPTED for privacy - employee decrypts locally for ZKML
   export struct PaymentRecord {
-    timestamp: Uint<32>;      // When payment was made
-    amount: Uint<64>;         // Payment amount
-    company_id: Bytes<32>;    // Which company paid
-    payment_type: Uint<8>;    // 0=salary, 1=advance, 2=bonus
+    timestamp: Uint<32>;           // When payment was made
+    encrypted_amount: Bytes<32>;   // Payment amount (encrypted with employee key)
+    company_id: Bytes<32>;         // Which company paid
+    payment_type: Uint<8>;         // 0=salary, 1=advance, 2=bonus
   }
 
   // Disclosure authorization for selective disclosure (bank.compact pattern)
@@ -50,16 +51,16 @@ module PayrollCommons {
     last_updated: Uint<32>;
   }
 
-  // Helper to create a new payment record
+  // Helper to create a new payment record (with encrypted amount)
   export pure circuit create_payment_record(
     timestamp: Uint<32>,
-    amount: Uint<64>,
+    encrypted_amount: Bytes<32>,
     company_id: Bytes<32>,
     payment_type: Uint<8>
   ): PaymentRecord {
     return PaymentRecord {
       timestamp: timestamp,
-      amount: amount,
+      encrypted_amount: encrypted_amount,
       company_id: company_id,
       payment_type: payment_type
     };
@@ -69,7 +70,7 @@ module PayrollCommons {
   export pure circuit create_empty_history(): Vector<12, PaymentRecord> {
     const empty_record = PaymentRecord {
       timestamp: 0 as Uint<32>,
-      amount: 0 as Uint<64>,
+      encrypted_amount: pad(32, ""),  // Empty encrypted amount
       company_id: pad(32, ""),
       payment_type: 0 as Uint<8>
     };

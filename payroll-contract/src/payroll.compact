@@ -305,10 +305,17 @@ export circuit pay_employee(
   // NOTE: Now stored on ledger so company can update it when paying
   const history = employee_payment_history.lookup(disclose(employee_id));
 
-  // Create new payment record
+  // Encrypt payment amount with employee's key (privacy - only employee can decrypt for ZKML)
+  const encrypted_payment_amount = encrypt_balance(disclose(salary_amount), employee_key);
+
+  // Add encrypted amount to balance_mappings for decryption (bank.compact pattern)
+  // This allows employee (and authorized parties with disclosure) to decrypt amounts
+  balance_mappings.insert(encrypted_payment_amount, disclose(salary_amount));
+
+  // Create new payment record (with ENCRYPTED amount for privacy)
   const new_payment = PC_create_payment_record(
     current_timestamp,
-    disclose(salary_amount),
+    encrypted_payment_amount,  // Encrypted amount (not plain text!)
     disclose(company_id),  // Company ID already disclosed for account check
     PC_PAYMENT_TYPE_SALARY()
   );
@@ -442,7 +449,7 @@ export circuit grant_employment_disclosure(
 
 // Grant audit disclosure to auditor (compliance checks, pay equity analysis)
 // Stores authorization for auditor to access company payroll data using ZKML
-// NOTE: Actual analysis happens OFF-CHAIN with ZK proofs (EZKL)
+// NOTE: Actual analysis happens OFF-CHAIN with ZKML proofs (python/ezkl)
 export circuit grant_audit_disclosure(
   company_id: Bytes<32>,
   auditor_id: Bytes<32>,

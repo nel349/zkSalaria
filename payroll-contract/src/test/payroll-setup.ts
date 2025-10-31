@@ -203,6 +203,20 @@ export class PayrollTestSetup {
     return [];
   }
 
+  // Helper: Decrypt payment amount from encrypted_amount field
+  // Uses balance_mappings ledger to decrypt (bank.compact pattern)
+  decryptPaymentAmount(encryptedAmount: Uint8Array): bigint | null {
+    const ledgerState = this.getLedgerState();
+    const balanceMappings = ledgerState.balance_mappings as any;
+
+    // Check if this encrypted amount has a mapping
+    if (balanceMappings.member(encryptedAmount)) {
+      return balanceMappings.lookup(encryptedAmount) as bigint;
+    }
+
+    return null; // Cannot decrypt - no mapping found
+  }
+
   // Debug helper: Print current payroll state
   printPayrollState(): void {
     console.log('\n📊 Payroll System State:');
@@ -272,5 +286,22 @@ export class PayrollTestSetup {
 
     // Return the result (Bytes<1>: 0x01 = employed, 0x00 = not employed)
     return results.result;
+  }
+
+  // Test method: Revoke disclosure
+  revokeDisclosure(grantorId: string, granteeId: string, permissionType: number): Ledger {
+    console.log(`🚫 ${grantorId} revoking disclosure for ${granteeId}`);
+
+    const grantorIdBytes = this.stringToBytes32(grantorId);
+    const granteeIdBytes = this.stringToBytes32(granteeId);
+
+    const results = this.contract.impureCircuits.revoke_disclosure(
+      this.turnContext,
+      grantorIdBytes,
+      granteeIdBytes,
+      BigInt(permissionType)
+    );
+
+    return this.updateStateAndGetLedger(results);
   }
 }

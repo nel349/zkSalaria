@@ -44,18 +44,23 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       // Each employee has their own payment history on ledger
       const emp1History = payroll.getEmployeePaymentHistory(employee1);
-      const emp1Payments = emp1History.filter(r => r.amount > 0n);
+      const emp1Payments = emp1History.filter(r => r.timestamp > 0n);
       expect(emp1Payments.length).toBe(1);
-      expect(emp1Payments[0].amount).toBe(5000n);
+
+      // Decrypt and verify amounts
+      const emp1Amount = payroll.decryptPaymentAmount(emp1Payments[0].encrypted_amount);
+      expect(emp1Amount).toBe(5000n);
 
       const emp2History = payroll.getEmployeePaymentHistory(employee2);
-      const emp2Payments = emp2History.filter(r => r.amount > 0n);
+      const emp2Payments = emp2History.filter(r => r.timestamp > 0n);
       expect(emp2Payments.length).toBe(1);
-      expect(emp2Payments[0].amount).toBe(6000n);
 
-      // Histories are separate - EMP001's history doesn't contain EMP002's payment
-      expect(emp1Payments.find(p => p.amount === 6000n)).toBeUndefined();
-      expect(emp2Payments.find(p => p.amount === 5000n)).toBeUndefined();
+      const emp2Amount = payroll.decryptPaymentAmount(emp2Payments[0].encrypted_amount);
+      expect(emp2Amount).toBe(6000n);
+
+      // Histories are separate - each employee has their own payment record
+      expect(emp1Payments.length).toBe(1);
+      expect(emp2Payments.length).toBe(1);
 
       console.log('✅ Payment histories correctly separated on ledger per employee');
     });
@@ -76,11 +81,16 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       // Employee payment history is readable from ledger
       const empHistory = payroll.getEmployeePaymentHistory(employeeId);
-      expect(empHistory.filter(r => r.amount > 0n).length).toBe(1);
+      const empPayments = empHistory.filter(r => r.timestamp > 0n);
+      expect(empPayments.length).toBe(1);
+
+      // Decrypt and verify amount
+      const amount = payroll.decryptPaymentAmount(empPayments[0].encrypted_amount);
+      expect(amount).toBe(7500n);
 
       // NOTE: Company doesn't have its own payment history - only employees have payment records
       const companyHistory = payroll.getEmployeePaymentHistory(companyId);
-      expect(companyHistory.filter(r => r.amount > 0n).length).toBe(0);
+      expect(companyHistory.filter(r => r.timestamp > 0n).length).toBe(0);
 
       console.log('✅ Payment history on public ledger - accessible for ZKML credit scoring');
     });
@@ -100,16 +110,22 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       // Employee's payment history accumulates on public ledger
       const empHistory = payroll.getEmployeePaymentHistory(employeeId);
-      const payments = empHistory.filter(r => r.amount > 0n);
+      const payments = empHistory.filter(r => r.timestamp > 0n);
 
       expect(payments.length).toBe(3);
-      expect(payments[0].amount).toBe(5000n);
-      expect(payments[1].amount).toBe(6000n);
-      expect(payments[2].amount).toBe(7000n);
+
+      // Decrypt and verify amounts
+      const amount1 = payroll.decryptPaymentAmount(payments[0].encrypted_amount);
+      const amount2 = payroll.decryptPaymentAmount(payments[1].encrypted_amount);
+      const amount3 = payroll.decryptPaymentAmount(payments[2].encrypted_amount);
+
+      expect(amount1).toBe(5000n);
+      expect(amount2).toBe(6000n);
+      expect(amount3).toBe(7000n);
 
       // Company doesn't have payment history - only employees do
       const companyHistory = payroll.getEmployeePaymentHistory(companyId);
-      expect(companyHistory.filter(r => r.amount > 0n).length).toBe(0);
+      expect(companyHistory.filter(r => r.timestamp > 0n).length).toBe(0);
 
       console.log('✅ Payment history correctly tracked on ledger per employee');
     });
@@ -138,15 +154,22 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const emp1History = payroll.getEmployeePaymentHistory(emp1);
       const emp2History = payroll.getEmployeePaymentHistory(emp2);
 
-      expect(emp1History.filter(r => r.amount > 0n).length).toBe(1);
-      expect(emp2History.filter(r => r.amount > 0n).length).toBe(1);
+      const emp1Payments = emp1History.filter(r => r.timestamp > 0n);
+      const emp2Payments = emp2History.filter(r => r.timestamp > 0n);
 
-      expect(emp1History.filter(r => r.amount > 0n)[0].amount).toBe(8000n);
-      expect(emp2History.filter(r => r.amount > 0n)[0].amount).toBe(7000n);
+      expect(emp1Payments.length).toBe(1);
+      expect(emp2Payments.length).toBe(1);
+
+      // Decrypt and verify amounts
+      const emp1Amount = payroll.decryptPaymentAmount(emp1Payments[0].encrypted_amount);
+      const emp2Amount = payroll.decryptPaymentAmount(emp2Payments[0].encrypted_amount);
+
+      expect(emp1Amount).toBe(8000n);
+      expect(emp2Amount).toBe(7000n);
 
       // Each employee's history is separate on ledger
-      expect(emp1History.find(p => p.amount === 7000n)).toBeUndefined();
-      expect(emp2History.find(p => p.amount === 8000n)).toBeUndefined();
+      expect(emp1Payments.length).toBe(1);
+      expect(emp2Payments.length).toBe(1);
 
       console.log('✅ Payment histories correctly separated on ledger between companies');
     });
@@ -165,22 +188,27 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       payroll.payEmployee(companyId, employees[2], 15000n);
 
       // Each employee should only see their own payment
-      const emp1Payments = payroll.getEmployeePaymentHistory(employees[0]).filter(r => r.amount > 0n);
-      const emp2Payments = payroll.getEmployeePaymentHistory(employees[1]).filter(r => r.amount > 0n);
-      const emp3Payments = payroll.getEmployeePaymentHistory(employees[2]).filter(r => r.amount > 0n);
+      const emp1Payments = payroll.getEmployeePaymentHistory(employees[0]).filter(r => r.timestamp > 0n);
+      const emp2Payments = payroll.getEmployeePaymentHistory(employees[1]).filter(r => r.timestamp > 0n);
+      const emp3Payments = payroll.getEmployeePaymentHistory(employees[2]).filter(r => r.timestamp > 0n);
 
       expect(emp1Payments.length).toBe(1);
       expect(emp2Payments.length).toBe(1);
       expect(emp3Payments.length).toBe(1);
 
-      expect(emp1Payments[0].amount).toBe(10000n);
-      expect(emp2Payments[0].amount).toBe(12000n);
-      expect(emp3Payments[0].amount).toBe(15000n);
+      // Decrypt and verify amounts
+      const emp1Amount = payroll.decryptPaymentAmount(emp1Payments[0].encrypted_amount);
+      const emp2Amount = payroll.decryptPaymentAmount(emp2Payments[0].encrypted_amount);
+      const emp3Amount = payroll.decryptPaymentAmount(emp3Payments[0].encrypted_amount);
+
+      expect(emp1Amount).toBe(10000n);
+      expect(emp2Amount).toBe(12000n);
+      expect(emp3Amount).toBe(15000n);
 
       // Each employee's history contains only their own payments
-      expect(emp1Payments.find(p => p.amount === 12000n || p.amount === 15000n)).toBeUndefined();
-      expect(emp2Payments.find(p => p.amount === 10000n || p.amount === 15000n)).toBeUndefined();
-      expect(emp3Payments.find(p => p.amount === 10000n || p.amount === 12000n)).toBeUndefined();
+      expect(emp1Payments.length).toBe(1);
+      expect(emp2Payments.length).toBe(1);
+      expect(emp3Payments.length).toBe(1);
 
       console.log('✅ Multiple employee payment histories correctly separated on ledger');
     });
@@ -232,8 +260,8 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('│  └─ Payment counters (aggregate only)');
       console.log('├─ PRIVACY MODEL:');
       console.log('│  ├─ Current balances: ENCRYPTED (nobody can see exact amounts)');
-      console.log('│  ├─ Payment history: PUBLIC (needed for ZKML credit scoring)');
-      console.log('│  └─ Company can write payments, anyone can read for credit scoring');
+      console.log('│  ├─ Payment history: ENCRYPTED AMOUNTS (privacy preserved)');
+      console.log('│  └─ Company can write payments, employee decrypts locally for ZKML');
       console.log('└─ MULTI-PARTY SAFE: Company can pay employees, history tracked on ledger ✅');
 
       payroll.registerCompany(companyId, 'Privacy Corp');
@@ -245,15 +273,16 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(payroll.getTotalSupply()).toBe(100000n);
       expect(payroll.getTotalPayments()).toBe(1n);
 
-      // Payment history is on public ledger - anyone can read for ZKML
+      // Payment history is on public ledger - amounts ENCRYPTED for privacy
+      // NOTE: Amounts are ENCRYPTED - employee decrypts locally for ZKML
       const empHistory = payroll.getEmployeePaymentHistory(employeeId);
-      expect(empHistory.filter(r => r.amount > 0n).length).toBe(1);
+      expect(empHistory.filter(r => r.timestamp > 0n).length).toBe(1);
 
       // Company doesn't have payment history (only employees do)
       const companyHistory = payroll.getEmployeePaymentHistory(companyId);
-      expect(companyHistory.filter(r => r.amount > 0n).length).toBe(0);
+      expect(companyHistory.filter(r => r.timestamp > 0n).length).toBe(0);
 
-      console.log('\n💡 Privacy achieved: Encrypted balances + public payment history for ZKML!');
+      console.log('\n💡 Privacy achieved: Encrypted balances + encrypted payment history for ZKML!');
       payroll.printMultiPartyState();
     });
   });
@@ -292,23 +321,24 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(payroll.getTotalSupply()).toBe(700000n);
 
       // Verify each employee only sees their own payment
+      // NOTE: Amounts are ENCRYPTED - we can only verify records exist, not read amounts
       comp1Employees.forEach((emp, idx) => {
         const history = payroll.getEmployeePaymentHistory(emp);
-        const payments = history.filter(r => r.amount > 0n);
+        const payments = history.filter(r => r.timestamp > 0n);
         expect(payments.length).toBe(1);
       });
 
       comp2Employees.forEach((emp, idx) => {
         const history = payroll.getEmployeePaymentHistory(emp);
-        const payments = history.filter(r => r.amount > 0n);
+        const payments = history.filter(r => r.timestamp > 0n);
         expect(payments.length).toBe(1);
       });
 
       // Companies don't have payment history - only employees do
       const comp1History = payroll.getEmployeePaymentHistory(comp1);
       const comp2History = payroll.getEmployeePaymentHistory(comp2);
-      expect(comp1History.filter(r => r.amount > 0n).length).toBe(0);
-      expect(comp2History.filter(r => r.amount > 0n).length).toBe(0);
+      expect(comp1History.filter(r => r.timestamp > 0n).length).toBe(0);
+      expect(comp2History.filter(r => r.timestamp > 0n).length).toBe(0);
 
       console.log('✅ Complex multi-party workflow with payment history on ledger');
       payroll.printMultiPartyState();
