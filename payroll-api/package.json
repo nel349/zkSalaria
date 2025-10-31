@@ -21,6 +21,8 @@
     "build:vercel": "mkdir -p dist && tsc",
     "dev": "mkdir -p dist && tsc --watch",
     "test": "RUN_STANDALONE=true vitest run --passWithNoTests",
+    "test:smoke": "vitest run src/test/payroll-api.smoke.test.ts",
+    "test:integration": "RUN_STANDALONE=true vitest run src/test/payroll-api.test.ts",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
     "prepack": "npm run build"

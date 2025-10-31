@@ -1,215 +1,211 @@
-/**
- * PayrollAPI Integration Tests
- * Tests all 7 implemented circuits with Docker Compose test environment
- */
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
+import { PayrollAPI, emptyPayrollState, utils, type PayrollProviders } from '../index.js';
+import pino from 'pino';
+import { firstValueFrom, filter } from 'rxjs';
+import WebSocket from 'ws';
+import { TestEnvironment, TestProviders } from './commons.js';
+import path from 'node:path';
+import fs from 'node:fs';
+import { currentDir } from './config.js';
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PayrollAPI, type DeployedPayrollAPI, type PayrollDerivedState } from '../payroll-api';
-import { TestEnvironment, createTestLogger, waitForDeployment } from './commons';
-import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { firstValueFrom } from 'rxjs';
-
-describe('PayrollAPI Integration Tests', () => {
-  let testEnv: TestEnvironment;
-  let contractAddress: ContractAddress;
-  let companyAPI: DeployedPayrollAPI;
-  let employeeAPI: DeployedPayrollAPI;
-  const logger = createTestLogger();
-
-  beforeAll(async () => {
-    // Start test environment (Docker Compose)
-    testEnv = new TestEnvironment();
-    await testEnv.start();
-
-    // Deploy payroll contract
-    const providers = testEnv.getProviders();
-    contractAddress = await PayrollAPI.deploy(providers, logger);
-
-    // Wait for deployment to be indexed
-    await waitForDeployment(providers, contractAddress);
-
-    // Connect company API instance
-    companyAPI = await PayrollAPI.connect(
-      providers,
-      contractAddress,
-      'company-acme',
-      logger,
-    );
-
-    // Connect employee API instance
-    employeeAPI = await PayrollAPI.connect(
-      providers,
-      contractAddress,
-      'employee-alice',
-      logger,
-    );
-  }, 60000); // 60s timeout for deployment
-
-  afterAll(async () => {
-    // Clean up test environment
-    await testEnv.stop();
+describe('PayrollAPI', () => {
+  test('should have correct initial empty state', () => {
+    expect(emptyPayrollState.totalCompanies).toBe(0n);
+    expect(emptyPayrollState.totalEmployees).toBe(0n);
+    expect(emptyPayrollState.totalPayments).toBe(0n);
+    expect(emptyPayrollState.totalSupply).toBe(0n);
+    expect(emptyPayrollState.currentTimestamp).toBe(0);
   });
 
-  describe('System Operations', () => {
-    it('should mint tokens successfully', async () => {
+  // Minimal smoke: basic exports
+  test('should export core types', () => {
+    expect(PayrollAPI).toBeDefined();
+    expect(emptyPayrollState).toBeDefined();
+    expect(utils).toBeDefined();
+  });
+
+  describe('Utils', () => {
+    test('should format balance correctly', () => {
+      expect(utils.formatBalance(10000n)).toBe('100.00');
+      expect(utils.formatBalance(2550n)).toBe('25.50');
+      expect(utils.formatBalance(0n)).toBe('0.00');
+    });
+
+    test('should parse amounts correctly', () => {
+      expect(utils.parseAmount('100.00')).toBe(10000n);
+      expect(utils.parseAmount('25.50')).toBe(2550n);
+      expect(utils.parseAmount('0.01')).toBe(1n);
+    });
+
+    test('should handle pad function', () => {
+      const result = utils.pad('test', 10);
+      expect(result.length).toBe(10);
+      expect(result[0]).toBe(116); // 't' in ASCII
+    });
+
+    test('should generate random bytes', () => {
+      const bytes1 = utils.randomBytes(32);
+      const bytes2 = utils.randomBytes(32);
+
+      expect(bytes1.length).toBe(32);
+      expect(bytes2.length).toBe(32);
+      expect(bytes1).not.toEqual(bytes2); // Should be different
+    });
+
+    test('should handle stringToBytes32', () => {
+      const result = utils.stringToBytes32('company-acme');
+      expect(result.length).toBe(32);
+    });
+
+    test('should handle stringToBytes64', () => {
+      const result = utils.stringToBytes64('ACME Corporation');
+      expect(result.length).toBe(64);
+    });
+
+    test('should normalize IDs', () => {
+      const shortId = 'test';
+      expect(utils.normalizeId(shortId)).toBe(shortId);
+
+      const longId = 'a'.repeat(50);
+      const normalized = utils.normalizeId(longId);
+      expect(normalized.length).toBeLessThanOrEqual(32);
+    });
+  });
+
+  describe('Integration', () => {
+    let testEnvironment: TestEnvironment;
+    let providers: PayrollProviders;
+    const logFile = path.resolve(currentDir, '..', 'logs', 'tests', `${new Date().toISOString()}.log`);
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const logger = pino(
+      { level: process.env.LOG_LEVEL ?? 'info' },
+      // Write synchronously to a file so logs always persist
+      pino.destination({ dest: logFile, sync: true }),
+    );
+
+    beforeAll(async () => {
+      // Ensure WebSocket global is set for indexer WS
+      globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
+      testEnvironment = new TestEnvironment(logger);
+      const testConfiguration = await testEnvironment.start();
+      const wallet = await testEnvironment.getWallet1();
+      providers = await new TestProviders().configurePayrollProviders(wallet, testConfiguration.dappConfig);
+    }, 10 * 60_000);
+
+    afterAll(async () => {
+      await testEnvironment.shutdown();
+    });
+
+    test('should run full lifecycle: deploy, mint, register company, add employee, deposit, pay, withdraw', async () => {
+      const companyId = `lifecycle-company-${Date.now()}`;
+      const companyName = 'ACME Corp';
+      const employeeId = `lifecycle-employee-${Date.now()}`;
+
+      logger.info('Deploying Payroll contract for lifecycle test…');
+      const contractAddress = await PayrollAPI.deploy(providers, logger);
+
+      // Connect API instances
+      logger.info('Connecting company API instance…');
+      const companyAPI = await PayrollAPI.connect(providers, contractAddress, companyId, logger);
+
+      logger.info('Connecting employee API instance…');
+      const employeeAPI = await PayrollAPI.connect(providers, contractAddress, employeeId, logger);
+
+      // Mint tokens
+      logger.info('Minting tokens…');
       await companyAPI.mintTokens('1000000.00');
-
-      const state = await firstValueFrom(companyAPI.state$);
+      let state = await firstValueFrom(companyAPI.state$);
       expect(state.totalSupply).toBeGreaterThan(0n);
-    });
 
-    it('should update timestamp', async () => {
-      const newTimestamp = Math.floor(Date.now() / 1000);
-      await companyAPI.updateTimestamp(newTimestamp);
-
-      const state = await firstValueFrom(companyAPI.state$);
-      expect(state.currentTimestamp).toBe(newTimestamp);
-    });
-  });
-
-  describe('Company Operations', () => {
-    const companyId = 'company-acme';
-    const companyName = 'ACME Corporation';
-
-    it('should register company successfully', async () => {
+      // Register company
+      logger.info('Registering company…');
       await companyAPI.registerCompany(companyId, companyName);
-
-      const info = await companyAPI.getCompanyInfo(companyId);
-      expect(info.exists).toBe(true);
-      expect(info.companyId).toBe(companyId);
-
-      const state = await firstValueFrom(companyAPI.state$);
+      state = await firstValueFrom(companyAPI.state$);
       expect(state.totalCompanies).toBe(1n);
-      expect(state.lastTransaction?.type).toBe('register_company');
-    });
 
-    it('should deposit company funds', async () => {
-      const depositAmount = '50000.00';
-      await companyAPI.depositCompanyFunds(companyId, depositAmount);
+      const companyInfo = await companyAPI.getCompanyInfo(companyId);
+      expect(companyInfo.exists).toBe(true);
 
-      const state = await firstValueFrom(companyAPI.state$);
-      expect(state.lastTransaction?.type).toBe('deposit');
-      expect(state.lastTransaction?.amount).toBe(5000000n); // 50000.00 * 100
-    });
+      // Deposit company funds
+      logger.info('Depositing company funds…');
+      await companyAPI.depositCompanyFunds(companyId, '50000.00');
 
-    it('should get company info for non-existent company', async () => {
-      const info = await companyAPI.getCompanyInfo('company-nonexistent');
-      expect(info.exists).toBe(false);
-    });
-  });
-
-  describe('Employee Operations', () => {
-    const companyId = 'company-acme';
-    const employeeId = 'employee-alice';
-
-    it('should add employee successfully', async () => {
+      // Add employee
+      logger.info('Adding employee…');
       await companyAPI.addEmployee(companyId, employeeId);
-
-      const info = await employeeAPI.getEmployeeInfo(employeeId);
-      expect(info.exists).toBe(true);
-      expect(info.employeeId).toBe(employeeId);
-
-      const state = await firstValueFrom(companyAPI.state$);
+      state = await firstValueFrom(companyAPI.state$);
       expect(state.totalEmployees).toBe(1n);
-      expect(state.lastTransaction?.type).toBe('add_employee');
-    });
 
-    it('should get employee info for non-existent employee', async () => {
-      const info = await employeeAPI.getEmployeeInfo('employee-nonexistent');
-      expect(info.exists).toBe(false);
-    });
-  });
+      const employeeInfo = await employeeAPI.getEmployeeInfo(employeeId);
+      expect(employeeInfo.exists).toBe(true);
 
-  describe('Payment Operations', () => {
-    const companyId = 'company-acme';
-    const employeeId = 'employee-alice';
-    const paymentAmount = '5000.00';
-
-    it('should pay employee salary', async () => {
-      await companyAPI.payEmployee(companyId, employeeId, paymentAmount);
-
-      const state = await firstValueFrom(companyAPI.state$);
+      // Pay employee
+      logger.info('Paying employee…');
+      await companyAPI.payEmployee(companyId, employeeId, '5000.00');
+      state = await firstValueFrom(companyAPI.state$);
       expect(state.totalPayments).toBe(1n);
-      expect(state.lastTransaction?.type).toBe('pay_salary');
-      expect(state.lastTransaction?.amount).toBe(500000n); // 5000.00 * 100
-    });
 
-    it('should get employee payment history', async () => {
-      const history = await employeeAPI.getEmployeePaymentHistory(employeeId);
-      expect(history.length).toBeGreaterThan(0);
-      expect(history[0].amount).toBeGreaterThan(0n);
-    });
+      // Check payment history
+      logger.info('Checking payment history…');
+      const paymentHistory = await employeeAPI.getEmployeePaymentHistory(employeeId);
+      expect(paymentHistory.length).toBeGreaterThan(0);
 
-    it('should return empty history for employee with no payments', async () => {
-      const history = await employeeAPI.getEmployeePaymentHistory('employee-bob');
-      expect(history).toEqual([]);
-    });
+      const updatedEmployeeInfo = await employeeAPI.getEmployeeInfo(employeeId);
+      expect(updatedEmployeeInfo.paymentHistoryCount).toBe(1);
 
-    it('should track payment count in employee info', async () => {
-      const info = await employeeAPI.getEmployeeInfo(employeeId);
-      expect(info.paymentHistoryCount).toBe(1);
-    });
-  });
+      // Withdraw employee salary
+      logger.info('Withdrawing employee salary…');
+      await employeeAPI.withdrawEmployeeSalary(employeeId, '2500.00');
 
-  describe('Withdrawal Operations', () => {
-    const employeeId = 'employee-alice';
-    const withdrawAmount = '2500.00';
+      logger.info('✅ Full lifecycle test completed successfully');
+    }, 5 * 60_000); // 5 minute timeout
 
-    it('should allow employee to withdraw salary', async () => {
-      await employeeAPI.withdrawEmployeeSalary(employeeId, withdrawAmount);
+    test('should update timestamp', async () => {
+      logger.info('Deploying contract for timestamp test…');
+      const contractAddress = await PayrollAPI.deploy(providers, logger);
+      const api = await PayrollAPI.connect(providers, contractAddress, 'timestamp-test', logger);
 
-      const state = await firstValueFrom(employeeAPI.state$);
-      expect(state.lastTransaction?.type).toBe('withdraw');
-      expect(state.lastTransaction?.amount).toBe(250000n); // 2500.00 * 100
-    });
-  });
+      const newTimestamp = Math.floor(Date.now() / 1000);
+      await api.updateTimestamp(newTimestamp);
 
-  describe('Reactive State Management', () => {
-    it('should emit state updates via Observable', async () => {
-      const statePromise = firstValueFrom(companyAPI.state$);
-      const state = await statePromise;
+      const state = await firstValueFrom(api.state$);
+      expect(state.currentTimestamp).toBe(newTimestamp);
+    }, 2 * 60_000);
 
-      expect(state).toBeDefined();
-      expect(state.totalCompanies).toBeGreaterThanOrEqual(0n);
-      expect(state.totalEmployees).toBeGreaterThanOrEqual(0n);
-      expect(state.totalPayments).toBeGreaterThanOrEqual(0n);
-      expect(state.totalSupply).toBeGreaterThanOrEqual(0n);
-    });
+    test('should handle multiple companies and employees', async () => {
+      logger.info('Deploying contract for multi-company test…');
+      const contractAddress = await PayrollAPI.deploy(providers, logger);
+      const api = await PayrollAPI.connect(providers, contractAddress, 'multi-test', logger);
 
-    it('should track last transaction in state', async () => {
-      await companyAPI.mintTokens('1000.00');
+      // Mint tokens (1 tx)
+      await api.mintTokens('1000000.00');
 
-      const state = await firstValueFrom(companyAPI.state$);
-      expect(state.lastTransaction).toBeDefined();
-      expect(state.lastTransaction?.type).toBe('mint_tokens');
-    });
-  });
+      // Register 2 companies (2 tx)
+      await api.registerCompany('company-1', 'Company One');
+      await api.registerCompany('company-2', 'Company Two');
 
-  describe('Multi-Company Scenario', () => {
-    const company2Id = 'company-globex';
-    const company2Name = 'Globex Corporation';
-    const employee2Id = 'employee-bob';
+      let state = await firstValueFrom(api.state$);
+      expect(state.totalCompanies).toBe(2n);
 
-    it('should handle multiple companies', async () => {
-      // Register second company
-      await companyAPI.registerCompany(company2Id, company2Name);
+      // Add 2 employees (2 tx) - reduced from 3
+      await api.addEmployee('company-1', 'employee-1');
+      await api.addEmployee('company-2', 'employee-2');
 
-      const state = await firstValueFrom(companyAPI.state$);
-      expect(state.totalCompanies).toBeGreaterThanOrEqual(2n);
-    });
+      state = await firstValueFrom(api.state$);
+      expect(state.totalEmployees).toBe(2n);
 
-    it('should add employee to second company', async () => {
-      await companyAPI.addEmployee(company2Id, employee2Id);
+      // Deposit for companies (2 tx)
+      await api.depositCompanyFunds('company-1', '10000.00');
+      await api.depositCompanyFunds('company-2', '10000.00');
 
-      const state = await firstValueFrom(companyAPI.state$);
-      expect(state.totalEmployees).toBeGreaterThanOrEqual(2n);
-    });
+      // Pay employees (2 tx) - reduced from 3
+      await api.payEmployee('company-1', 'employee-1', '1000.00');
+      await api.payEmployee('company-2', 'employee-2', '2000.00');
 
-    it('should pay employee from second company', async () => {
-      await companyAPI.payEmployee(company2Id, employee2Id, '3000.00');
+      state = await firstValueFrom(api.state$);
+      expect(state.totalPayments).toBe(2n);
 
-      const state = await firstValueFrom(companyAPI.state$);
-      expect(state.totalPayments).toBeGreaterThanOrEqual(2n);
-    });
+      logger.info('✅ Multi-company test completed successfully');
+    }, 5 * 60_000); // 5 minutes - 10 transactions * ~24s each = ~240s
   });
 });

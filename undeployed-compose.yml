@@ -1,16 +1,16 @@
 services:
   proof-server:
-    container_name: 'pay-proof-server'
+    container_name: 'payroll-proof-server'
     image: 'midnight-proof-server:k17'
     ports:
       - '6300:6300'
     environment:
       RUST_BACKTRACE: 'full'
     networks:
-      - bank-network
+      - payroll-network
 
   indexer:
-    container_name: 'pay-indexer'
+    container_name: 'payroll-indexer'
     image: 'midnightntwrk/indexer-standalone:latest'
     ports:
       - '8088:8088'
@@ -22,11 +22,11 @@ services:
       node:
         condition: service_started
     networks:
-      - bank-network
+      - payroll-network
 
   node:
     image: 'midnightnetwork/midnight-node:0.12.0-arm64'
-    container_name: 'pay-node'
+    container_name: 'payroll-node'
     ports:
       - '9944:9944'
     healthcheck:
@@ -38,8 +38,8 @@ services:
     environment:
       CFG_PRESET: 'dev'
     networks:
-      - bank-network
+      - payroll-network
 
 networks:
-  bank-network:
+  payroll-network:
     driver: bridge

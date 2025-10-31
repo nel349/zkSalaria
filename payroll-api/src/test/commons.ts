@@ -1,148 +1,204 @@
-/**
- * Test Commons - Following bank-api test pattern
- * Provides Docker Compose test environment setup for integration tests
- */
+import { type Config, StandaloneConfig } from './config.js';
+import {
+  DockerComposeEnvironment,
+  type StartedDockerComposeEnvironment,
+  Wait,
+} from 'testcontainers';
+import path from 'path';
+import * as Rx from 'rxjs';
+import { type CoinInfo, nativeToken, Transaction, type TransactionId } from '@midnight-ntwrk/ledger';
+import type { Logger } from 'pino';
+import type { Wallet } from '@midnight-ntwrk/wallet-api';
+import { type Resource, WalletBuilder } from '@midnight-ntwrk/wallet';
+import {
+  type BalancedTransaction,
+  createBalancedTx,
+  type MidnightProvider,
+  type MidnightProviders,
+  type UnbalancedTransaction,
+  type WalletProvider,
+} from '@midnight-ntwrk/midnight-js-types';
+import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
+import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
+import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
+import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
+import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { inMemoryPrivateStateProvider } from './in-memory-private-state-provider.js';
+import type { FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { type PayrollPrivateState } from '@zksalaria/payroll-contract';
+import { expect } from 'vitest';
+import { type PayrollCircuitKeys, type AccountId } from '../common-types.js';
 
-import { type PayrollProviders, type AccountId, type PayrollCircuitKeys } from '../common-types.js';
-import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { randomBytes } from '../utils/index.js';
+export const GENESIS_MINT_WALLET_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
 
-// Test wallet seed (deterministic for reproducible tests)
-export const TEST_WALLET_SEED = 'test test test test test test test test test test test junk';
+export type PayrollProviders = MidnightProviders<PayrollCircuitKeys, AccountId, PayrollPrivateState>;
 
-// Docker network configuration
-export const INDEXER_WS_URL = process.env.INDEXER_WS_URL ?? 'ws://localhost:8088';
-export const NODE_GRPC_URL = process.env.NODE_GRPC_URL ?? 'http://localhost:50051';
-export const PROOF_SERVER_URL = process.env.PROOF_SERVER_URL ?? 'http://localhost:6300';
-
-/**
- * Test Environment Configuration
- */
-export interface TestConfig {
-  indexerWsUrl: string;
-  nodeGrpcUrl: string;
-  proofServerUrl: string;
-  walletSeed: string;
+export interface TestConfiguration {
+  seed: string;
+  dappConfig: Config;
+  psMode: string;
 }
 
-export const defaultTestConfig: TestConfig = {
-  indexerWsUrl: INDEXER_WS_URL,
-  nodeGrpcUrl: NODE_GRPC_URL,
-  proofServerUrl: PROOF_SERVER_URL,
-  walletSeed: TEST_WALLET_SEED,
-};
+export class LocalTestConfig implements TestConfiguration {
+  seed = GENESIS_MINT_WALLET_SEED;
+  dappConfig = new StandaloneConfig();
+  psMode = 'undeployed';
+}
 
-/**
- * Test Environment
- * Manages Docker Compose lifecycle and provider initialization
- */
 export class TestEnvironment {
-  private providers?: PayrollProviders;
-  private config: TestConfig;
+  private readonly logger: Logger;
+  private env: StartedDockerComposeEnvironment | undefined;
+  private testConfig: TestConfiguration;
+  private testWallet1: TestWallet | undefined;
 
-  constructor(config: TestConfig = defaultTestConfig) {
-    this.config = config;
+  constructor(logger: Logger) {
+    this.logger = logger;
+    this.testConfig = new LocalTestConfig();
   }
 
-  /**
-   * Initialize test environment
-   * - Start Docker Compose services if needed
-   * - Create wallet from seed
-   * - Initialize providers
-   */
-  async start(): Promise<void> {
-    // TODO: Add Docker Compose startup logic
-    // For now, assume services are already running
-
-    // Initialize providers
-    this.providers = await this.createProviders();
-  }
-
-  /**
-   * Clean up test environment
-   * - Stop Docker Compose services
-   * - Close provider connections
-   */
-  async stop(): Promise<void> {
-    // TODO: Add Docker Compose shutdown logic
-    // Close WebSocket connections
-    if (this.providers) {
-      // Clean up providers if they have cleanup methods
+  start = async (): Promise<TestConfiguration> => {
+    this.testConfig = new LocalTestConfig();
+    if (process.env.RUN_STANDALONE === 'true') {
+      this.logger.info('Running tests against an existing standalone stack...');
+      return this.testConfig;
     }
-  }
 
-  /**
-   * Get initialized providers
-   */
-  getProviders(): PayrollProviders {
-    if (!this.providers) {
-      throw new Error('Test environment not started. Call start() first.');
+    this.logger.info('Test containers starting...');
+    const composeFile = process.env.COMPOSE_FILE ?? 'standalone.yml';
+    this.logger.info(`Using compose file: ${composeFile}`);
+    const rootDir = path.resolve(new URL(import.meta.url).pathname, '..', '..');
+    this.env = await new DockerComposeEnvironment(rootDir, composeFile)
+      .withWaitStrategy('payroll-api-proof-server', Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1))
+      .withWaitStrategy('payroll-api-indexer', Wait.forLogMessage(/starting indexing/, 1))
+      .withWaitStrategy('payroll-api-node', Wait.forLogMessage(/Running JSON-RPC server/, 1))
+      .up();
+
+    this.testConfig.dappConfig = {
+      ...this.testConfig.dappConfig,
+      indexer: TestEnvironment.mapContainerPort(this.env, this.testConfig.dappConfig.indexer, 'payroll-api-indexer'),
+      indexerWS: TestEnvironment.mapContainerPort(this.env, this.testConfig.dappConfig.indexerWS, 'payroll-api-indexer'),
+      node: TestEnvironment.mapContainerPort(this.env, this.testConfig.dappConfig.node, 'payroll-api-node'),
+      proofServer: TestEnvironment.mapContainerPort(this.env, this.testConfig.dappConfig.proofServer, 'payroll-api-proof-server'),
+    };
+
+    this.logger.info({ event: 'config', config: this.testConfig });
+    this.logger.info('Test containers started');
+    return this.testConfig;
+  };
+
+  static mapContainerPort = (env: StartedDockerComposeEnvironment, url: string, containerName: string) => {
+    const mappedUrl = new URL(url);
+    const container = env.getContainer(containerName);
+    mappedUrl.port = String(container.getFirstMappedPort());
+    return mappedUrl.toString().replace(/\/+$/, '');
+  };
+
+  shutdown = async () => {
+    if (this.testWallet1 !== undefined) {
+      await this.testWallet1.close();
     }
-    return this.providers;
-  }
+    if (this.env !== undefined) {
+      this.logger.info('Test containers closing');
+      await this.env.down();
+    }
+  };
 
-  /**
-   * Create a new wallet account ID
-   */
-  createAccountId(): AccountId {
-    // Generate random account ID for testing
-    const randomId = randomBytes(16);
-    return Buffer.from(randomId).toString('hex');
-  }
-
-  /**
-   * Create providers for the test environment
-   */
-  private async createProviders(): Promise<PayrollProviders> {
-    // TODO: Implement provider creation
-    // This would involve:
-    // 1. Creating wallet from seed
-    // 2. Initializing DAppConnectorAPI
-    // 3. Creating publicDataProvider, privateStateProvider, proofProvider, zkConfigProvider
-
-    throw new Error('Provider creation not yet implemented. Requires Midnight SDK integration.');
-  }
+  getWallet1 = async () => {
+    this.testWallet1 = new TestWallet(this.logger);
+    return await this.testWallet1.setup(this.testConfig);
+  };
 }
 
-/**
- * Helper: Wait for contract deployment
- */
-export async function waitForDeployment(
-  providers: PayrollProviders,
-  contractAddress: ContractAddress,
-  timeoutMs: number = 30000,
-): Promise<void> {
-  const startTime = Date.now();
+export class TestWallet {
+  private wallet: (Wallet & Resource) | undefined;
+  logger: Logger;
 
-  while (Date.now() - startTime < timeoutMs) {
-    try {
-      const state = await providers.publicDataProvider.queryContractState(contractAddress);
-      if (state) {
-        return; // Contract deployed and state available
-      }
-    } catch (err) {
-      // Contract not yet deployed, continue waiting
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  constructor(logger: Logger) {
+    this.logger = logger;
   }
 
-  throw new Error(`Contract deployment timeout after ${timeoutMs}ms`);
+  setup = async (testConfiguration: TestConfiguration) => {
+    this.logger.info('Setting up wallet');
+    this.wallet = await this.buildWalletAndWaitForFunds(testConfiguration.dappConfig, testConfiguration.seed);
+    expect(this.wallet).not.toBeNull();
+    const state = await Rx.firstValueFrom(this.wallet.state());
+    expect(state.balances[nativeToken()].valueOf()).toBeGreaterThan(BigInt(0));
+    return this.wallet;
+  };
+
+  waitForFunds = (wallet: Wallet) =>
+    Rx.firstValueFrom(
+      wallet.state().pipe(
+        Rx.throttleTime(10_000),
+        Rx.map((s) => s.balances[nativeToken()] ?? 0n),
+        Rx.filter((balance) => balance > 0n),
+      ),
+    );
+
+  buildWalletAndWaitForFunds = async (
+    { indexer, indexerWS, node, proofServer }: Config,
+    seed: string,
+  ): Promise<Wallet & Resource> => {
+    const wallet = await WalletBuilder.buildFromSeed(
+      indexer,
+      indexerWS,
+      proofServer,
+      node,
+      seed,
+      getZswapNetworkId(),
+      'warn',
+    );
+    wallet.start();
+    const state = await Rx.firstValueFrom(wallet.state());
+    this.logger.info({ event: 'wallet', seed, address: state.address });
+    let balance = state.balances[nativeToken()];
+    if (balance === undefined || balance === 0n) {
+      this.logger.info({ event: 'wallet_wait_for_funds' });
+      balance = await this.waitForFunds(wallet);
+    }
+    this.logger.info({ event: 'wallet_balance', balance: balance?.toString() });
+    return wallet;
+  };
+
+  close = async () => {
+    if (this.wallet !== undefined) {
+      await this.wallet.close();
+    }
+  };
 }
 
-/**
- * Helper: Create test logger (silent by default)
- */
-export function createTestLogger(): any {
-  return {
-    level: 'silent',
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    debug: () => {},
-    fatal: () => {},
-    trace: () => {},
-    silent: () => {},
-    child: () => createTestLogger(),
+export class TestProviders {
+  createWalletAndMidnightProvider = async (wallet: Wallet): Promise<WalletProvider & MidnightProvider> => {
+    const state = await Rx.firstValueFrom(wallet.state());
+    return {
+      encryptionPublicKey: state.encryptionPublicKey,
+      coinPublicKey: state.coinPublicKey,
+      balanceTx(tx: UnbalancedTransaction, newCoins: CoinInfo[]): Promise<BalancedTransaction> {
+        return wallet
+          .balanceTransaction(
+            ZswapTransaction.deserialize(tx.serialize(getZswapNetworkId()), getZswapNetworkId()),
+            newCoins,
+          )
+          .then((tx) => wallet.proveTransaction(tx))
+          .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getZswapNetworkId()), getLedgerNetworkId()))
+          .then(createBalancedTx);
+      },
+      submitTx(tx: BalancedTransaction): Promise<TransactionId> {
+        return wallet.submitTransaction(tx);
+      },
+    };
+  };
+
+  configurePayrollProviders = async (wallet: Wallet & Resource, config: Config) => {
+    const walletAndMidnightProvider = await this.createWalletAndMidnightProvider(wallet);
+    const inMemory = inMemoryPrivateStateProvider<AccountId, PayrollPrivateState>();
+    return {
+      privateStateProvider: inMemory,
+      publicDataProvider: indexerPublicDataProvider(config.indexer, config.indexerWS),
+      zkConfigProvider: new NodeZkConfigProvider<PayrollCircuitKeys>(config.payrollZkConfigPath),
+      proofProvider: httpClientProofProvider(config.proofServer),
+      walletProvider: walletAndMidnightProvider,
+      midnightProvider: walletAndMidnightProvider,
+    } satisfies PayrollProviders;
   };
 }
