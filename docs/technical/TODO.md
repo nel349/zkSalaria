@@ -107,24 +107,37 @@
 
 **🚨 CRITICAL ARCHITECTURE CLARIFICATION - ZKML Design:**
 
+**⚡ ZKML Usage Pattern for zkSalaria:**
+
 ```
 OFF-CHAIN (Employee's Computer):
 1. Read payment history from blockchain (txids)
 2. Decrypt amounts with private key
-3. Run ML model locally (XGBoost credit scoring) ← EZKL
-4. Generate ZK proof: "Score > 680" ← EZKL
+3. Run ML model locally (XGBoost credit scoring) ← EZKL OFF-CHAIN
+4. Generate ZK proof: "Score > 680" ← EZKL OFF-CHAIN
 5. Submit proof + txids to smart contract
 
 ON-CHAIN (Smart Contract):
 1. Verify transactions exist on blockchain ✓
 2. Verify Merkle root matches txids ✓
-3. Verify ZK proof is valid ✓
+3. Verify ZK proof is valid ✓ (NOT running ML, just verifying proof)
 4. Store approval (YES/NO result)
 
 LENDER:
 1. Read approval from ledger
 2. No access to payment amounts or exact score
 ```
+
+**🎯 ZKML is ONLY used when:**
+- Employee wants to prove something about their data WITHOUT revealing exact values
+- Examples: "Score > 680", "Income in range $X-$Y", "Average salary is $Z"
+- ML runs OFF-CHAIN, contract ONLY verifies proofs ON-CHAIN
+
+**❌ ZKML is NOT used for:**
+- Simple encrypted balance transfers (use bank.compact pattern)
+- Direct salary payments (no ML needed)
+- Basic CRUD operations (register, deposit, withdraw)
+- Any operation that doesn't need zero-knowledge proofs
 
 **What Contract DOES:**
 - ✅ Store disclosure authorizations (grant/revoke)
@@ -144,35 +157,58 @@ LENDER:
 - [x] Added `export ledger shared_payment_history: Map<Bytes<32>, Bytes<32>>`
 
 **Implemented Circuits (11 total):**
+
+**Authorization Circuits (enable ZKML, but are NOT ZKML themselves):**
 - [x] `grant_income_disclosure(employee_id, lender_id, min_threshold, expires_in)`:
-  - Stores authorization on ledger
-  - Grants lender permission to submit ZKML proofs
-  - NOTE: Actual credit score calculation happens OFF-CHAIN (EZKL in Phase 2)
+  - **NOT ZKML**: Simple ledger write storing authorization
+  - **What it does**: Employee says "I give lender permission to see my income data"
+  - **Stores**: Authorization record on public ledger with expiration
+  - **Enables ZKML (Phase 2)**: Lender can later request ZK proof via `verify_credit_proof()`
+  - **Future ZKML flow**:
+    - Employee (off-chain): Runs credit model → generates proof "score > 680"
+    - Lender (on-chain): Submits proof to `verify_credit_proof()` circuit (Phase 2)
 
 - [x] `grant_employment_disclosure(employee_id, verifier_id, company_id, expires_in)`:
-  - Stores authorization for employment verification
-  - Landlord/verifier can submit ZKML proofs to verify employment
-  - Company ID validated but stored separately (threshold not used)
+  - **NOT ZKML**: Simple ledger write storing authorization
+  - **What it does**: Employee says "I give verifier permission to verify my employment"
+  - **Stores**: Authorization record on public ledger with expiration
+  - **Enables ZKML (Phase 2)**: Verifier can later request ZK proof via `verify_employment_proof()`
+  - **Future ZKML flow**:
+    - Employee (off-chain): Generates proof "I work at company X" without revealing salary
+    - Verifier (on-chain): Submits proof to `verify_employment_proof()` circuit (Phase 2)
 
 - [x] `grant_audit_disclosure(company_id, auditor_id, expires_in)`:
-  - Stores authorization for compliance/pay equity audits
-  - Auditor can submit ZKML proofs for fairness analysis
-  - Company grants permission for aggregate analysis
+  - **NOT ZKML**: Simple ledger write storing authorization
+  - **What it does**: Company says "I give auditor permission to audit my payroll"
+  - **Stores**: Authorization record on public ledger with expiration
+  - **Enables ZKML (Phase 2)**: Auditor can analyze salaries and generate ZK fairness proof via `verify_audit_proof()`
+  - **Future ZKML flow**:
+    - Auditor (off-chain): Downloads salary data → runs fairness model → generates proof "no gender pay gap"
+    - Auditor (on-chain): Submits proof to `verify_audit_proof()` circuit (Phase 2)
 
+**Other Non-ZKML Circuits:**
 - [x] `revoke_disclosure(grantor_id, grantee_id, permission_type)`:
+  - **NOT ZKML**: Simple ledger update (remove authorization)
   - Allows employee/company to revoke access early
   - Removes authorization from ledger
   - Removes shared payment history
 
-**Deferred to Phase 2 (ZKML Integration):**
-- [ ] `verify_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`:
+**Deferred to Phase 2 (TRUE ZKML CIRCUITS - not yet implemented):**
+- [ ] **`verify_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`**:
+  - ✅ **THIS IS A ZKML CIRCUIT** - Verifies ZK proof generated off-chain
   - Verifies transactions exist on blockchain
   - Verifies Merkle root consistency
   - Verifies ZK proof from EZKL
-  - Stores approval result
+  - Stores approval result (YES/NO without revealing score)
   - See ZKML_TECHNICAL_DEEP_DIVE.md for full implementation
+- [ ] **`verify_employment_proof(proof, employee_id, verifier_id, company_id)`**:
+  - ✅ **THIS IS A ZKML CIRCUIT** - Verifies ZK proof of employment
+- [ ] **`verify_audit_proof(proof, company_id, auditor_id, fairness_threshold)`**:
+  - ✅ **THIS IS A ZKML CIRCUIT** - Verifies ZK proof of fair pay analysis
 
+**Phase 2 Implementation:**
 - [ ] Employee generates ZKML credit score proof locally (EZKL + Python)
+- [ ] Auditor generates ZKML fairness proof locally (EZKL + Python)
 - [ ] Test end-to-end: payment history → ML → EZKL proof → verification
 
 **Test Scenarios:**
@@ -192,18 +228,25 @@ LENDER:
 - ✅ Follows bank.compact proven patterns
 
 **Compilation Status:**
-- ✅ 11 circuits compiling successfully:
-  1. mint_tokens
-  2. register_company
-  3. deposit_company_funds
-  4. add_employee
-  5. withdraw_employee_salary
-  6. pay_employee
-  7. update_timestamp
-  8. **grant_income_disclosure** ← NEW (Phase 0 Step 5)
-  9. **grant_employment_disclosure** ← NEW (Phase 0 Step 5)
-  10. **grant_audit_disclosure** ← NEW (Phase 0 Step 5)
-  11. **revoke_disclosure** ← NEW (Phase 0 Step 5)
+- ✅ 11 circuits compiling successfully
+
+**⚡ ZKML Classification:**
+
+| Circuit | ZKML Usage | Status |
+|---------|-----------|--------|
+| `mint_tokens` | ❌ NO | Standard token operation |
+| `register_company` | ❌ NO | Simple ledger write |
+| `deposit_company_funds` | ❌ NO | Encrypted balance transfer |
+| `add_employee` | ❌ NO | Simple ledger write |
+| `withdraw_employee_salary` | ❌ NO | Encrypted balance transfer |
+| `pay_employee` | ❌ NO | Encrypted balance transfer |
+| `update_timestamp` | ❌ NO | Ledger update |
+| `grant_income_disclosure` | ❌ NO | **Authorization only** (stores permission on ledger) |
+| `grant_employment_disclosure` | ❌ NO | **Authorization only** (stores permission on ledger) |
+| `grant_audit_disclosure` | ❌ NO | **Authorization only** (stores permission on ledger) |
+| `revoke_disclosure` | ❌ NO | Simple ledger update |
+
+**Summary:** **All 11 circuits are NON-ZKML** - They're standard encrypted operations and authorization storage. The actual ZKML circuits (`verify_credit_proof`, `verify_employment_proof`, `verify_audit_proof`) will be added in Phase 2.
 
 **Important Architecture Notes:**
 - ❌ **NO IN-CONTRACT COMPUTATION**: Smart contract does NOT calculate averages, scores, or run ML models
@@ -357,14 +400,28 @@ LENDER:
 
 ## Phase 2: ZKML Integration
 
-### ML Models
+**🚨 IMPORTANT:** This phase adds the actual ZKML circuits. Phase 0-1 only has authorization circuits (grant/revoke). The verify_*_proof() circuits below are the TRUE ZKML circuits.
+
+### ML Models (OFF-CHAIN)
 - [ ] Set up Python zkml workspace with EZKL dependencies
 - [ ] Build XGBoost credit scoring model with synthetic data
 - [ ] Export model to ONNX format
 - [ ] Generate ZK circuit from ONNX using EZKL
+- [ ] Create proof generation scripts (employee runs locally)
 
-### Smart Contracts
-- [ ] Create CreditScoring.compact for ZKML proof verification
+### Smart Contracts (ON-CHAIN ZKML VERIFICATION)
+- [ ] **Add ZKML circuit: `verify_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`**
+  - ✅ **THIS IS THE ZKML CIRCUIT** - Verifies ZK proof generated off-chain
+  - Verifies transactions exist on blockchain
+  - Verifies Merkle root matches txids
+  - Verifies ZK proof is valid
+  - Stores approval (YES/NO)
+- [ ] **Add ZKML circuit: `verify_employment_proof(proof, employee_id, verifier_id, company_id)`**
+  - ✅ **THIS IS THE ZKML CIRCUIT** - Verifies ZK proof of employment
+  - Proves employee works at company without revealing salary
+- [ ] **Add ZKML circuit: `verify_audit_proof(proof, company_id, auditor_id, fairness_threshold)`**
+  - ✅ **THIS IS THE ZKML CIRCUIT** - Verifies ZK proof of fair pay analysis
+  - Proves no gender pay gap without revealing individual salaries
 - [ ] Integrate ZKML proof generation with payroll-api
 - [ ] Test end-to-end: payment → ML analysis → proof → verification
 
@@ -377,6 +434,330 @@ LENDER:
 
 ---
 
+## Future Enhancements (Priority Order for Production Payroll)
+
+**⚡ ZKML Usage Summary:**
+
+| Priority | Feature | ZKML Required? | Reason |
+|----------|---------|----------------|--------|
+| 1 | Recurring Payments | ❌ NO | Simple encrypted balance transfers |
+| 2 | Salary History Queries | ✅ **YES** | **PRIMARY ZKML USE CASE** - Prove income without revealing amounts |
+| 3 | Tax Withholding | ⚡ HYBRID | Basic withholding = NO, W-2 privacy = YES (optional) |
+| 4 | Benefits Tracking | ❌ NO | Simple arithmetic, optional ZKML enhancement possible |
+| 5 | Payment Batching | ❌ NO | Performance optimization, not privacy feature |
+
+**Key Insight:** Only 1 out of 5 enhancements requires ZKML. Most payroll operations are straightforward encrypted balance transfers. ZKML is reserved for privacy-preserving proofs where employees need to prove properties about their data without revealing exact values.
+
+---
+
+### Priority 1: Recurring Payments (FUNDAMENTAL)
+**Why Critical:** Every company pays employees on a recurring schedule (bi-weekly, monthly, semi-monthly). Without this, companies must manually initiate every payment - not scalable for real-world use.
+
+**⚡ ZKML Applicability:** ❌ **NO ZKML NEEDED**
+- Recurring payments are simple encrypted balance transfers (bank.compact pattern)
+- No ML computation required
+- No zero-knowledge proofs needed
+- Standard ledger operations: check schedule → execute payment → update next_payment_date
+
+**Implementation:**
+- [ ] Add `PaymentSchedule` struct in PayrollCommons.compact:
+  ```compact
+  struct PaymentSchedule {
+    employee_id: Bytes<32>,
+    amount: Uint<64>,
+    frequency: Uint<8>, // 1=weekly, 2=bi-weekly, 4=monthly
+    next_payment_date: Uint<64>,
+    is_active: Bool
+  }
+  ```
+- [ ] Add ledger state: `export ledger payment_schedules: Map<Bytes<32>, PaymentSchedule>`
+- [ ] Create circuit: `setup_recurring_payment(employee_id, amount, frequency, start_date)`
+  - Store schedule on public ledger
+  - Validate company has sufficient balance
+  - Set next payment date based on frequency
+- [ ] Create circuit: `execute_recurring_payment(employee_id)`
+  - Check if current_timestamp >= next_payment_date
+  - Execute encrypted balance transfer (reuse pay_employee logic)
+  - Update next_payment_date (add frequency interval)
+  - Append to payment history
+- [ ] Create circuit: `pause_recurring_payment(employee_id)` - Set is_active to false
+- [ ] Create circuit: `resume_recurring_payment(employee_id)` - Set is_active to true
+- [ ] Create circuit: `cancel_recurring_payment(employee_id)` - Remove from ledger
+
+**User Impact:**
+- ✅ Companies set up payments once, run automatically forever
+- ✅ Employees get predictable payment schedule
+- ✅ Reduces manual work by 99% (no more clicking "Pay" every 2 weeks)
+
+**Technical Notes:**
+- Execution could be triggered by company, employee, or automated service
+- Consider adding `last_payment_date` to track payment history
+- Handle edge cases: insufficient balance (pause schedule), employee termination (cancel schedule)
+
+---
+
+### Priority 2: Salary History Queries with ZK Proofs (WOW FACTOR)
+**Why Important:** This is zkSalaria's UNIQUE value proposition - employees can prove income to lenders/landlords without revealing exact salary amounts. This leverages the privacy architecture we've already built.
+
+**⚡ ZKML Applicability:** ✅ **FULL ZKML IMPLEMENTATION REQUIRED**
+- **This is the PRIMARY ZKML use case for zkSalaria**
+- **OFF-CHAIN (Employee's device)**:
+  - Download payment history from blockchain (txids)
+  - Decrypt amounts with private key
+  - Calculate aggregate (average, threshold check, range check)
+  - Run ML model if needed (credit scoring, income prediction)
+  - Generate ZK proof using EZKL: "My average income is > $X" or "My score > 680"
+- **ON-CHAIN (Smart contract)**:
+  - Verify txids exist on blockchain
+  - Verify Merkle root matches txids
+  - Verify ZK proof is valid
+  - Store approval (YES/NO) without revealing amounts
+- **Pattern:** Exactly follows ZKML_TECHNICAL_DEEP_DIVE.md architecture
+- **Integration:** Uses existing `grant_income_disclosure()` authorization circuit
+
+**Implementation:**
+- [ ] Create circuit: `generate_income_proof(employee_id, proof_type, threshold)`
+  - Proof types:
+    - `INCOME_ABOVE_THRESHOLD` - "I earn more than $X/month" (for credit cards)
+    - `INCOME_RANGE` - "I earn between $X and $Y" (for rentals)
+    - `AVERAGE_INCOME` - "My average monthly income is $X" (for loans)
+  - Read payment history from ledger (already stored)
+  - Calculate aggregate without revealing individual payments
+  - Generate ZK proof of calculation
+  - Return proof hash for verifier
+- [ ] Create circuit: `verify_income_proof(proof_hash, employee_id, verifier_id)`
+  - Check employee has granted disclosure to verifier
+  - Verify proof is valid and not expired
+  - Store verification result on ledger
+  - Verifier can read YES/NO without seeing amounts
+- [ ] Add ledger state: `export ledger income_proofs: Map<Bytes<32>, IncomeProof>`
+- [ ] Add `IncomeProof` struct:
+  ```compact
+  struct IncomeProof {
+    employee_id: Bytes<32>,
+    proof_type: Uint<8>,
+    proof_hash: Bytes<32>,
+    created_at: Uint<64>,
+    expires_at: Uint<64>,
+    verified: Bool
+  }
+  ```
+
+**User Impact:**
+- ✅ Employees control who sees their income data
+- ✅ Lenders get proof of income without salary snooping
+- ✅ Landlords verify tenant income privately
+- ✅ Banks approve loans with ZK income verification
+
+**Integration with Existing Features:**
+- ✅ Leverages `grant_income_disclosure()` circuit (already implemented)
+- ✅ Uses payment history on public ledger (already stored)
+- ✅ Works with existing disclosure authorization system
+
+**Wow Factor:**
+- 🚀 "Apply for loan without revealing your exact salary"
+- 🚀 "Rent apartment with privacy-preserving income proof"
+- 🚀 "Get credit card approval without exposing paycheck amounts"
+
+---
+
+### Priority 3: Tax Withholding (LEGALLY REQUIRED)
+**Why Critical:** Tax withholding is legally required in most jurisdictions. Companies must deduct federal/state/local taxes from employee paychecks and report them to tax authorities. Without this, zkSalaria cannot be used for real payroll.
+
+**⚡ ZKML Applicability:** ⚡ **HYBRID - ZKML for W-2 Privacy, Standard for Withholding**
+- **Tax Calculation (NO ZKML):**
+  - Standard arithmetic in circuit: `tax = (amount * rate) / 100`
+  - No ML needed for basic tax withholding
+  - Straightforward encrypted balance operations
+- **W-2 Generation (YES ZKML - OPTIONAL PRIVACY ENHANCEMENT):**
+  - **OFF-CHAIN**: Employee generates ZK proof of annual tax data
+  - **Proof**: "I paid $X in taxes this year" without revealing salary or individual paychecks
+  - **Use Case**: Privacy-preserving tax filing (prove compliance without revealing income details)
+  - **ON-CHAIN**: Contract verifies proof of annual tax totals
+- **Why Hybrid?**
+  - Tax withholding is computation on single paycheck (no ML needed)
+  - W-2 reporting aggregates annual data (ZKML provides privacy for tax filing)
+  - Employees can choose: reveal W-2 publicly OR prove via ZK proof
+
+**Implementation:**
+- [ ] Add `TaxWithholding` struct in PayrollCommons.compact:
+  ```compact
+  struct TaxWithholding {
+    employee_id: Bytes<32>,
+    federal_rate: Uint<8>, // Percentage (0-100)
+    state_rate: Uint<8>,
+    local_rate: Uint<8>,
+    additional_amount: Uint<64>, // Flat amount per paycheck
+    ytd_withheld: Uint<64> // Year-to-date total
+  }
+  ```
+- [ ] Add ledger state: `export ledger tax_withholdings: Map<Bytes<32>, TaxWithholding>`
+- [ ] Create circuit: `setup_tax_withholding(employee_id, federal_rate, state_rate, local_rate, additional)`
+  - Store tax configuration for employee
+  - Validate rates are reasonable (0-50%)
+- [ ] Update `pay_employee()` circuit to calculate and deduct taxes:
+  ```compact
+  gross_amount = requested_payment
+  federal_tax = (gross_amount * federal_rate) / 100
+  state_tax = (gross_amount * state_rate) / 100
+  local_tax = (gross_amount * local_rate) / 100
+  total_tax = federal_tax + state_tax + local_tax + additional_amount
+  net_amount = gross_amount - total_tax
+
+  // Transfer net_amount to employee (encrypted)
+  // Keep total_tax in company reserve for tax payments
+  // Update ytd_withheld
+  ```
+- [ ] Create circuit: `generate_w2_proof(employee_id, year)`
+  - Calculate annual totals (gross income, taxes withheld)
+  - Generate ZK proof of W-2 data for tax filing
+  - Store proof hash on ledger
+- [ ] Add to PaymentRecord:
+  ```compact
+  gross_amount: Uint<64>,
+  tax_withheld: Uint<64>,
+  net_amount: Uint<64>
+  ```
+
+**User Impact:**
+- ✅ Companies comply with tax laws automatically
+- ✅ Employees see gross vs net pay breakdown
+- ✅ Year-end W-2 generation (privacy-preserving)
+- ✅ Tax authorities can verify compliance via ZK proofs
+
+**Technical Notes:**
+- Consider adding `tax_year` to track annual limits (Social Security cap, etc.)
+- Support for multiple tax jurisdictions (multi-state employees)
+- Integration with IRS reporting (W-2 generation)
+
+---
+
+### Priority 4: Benefits Tracking (COMMON)
+**Why Important:** Most companies offer benefits (health insurance, 401k, FSA, etc.) that require paycheck deductions. This is essential for competitive employers and standard in modern payroll systems.
+
+**⚡ ZKML Applicability:** ❌ **NO ZKML NEEDED (but could be enhanced)**
+- **Basic Benefits Tracking (NO ZKML):**
+  - Simple arithmetic: deduct benefit amount from paycheck
+  - Track year-to-date contributions
+  - Standard encrypted balance operations
+- **OPTIONAL ZKML Enhancement (Future):**
+  - **OFF-CHAIN**: Employee proves "My 401k contributions are on track for $X annual goal"
+  - **OFF-CHAIN**: Employee proves "I've maxed out my HSA limit" without revealing exact amounts
+  - **Use Case**: Privacy-preserving benefits planning
+  - Not critical for MVP, basic tracking is sufficient
+
+**Implementation:**
+- [ ] Add `BenefitDeduction` struct in PayrollCommons.compact:
+  ```compact
+  struct BenefitDeduction {
+    employee_id: Bytes<32>,
+    benefit_type: Uint<8>, // 1=health, 2=dental, 3=401k, 4=fsa, 5=hsa
+    deduction_amount: Uint<64>, // Per paycheck
+    company_match: Uint<64>, // Employer contribution (for 401k)
+    ytd_employee: Uint<64>, // Year-to-date employee contributions
+    ytd_company: Uint<64>, // Year-to-date company contributions
+    is_active: Bool
+  }
+  ```
+- [ ] Add ledger state: `export ledger benefit_deductions: Map<Bytes<32>, Vector<5, BenefitDeduction>>`
+- [ ] Create circuit: `setup_benefit_deduction(employee_id, benefit_type, amount, company_match)`
+  - Store benefit configuration for employee
+  - Validate amounts are reasonable
+- [ ] Update `pay_employee()` circuit to deduct benefits:
+  ```compact
+  net_after_tax = gross_amount - total_tax
+  total_benefits = 0
+
+  for each active benefit:
+    deduct benefit_amount from net_after_tax
+    total_benefits += benefit_amount
+    if company_match > 0:
+      deduct company_match from company balance
+      total_benefits += company_match
+    update ytd_employee and ytd_company
+
+  final_net = net_after_tax - total_benefits
+  ```
+- [ ] Create circuit: `pause_benefit(employee_id, benefit_type)` - Set is_active to false
+- [ ] Create circuit: `resume_benefit(employee_id, benefit_type)` - Set is_active to true
+- [ ] Add to PaymentRecord:
+  ```compact
+  benefits_deducted: Uint<64>,
+  company_match: Uint<64>
+  ```
+
+**User Impact:**
+- ✅ Employees see benefits deductions on paystub
+- ✅ Companies track employer contributions (401k match)
+- ✅ Year-to-date tracking for contribution limits (401k has $23,000 annual limit)
+- ✅ Privacy preserved (benefit elections are encrypted)
+
+**Use Cases:**
+- Health insurance: $200/month deduction
+- 401k: 5% of salary with 3% company match
+- HSA: $300/month pre-tax contribution
+- Dental/Vision: $50/month deduction
+
+---
+
+### Priority 5: Payment Batching (EFFICIENCY)
+**Why Important:** Paying 100+ employees one at a time is slow and expensive (gas fees, time). Batch payments allow companies to pay all employees in a single transaction, saving time and costs. Critical for larger companies.
+
+**⚡ ZKML Applicability:** ❌ **NO ZKML NEEDED**
+- Batch payments are multiple encrypted balance transfers in one circuit
+- No ML computation required
+- No zero-knowledge proofs needed beyond standard encryption
+- Performance optimization, not a privacy feature
+- **Pattern**: Loop through employees → decrypt balance → add amount → re-encrypt
+- **Blocker**: Currently blocked by Compact loop constraints (see implementation notes)
+
+**Implementation:**
+- [ ] Create circuit: `pay_employees_batch(employee_ids: Vector<N, Bytes<32>>, amounts: Vector<N, Uint<64>>)`
+  - **Challenge:** Compact doesn't support dynamic loops yet (acknowledged blocker in TODO)
+  - **Workaround:** Create fixed-size batch circuits:
+    - `pay_employees_batch_10()` - Pay up to 10 employees
+    - `pay_employees_batch_50()` - Pay up to 50 employees
+    - `pay_employees_batch_100()` - Pay up to 100 employees
+  - Each circuit:
+    1. Verify company has sufficient total balance
+    2. For each employee (up to N):
+       - Decrypt employee balance
+       - Add payment amount
+       - Re-encrypt employee balance
+       - Update balance_mappings
+       - Append to payment history
+    3. Decrypt company balance once
+    4. Deduct total amount from company
+    5. Re-encrypt company balance once
+  - Single transaction for entire batch (1 ZK proof instead of N proofs)
+- [ ] Alternative: Use `pay_employees_batch_dynamic()` if Compact adds loop support
+- [ ] Add ledger state for batch tracking:
+  ```compact
+  export ledger batch_payments: Map<Bytes<32>, BatchPaymentRecord>
+
+  struct BatchPaymentRecord {
+    batch_id: Bytes<32>,
+    company_id: Bytes<32>,
+    employee_count: Uint<16>,
+    total_amount: Uint<64>,
+    timestamp: Uint<64>
+  }
+  ```
+
+**User Impact:**
+- ✅ Companies save time (1 transaction vs 100 transactions)
+- ✅ Companies save costs (1 ZK proof vs 100 proofs = ~24s vs 40 minutes)
+- ✅ Employees all get paid simultaneously (no staggered payments)
+- ✅ Audit trail shows batch payments for reconciliation
+
+**Technical Notes:**
+- **BLOCKER:** Currently blocked by Compact loop constraints (mentioned in Phase 1 checklist)
+- Consider deferring to post-hackathon when Compact adds loop support
+- Workaround: Fixed-size batch circuits for demonstration
+- Performance: Single batch of 100 employees = 1 ZK proof (~24s) vs 100 individual payments (~40 minutes)
+
+---
+
 ## Phase 4: Deployment & Demo
 
 - [ ] Deploy contracts to Midnight testnet
@@ -386,8 +767,54 @@ LENDER:
 
 ## Current Status
 
-**Phase:** Phase 1 - API Integration (COMPLETED ✅)
-**Current Task:** Ready to move to Phase 2 - ZKML Integration
+**Phase:** Phase 1 - Testing & Validation (COMPLETED ✅)
+**Current Task:** Ready to move to Phase 2 - API Integration OR ZKML Integration
+**Last Update:** December 2024 - Balance decryption testing completed with multi-party architecture
+
+**⚡ ZKML Architecture Overview:**
+
+**Current Implementation (Phase 0-1):**
+- ✅ **11 NON-ZKML circuits** - All current circuits are standard operations:
+  - 7 encrypted balance operations (deposit, pay, withdraw, register, mint, update_timestamp)
+  - 3 authorization circuits (grant_income_disclosure, grant_employment_disclosure, grant_audit_disclosure)
+  - 1 revoke circuit (revoke_disclosure)
+- ✅ **Payment history on public ledger** - Accessible for off-chain ZKML credit scoring
+- ⏸️ **ZKML verification circuits** - NOT YET IMPLEMENTED (Phase 2)
+  - `verify_credit_proof()` - Verify ZK proof of credit score
+  - `verify_employment_proof()` - Verify ZK proof of employment
+  - `verify_audit_proof()` - Verify ZK proof of fair pay analysis
+
+**ZKML Pattern (Phase 2 - when verification circuits are added):**
+```
+1. Authorization (CURRENT - Phase 0-1):
+   Employee/Company grants permission via grant_*_disclosure() circuits
+
+2. OFF-CHAIN (Employee/Auditor device - PHASE 2):
+   Download payment txids → Decrypt amounts → Run ML model (EZKL) → Generate ZK proof
+
+3. ON-CHAIN (Smart contract verification - PHASE 2):
+   Call verify_*_proof() → Verify txids exist → Verify Merkle root → Verify ZK proof → Store approval (YES/NO)
+```
+
+**Key Insight:** The grant circuits are just authorization (permission storage). The actual ZKML happens in Phase 2 with verify_*_proof() circuits that check ZK proofs generated off-chain.
+
+---
+
+**✅ What Works Now:**
+- ✅ Payroll contract with 11 NON-ZKML circuits (register, deposit, pay, withdraw, authorization)
+- ✅ Encrypted balance system (encrypted_employee_balances + balance_mappings)
+- ✅ Real token operations (mint, send via Midnight blockchain)
+- ✅ Payment history on public ledger (ready for ZKML credit scoring in Phase 2)
+- ✅ Authorization circuits for selective disclosure (grant/revoke permissions)
+- ✅ Multi-party architecture tested (separate private states per participant)
+- ✅ Balance decryption verified (22 comprehensive tests passing)
+- ✅ **ZKML foundation ready**: Authorization + payment history in place, ZKML verification circuits deferred to Phase 2
+
+**🔄 Next Steps - Choose Your Path:**
+1. **API Layer** - Build TypeScript API to integrate contract with UI/ZKML
+2. **ZKML** - Build credit scoring with EZKL (requires payment history, already on ledger)
+3. **UI** - Build React frontend for companies/employees (requires API layer first)
+
 **Completed:**
 
 **Phase 0 - Privacy & Architecture Fixes:**
@@ -410,49 +837,102 @@ LENDER:
   - Company can write payments, anyone can read for credit scoring
   - Multi-party safe: separate history per employee on ledger
 - ✅ Multi-party testing completed:
-  - All 31 tests passing (22 basic + 9 multi-party)
-  - Verified separate private states per participant
-  - Verified encrypted balance transfers work correctly
-  - Verified payment history isolation per employee
+  - **22 comprehensive multi-party tests passing** (single-party tests deprecated)
+  - ✅ Verified separate private states per participant (company, employee, verifier)
+  - ✅ Verified encrypted balance transfers work correctly across participants
+  - ✅ Verified payment history isolation per employee on shared public ledger
+  - ✅ **Balance decryption from ledger tested** (7 new tests):
+    - Decrypt employee balance from encrypted_employee_balances + balance_mappings
+    - Decrypt company balance from token_reserve
+    - Handle null balances for employees without payments
+    - Decrypt multiple independent employee balances
+    - Track balance changes through full payment/withdrawal workflow
+    - Verify withdrawals reduce both encrypted balance and token reserve
+    - Demonstrate privacy with encrypted balances on shared ledger
+  - ✅ Tests verify ACTUAL decrypted balances match expected values
+  - ✅ Multi-party architecture proven: separate private states + shared encrypted ledger
 
-**Phase 1 - API Integration:**
-- ✅ Created complete payroll-api package following @midnight-bank/bank-api patterns
-- ✅ Implemented PayrollAPI class with RxJS reactive state management
-- ✅ Set up Midnight SDK providers (wallet, indexer, proof)
-- ✅ Created Docker test environment (midnight-node, indexer, proof-server)
-- ✅ Written comprehensive test suite:
-  - 28 smoke tests (<10ms) for rapid development feedback
-  - 3 integration tests covering full lifecycle
-  - All 31 tests passing
-- ✅ Tested end-to-end: deploy → mint → register → deposit → add employee → pay → withdraw
-- ✅ Verified encrypted balance operations work correctly
-- ✅ Investigated and documented transaction performance:
-  - 24s per transaction (15s ZK proof + 9s block confirmation)
-  - No optimization possible (inherent to ZK blockchain)
-  - Polling interval already optimal (1s, hardcoded in SDK)
+**Phase 1 - Contract Testing & Validation:**
+- ✅ **Comprehensive multi-party testing framework** (22 tests passing):
+  - Built PayrollMultiPartyTestSetup class simulating real-world usage
+  - Each participant (company, employee, verifier) has separate private state
+  - All participants share same encrypted public ledger
+  - Tests verify encrypted balance operations across participants
+- ✅ **Balance decryption testing** (7 dedicated tests):
+  - Test: Decrypt employee balance from encrypted_employee_balances + balance_mappings
+  - Test: Decrypt company balance from token_reserve
+  - Test: Handle null balances for employees without payments
+  - Test: Decrypt multiple independent employee balances
+  - Test: Track balance changes through full payment/withdrawal workflow
+  - Test: Verify withdrawals reduce both encrypted balance and token reserve
+  - Test: Demonstrate privacy with encrypted balances on shared ledger
+- ✅ **Test architecture proven**:
+  - Manual balance tracking (expected values)
+  - Actual balance decryption from ledger (encrypted_employee_balances → balance_mappings)
+  - Both match, proving encryption logic works correctly
+  - Company balance = token_reserve (not separately encrypted)
+  - Employee balances encrypted with independent keys
+- ✅ **Deprecated single-party tests**:
+  - Moved all tests to multi-party setup (more realistic)
+  - Single-party tests saved as .deprecated (reference only)
+  - Multi-party tests properly simulate production environment
+- ✅ **Test coverage complete**:
+  - Payment history on public ledger (for ZKML)
+  - Separate private states per participant
+  - Encrypted balance transfers (company → employee)
+  - Withdrawals (employee → external)
+  - Employment verification (3-party workflow)
+  - Balance decryption from ledger maps
 
-**Next Steps:**
-1. **Phase 2: ZKML Integration** (see detailed checklist in Phase 2 section)
-   - Set up Python zkml workspace with EZKL dependencies
-   - Build XGBoost credit scoring model with synthetic payment data
-   - Export model to ONNX format
-   - Generate ZK circuit from ONNX using EZKL
-   - Create CreditScoring.compact for ZKML proof verification
-   - Integrate ZKML proof generation with payroll-api
-   - Test end-to-end: payment history → ML analysis → proof → verification
-2. **Optional Phase 0 Step 5:** Add selective disclosure circuits (documented but deferred)
-   - Can be added after ZKML integration if time permits
-   - Bank.compact pattern already documented for implementation
+**Phase 2 - API Integration:**
+- ❌ Not started yet (recommended next step)
+- Plan: Create complete payroll-api package following @midnight-bank/bank-api patterns
+- Will include:
+  - PayrollAPI class with RxJS reactive state management
+  - Midnight SDK providers setup (wallet, indexer, proof)
+  - Docker test environment (midnight-node, indexer, proof-server)
+  - Comprehensive integration tests
+  - End-to-end testing: deploy → mint → register → deposit → add employee → pay → withdraw
+- Note: Expect ~24s per transaction (15s ZK proof + 9s block confirmation)
+
+**Next Steps (Choose One Path):**
+
+**Option A: API Layer Development** (Recommended - bridges contract to UI)
+- Create payroll-api package following @midnight-bank/bank-api patterns
+- Implement PayrollAPI class with RxJS reactive state management
+- Set up Midnight SDK providers (wallet, indexer, proof)
+- Create Docker test environment
+- Write integration tests for all circuits
+- Document: Transaction times (~24s per tx due to ZK proofs)
+
+**Option B: ZKML Integration** (Phase 2 - see detailed checklist in Phase 2 section)
+- Set up Python zkml workspace with EZKL dependencies
+- Build XGBoost credit scoring model with synthetic payment data
+- Export model to ONNX format
+- Generate ZK circuit from ONNX using EZKL
+- Create CreditScoring.compact for ZKML proof verification
+- Integrate ZKML proof generation with payroll-api
+- Test end-to-end: payment history → ML analysis → proof → verification
+
+**Option C: UI Development** (Phase 3)
+- Build company dashboard (manage employees, process payroll)
+- Build employee portal (view payments, withdraw funds)
+- Build employment verification interface (for landlords/banks)
+
+**Recommendation:** Build API layer first - it enables both UI and ZKML integration
 
 **Blockers:**
 - None currently
 - Batch payments blocked by Compact loop constraints (deferred to post-hackathon)
 
 **Timeline:**
-- ✅ Phase 0 completed in 2 sessions
-- ✅ Phase 1 completed in 1 session
+- ✅ Phase 0: Privacy & Architecture Fixes - COMPLETED (encrypted balances, employment verification)
+- ✅ Phase 1: Contract Testing & Validation - COMPLETED (22 multi-party tests, balance decryption)
+- 🔄 Phase 2: API Integration - NOT STARTED (recommended next)
+- ⏸️ Phase 3: ZKML Integration - WAITING
+- ⏸️ Phase 4: UI Development - WAITING
 - On track for 3-week hackathon timeline
-- Priority: ZKML credit scoring integration
+- Current priority: Choose between API layer or ZKML integration
 
 ---
 
