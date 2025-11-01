@@ -163,10 +163,19 @@ LENDER:
   - **NOT ZKML**: Simple ledger write storing authorization
   - **What it does**: Employee says "I give lender permission to see my income data"
   - **Stores**: Authorization record on public ledger with expiration
-  - **Enables ZKML (Phase 2)**: Lender can later request ZK proof via `verify_credit_proof()`
+  - **Note**: This is for direct income disclosure (read payment history), NOT for credit scoring
+  - **Use case**: Employee shares payment history directly with lender (no ZK proof)
+
+- [ ] **`grant_credit_disclosure(employee_id, verifier_id, min_threshold, expires_in)` (Phase 2)**:
+  - **NOT ZKML**: Simple ledger write storing authorization
+  - **What it does**: Employee says "I give verifier permission to check my credit score"
+  - **Stores**: Authorization record on public ledger with expiration
+  - **Enables ZKML (Phase 2)**: Verifier can later request verification via `verify_credit_proof()`
   - **Future ZKML flow**:
-    - Employee (off-chain): Runs credit model → generates proof "score > 680"
-    - Lender (on-chain): Submits proof to `verify_credit_proof()` circuit (Phase 2)
+    1. Employee grants permission: `grant_credit_disclosure()`
+    2. Employee (off-chain): Runs credit model → generates ZK proof "score > 680"
+    3. Employee (on-chain): Submits proof → stored encrypted in `encrypted_credit_scores` map
+    4. Verifier (on-chain): Calls `verify_credit_proof(employee_id)` → checks encrypted score exists and meets threshold
 
 - [x] `grant_employment_disclosure(employee_id, verifier_id, company_id, expires_in)`:
   - **NOT ZKML**: Simple ledger write storing authorization
@@ -181,10 +190,11 @@ LENDER:
   - **NOT ZKML**: Simple ledger write storing authorization
   - **What it does**: Company says "I give auditor permission to audit my payroll"
   - **Stores**: Authorization record on public ledger with expiration
-  - **Enables ZKML (Phase 2)**: Auditor can analyze salaries and generate ZK fairness proof via `verify_audit_proof()`
+  - **Enables ZKML (Phase 2)**: Auditor can download salary data, analyze, and submit comprehensive audit report
   - **Future ZKML flow**:
-    - Auditor (off-chain): Downloads salary data → runs fairness model → generates proof "no gender pay gap"
-    - Auditor (on-chain): Submits proof to `verify_audit_proof()` circuit (Phase 2)
+    - Auditor (off-chain): Downloads authorized salary data → runs fairness analysis (ZKML) → generates comprehensive report + ZK proof
+    - Auditor (on-chain): Submits audit result via `submit_audit_result()` circuit (Phase 2)
+    - Public/Regulators (on-chain): Read audit results from ledger (company passed/failed with detailed metrics)
 
 **Other Non-ZKML Circuits:**
 - [x] `revoke_disclosure(grantor_id, grantee_id, permission_type)`:
@@ -194,22 +204,62 @@ LENDER:
   - Removes shared payment history
 
 **Deferred to Phase 2 (TRUE ZKML CIRCUITS - not yet implemented):**
-- [ ] **`verify_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`**:
-  - ✅ **THIS IS A ZKML CIRCUIT** - Verifies ZK proof generated off-chain
+
+**ZKML Architecture (following encrypted balance pattern):**
+
+**Step 1: Authorization (NOT ZKML)**
+- [ ] `grant_credit_disclosure(employee_id, verifier_id, min_threshold, expires_in)` - Employee grants permission
+
+**Step 2: Employee Submits Encrypted Proof (ZKML CIRCUIT)**
+- [ ] **`submit_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`**:
+  - ✅ **THIS IS A ZKML CIRCUIT** - Employee submits ZK proof generated off-chain
   - Verifies transactions exist on blockchain
   - Verifies Merkle root consistency
-  - Verifies ZK proof from EZKL
-  - Stores approval result (YES/NO without revealing score)
+  - Verifies ZK proof from EZKL is valid
+  - **Stores encrypted score** in `encrypted_credit_scores` map (like encrypted_employee_balances)
+  - **Stores score mapping** in `credit_score_mappings` map (like balance_mappings for decryption)
+  - Employee can update their score anytime by re-submitting
   - See ZKML_TECHNICAL_DEEP_DIVE.md for full implementation
-- [ ] **`verify_employment_proof(proof, employee_id, verifier_id, company_id)`**:
-  - ✅ **THIS IS A ZKML CIRCUIT** - Verifies ZK proof of employment
-- [ ] **`verify_audit_proof(proof, company_id, auditor_id, fairness_threshold)`**:
-  - ✅ **THIS IS A ZKML CIRCUIT** - Verifies ZK proof of fair pay analysis
+
+**Step 3: Verifier Checks Encrypted Score (ZKML VERIFICATION)**
+- [ ] **`verify_credit_proof(employee_id, verifier_id)`**:
+  - ✅ **THIS IS A ZKML VERIFICATION CIRCUIT** - Third party verifies employee's credit score
+  - Checks authorization: Does employee allow verifier to see score?
+  - Checks encrypted score exists: Has employee submitted proof?
+  - Decrypts score from `encrypted_credit_scores` + `credit_score_mappings` (if authorized)
+  - Returns YES/NO based on threshold (or encrypted score if full disclosure)
+  - **Does NOT re-verify ZK proof** (already verified in submit_credit_proof)
+
+**Ledger State to Add (Phase 2):**
+```compact
+// Credit scores (encrypted like balances)
+export ledger encrypted_credit_scores: Map<Bytes<32>, Bytes<32>>;     // employee_id -> encrypted_score
+export ledger credit_score_mappings: Map<Bytes<32>, Uint<64>>;        // encrypted_score -> actual_score
+export ledger credit_score_timestamps: Map<Bytes<32>, Uint<64>>;      // employee_id -> last_updated
+
+// Employment proofs (encrypted like balances)
+export ledger encrypted_employment_proofs: Map<Bytes<32>, Bytes<32>>; // employee_id -> encrypted_proof
+export ledger employment_proof_mappings: Map<Bytes<32>, Bool>;        // encrypted_proof -> is_employed
+
+// Audit results (public/semi-public - NOT encrypted)
+export ledger audit_reports: Map<Bytes<32>, AuditReport>;             // company_id -> audit_report
+```
+
+**Similar pattern for employment (encrypted proofs):**
+- [ ] `grant_employment_disclosure()` - Authorization (already implemented)
+- [ ] **`submit_employment_proof(proof, employee_id, company_id)`** - Employee submits encrypted employment proof (ZKML)
+- [ ] **`verify_employment_proof(employee_id, verifier_id)`** - Verifier checks encrypted employment proof (ZKML VERIFICATION)
+
+**Different pattern for audit (public/semi-public results):**
+- [x] `grant_audit_disclosure()` - Authorization (already implemented)
+- [ ] **`submit_audit_result(proof, company_id, auditor_id, audit_report)`** - Auditor submits comprehensive audit result (ZKML)
+  - See detailed `AuditReport` structure in Phase 2 section
+  - No verify circuit needed - result readable via `get_audit_result(company_id)`
 
 **Phase 2 Implementation:**
 - [ ] Employee generates ZKML credit score proof locally (EZKL + Python)
-- [ ] Auditor generates ZKML fairness proof locally (EZKL + Python)
-- [ ] Test end-to-end: payment history → ML → EZKL proof → verification
+- [ ] Auditor generates ZKML fairness audit locally (EZKL + Python) with comprehensive report
+- [ ] Test end-to-end: payment history → ML → EZKL proof → submit → verify/read results
 
 **Test Scenarios:**
 - [x] Test: Employee grants lender income disclosure (stores auth)
@@ -400,30 +450,235 @@ LENDER:
 
 ## Phase 2: ZKML Integration
 
-**🚨 IMPORTANT:** This phase adds the actual ZKML circuits. Phase 0-1 only has authorization circuits (grant/revoke). The verify_*_proof() circuits below are the TRUE ZKML circuits.
+**🚨 IMPORTANT:** This phase adds ZK proof circuits (ZKML + ZK-SNARK) and LLM layer. Phase 0-1 only has authorization circuits (grant/revoke).
 
-### ML Models (OFF-CHAIN)
+**Architecture - Right Tool for Each Job:**
+
+| Use Case | Technology | Why | ZK Proof? |
+|----------|-----------|-----|-----------|
+| **Credit Scoring** | ZKML (EZKL + XGBoost) | ML model learning from patterns | ✅ YES |
+| **Fraud Detection** | ZKML (EZKL + Isolation Forest) | Anomaly detection, pattern recognition | ✅ YES |
+| **Pay Equity** | ZK-SNARK (arithmetic circuits) | Simple statistical calculations | ✅ YES |
+| **Tax Compliance** | ZK-SNARK (rule validation circuits) | Conditional logic, threshold checks | ✅ YES |
+| **Report Generation** | LLM (GPT-4, Claude) | Natural language, human-readable reports | ❌ NO (off-chain only) |
+| **Natural Language UI** | LLM (GPT-4, Claude) | Query interface, explanations | ❌ NO (off-chain only) |
+
+### ML Models (OFF-CHAIN - ZKML)
 - [ ] Set up Python zkml workspace with EZKL dependencies
-- [ ] Build XGBoost credit scoring model with synthetic data
-- [ ] Export model to ONNX format
-- [ ] Generate ZK circuit from ONNX using EZKL
-- [ ] Create proof generation scripts (employee runs locally)
+- [ ] **Credit Scoring Model:**
+  - Build XGBoost credit scoring model with synthetic data
+  - Export model to ONNX format
+  - Generate ZK circuit from ONNX using EZKL
+  - Create proof generation scripts (employee runs locally)
+- [ ] **Fraud Detection Model:**
+  - Build Isolation Forest anomaly detection model
+  - Export to ONNX format
+  - Generate ZK circuit using EZKL
+  - Create proof generation scripts (auditor runs locally)
 
-### Smart Contracts (ON-CHAIN ZKML VERIFICATION)
-- [ ] **Add ZKML circuit: `verify_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`**
-  - ✅ **THIS IS THE ZKML CIRCUIT** - Verifies ZK proof generated off-chain
-  - Verifies transactions exist on blockchain
-  - Verifies Merkle root matches txids
-  - Verifies ZK proof is valid
-  - Stores approval (YES/NO)
-- [ ] **Add ZKML circuit: `verify_employment_proof(proof, employee_id, verifier_id, company_id)`**
-  - ✅ **THIS IS THE ZKML CIRCUIT** - Verifies ZK proof of employment
-  - Proves employee works at company without revealing salary
-- [ ] **Add ZKML circuit: `verify_audit_proof(proof, company_id, auditor_id, fairness_threshold)`**
-  - ✅ **THIS IS THE ZKML CIRCUIT** - Verifies ZK proof of fair pay analysis
-  - Proves no gender pay gap without revealing individual salaries
-- [ ] Integrate ZKML proof generation with payroll-api
-- [ ] Test end-to-end: payment → ML analysis → proof → verification
+### ZK-SNARK Circuits (OFF-CHAIN - Arithmetic & Rule Validation)
+- [ ] **Pay Equity Audit Circuits:**
+  - Build ZK-SNARK circuits for statistical calculations (averages, ratios, comparisons)
+  - Prove: "Average male salary = X, female salary = Y, gap = Z%"
+  - Simpler than ZKML, faster proof generation
+  - Use tools: Circom, SnarkJS, or Noir
+- [ ] **Tax/Benefits Compliance Circuits:**
+  - Build ZK-SNARK circuits for rule validation
+  - Prove: "All tax withholdings match rates, X violations found"
+  - Conditional logic, threshold checks
+  - Use tools: Circom, SnarkJS, or Noir
+
+### LLM Layer (OFF-CHAIN - Human Interface, NO ZK Proofs)
+- [ ] **Report Generation Service:**
+  - Reads structured `AuditReport` from blockchain
+  - Uses LLM (GPT-4, Claude) to generate human-readable reports
+  - Example: Turn findings into prose "ABC Corp's audit revealed..."
+  - Output: PDF reports, email summaries, dashboard text
+- [ ] **Natural Language Query Interface:**
+  - User asks: "Show me all audits with critical findings in Q4"
+  - LLM translates to blockchain queries
+  - Returns results in natural language
+- [ ] **Anomaly Explanation:**
+  - User asks: "Why is employee #123's payment flagged?"
+  - LLM analyzes audit findings and provides explanation
+  - "This employee received duplicate payments on dates X and Y"
+- [ ] **Regulatory Compliance Check:**
+  - LLM validates audit reports against regulations (EEOC, FLSA, etc.)
+  - "This audit meets EEOC requirements for pay equity reporting"
+
+**🔒 Important:** LLM layer is OFF-CHAIN only, does NOT generate ZK proofs, used ONLY for human-readable output and natural language interface after ZK proofs are verified on-chain.
+
+### Smart Contracts (ON-CHAIN ZK PROOF VERIFICATION)
+
+**🚨 CRITICAL: Two-Circuit Pattern (Submit + Verify)**
+
+The ZK architecture uses TWO types of circuits following the encrypted balance pattern:
+
+**1. Authorization Circuit (NOT ZKML):**
+- [ ] `grant_credit_disclosure(employee_id, verifier_id, min_threshold, expires_in)` - Employee grants permission to verifier
+
+**2. Submit Circuit (ZKML - Employee submits encrypted proof):**
+- [ ] **`submit_credit_proof(proof, employee_wallet, txids, merkle_root, threshold, model_hash)`**
+  - ✅ **THIS IS A ZKML CIRCUIT** - Employee submits ZK proof they generated OFF-CHAIN
+  - Employee runs EZKL locally → generates proof "score > 680"
+  - Employee calls this circuit to submit proof on-chain
+  - Circuit verifies: txids exist + Merkle root + ZK proof valid
+  - Circuit stores encrypted score in `encrypted_credit_scores` map (like encrypted balances)
+  - **Employee controls their own encrypted score** (can update anytime)
+
+**3. Verify Circuit (ZKML VERIFICATION - Third party checks):**
+- [ ] **`verify_credit_proof(employee_id, verifier_id)`**
+  - ✅ **THIS IS A ZKML VERIFICATION CIRCUIT** - Third party checks employee's encrypted score
+  - Checks authorization from `grant_credit_disclosure()`
+  - Decrypts score from `encrypted_credit_scores` + `credit_score_mappings`
+  - Returns YES/NO based on threshold
+  - **Does NOT re-verify ZK proof** (already verified in submit_credit_proof)
+
+**Similar pattern for employment:**
+- [ ] `grant_employment_disclosure()` - Authorization (already implemented)
+- [ ] `submit_employment_proof()` - Employee submits encrypted employment proof (ZKML)
+- [ ] `verify_employment_proof()` - Verifier checks (ZKML VERIFICATION)
+
+**Different pattern for audit (result is public/semi-public):**
+- [x] `grant_audit_disclosure()` - Authorization (already implemented)
+- [ ] **`submit_audit_result(proof, company_id, auditor_id, audit_report)`** - Auditor submits comprehensive audit result
+  - ✅ **THIS IS A ZK VERIFICATION CIRCUIT** - Auditor submits ZK proof they generated OFF-CHAIN
+  - **Proof type depends on audit_type:**
+    - **Fraud detection** (audit_type=3) → Uses ZKML (EZKL) proof from ML model
+    - **Pay equity** (audit_type=1) → Uses ZK-SNARK proof from arithmetic circuits
+    - **Tax compliance** (audit_type=2) → Uses ZK-SNARK proof from rule validation circuits
+  - Circuit verifies: ZK proof is valid (proves calculations/model ran correctly)
+  - **Stores audit result on ledger** (public or regulator-only access)
+  - **Generic audit_report structure** (supports any audit type):
+    ```compact
+    struct AuditReport {
+      company_id: Bytes<32>,
+      auditor_id: Bytes<32>,
+      timestamp: Uint<64>,
+      audit_type: Uint<8>,              // 1=pay_equity, 2=tax_compliance, 3=fraud, 4=benefits, etc.
+      overall_status: Uint<8>,          // 0=failed, 1=passed, 2=warning, 3=critical
+      total_employees_analyzed: Uint<16>,
+
+      // Generic findings - up to 10 different irregularities
+      findings: Vector<10, AuditFinding>,
+
+      // Generic metrics - up to 10 key performance indicators
+      metrics: Vector<10, AuditMetric>,
+
+      detailed_report_hash: Bytes<32>,  // Hash of full report (stored off-chain: IPFS, Arweave)
+      proof_hash: Bytes<32>             // ZK proof hash (proves calculations correct)
+    }
+
+    struct AuditFinding {
+      finding_type: Uint<8>,            // Type of irregularity (1=gender_gap, 2=overtime_violation, etc.)
+      severity: Uint<8>,                // 0=info, 1=low, 2=medium, 3=high, 4=critical
+      affected_employees: Uint<16>,     // Number of employees affected by this finding
+      quantitative_value: Uint<64>      // Measure: amount, percentage * 100, count, etc.
+    }
+
+    struct AuditMetric {
+      metric_type: Uint<8>,             // Type of metric (1=avg_salary, 2=compliance_rate, etc.)
+      value: Uint<64>                   // Metric value (salary in cents, percentage * 100, etc.)
+    }
+    ```
+
+    **Example Usage:**
+    - **Pay Equity Audit**: audit_type=1, findings=[gender_gap, role_inequity], metrics=[avg_male_salary, avg_female_salary]
+    - **Tax Compliance**: audit_type=2, findings=[withholding_errors, missing_w2s], metrics=[total_tax_discrepancy]
+    - **Fraud Detection**: audit_type=3, findings=[duplicate_payments, ghost_employees], metrics=[total_fraud_amount]
+    - **Benefits Compliance**: audit_type=4, findings=[401k_contribution_errors], metrics=[total_affected_amount]
+- [ ] **`get_audit_result(company_id)` or `get_audit_result(company_id, regulator_id)`** - Read audit results
+  - Simple ledger read (NOT ZKML, just data retrieval)
+  - Public access OR regulator-only (depending on privacy requirements)
+  - Returns comprehensive audit report for company
+
+**Ledger State:**
+```compact
+// Credit scores (encrypted, like balances)
+export ledger encrypted_credit_scores: Map<Bytes<32>, Bytes<32>>;     // employee_id -> encrypted_score
+export ledger credit_score_mappings: Map<Bytes<32>, Uint<64>>;        // encrypted_score -> actual_score
+export ledger credit_score_timestamps: Map<Bytes<32>, Uint<64>>;      // employee_id -> last_updated
+
+// Employment proofs (encrypted, like balances)
+export ledger encrypted_employment_proofs: Map<Bytes<32>, Bytes<32>>; // employee_id -> encrypted_proof
+export ledger employment_proof_mappings: Map<Bytes<32>, Bool>;        // encrypted_proof -> is_employed
+
+// Audit results (public or regulator-only, NOT encrypted - different from credit scores)
+export ledger audit_reports: Map<Bytes<32>, AuditReport>;             // company_id -> audit_report
+
+// Generic audit structures (support any audit type)
+struct AuditReport {
+  company_id: Bytes<32>,
+  auditor_id: Bytes<32>,
+  timestamp: Uint<64>,
+  audit_type: Uint<8>,               // 1=pay_equity, 2=tax_compliance, 3=fraud, 4=benefits, etc.
+  overall_status: Uint<8>,           // 0=failed, 1=passed, 2=warning, 3=critical
+  total_employees_analyzed: Uint<16>,
+  findings: Vector<10, AuditFinding>,
+  metrics: Vector<10, AuditMetric>,
+  detailed_report_hash: Bytes<32>,   // Hash of full report (off-chain: IPFS, Arweave)
+  proof_hash: Bytes<32>              // ZK proof hash
+}
+
+struct AuditFinding {
+  finding_type: Uint<8>,             // Type of irregularity
+  severity: Uint<8>,                 // 0=info, 1=low, 2=medium, 3=high, 4=critical
+  affected_employees: Uint<16>,
+  quantitative_value: Uint<64>
+}
+
+struct AuditMetric {
+  metric_type: Uint<8>,
+  value: Uint<64>
+}
+```
+
+- [ ] Integrate ZK proof generation with payroll-api (ZKML + ZK-SNARK)
+- [ ] Integrate LLM layer with UI (report generation, natural language queries)
+- [ ] Test end-to-end flows:
+  - **Credit score (ZKML)**:
+    - Employee: Download txids → Run XGBoost (EZKL) → Generate proof → Call `submit_credit_proof()`
+    - Third party: Call `verify_credit_proof()` → Get YES/NO
+    - LLM: Generate report "Employee's credit score qualifies for $2k advance"
+  - **Employment (ZKML)**:
+    - Employee: Generate employment proof (EZKL) → Call `submit_employment_proof()`
+    - Verifier: Call `verify_employment_proof()` → Get YES/NO
+    - LLM: Generate letter "Verified: Alice works at ABC Corp"
+  - **Fraud audit (ZKML)**:
+    - Auditor: Download salaries → Run Isolation Forest (EZKL) → Generate proof → Call `submit_audit_result()`
+    - Public: Call `get_audit_result()` → Read structured findings
+    - LLM: Generate report "ABC Corp audit found 3 suspicious payment patterns..."
+  - **Pay equity audit (ZK-SNARK)**:
+    - Auditor: Download salaries → Run arithmetic circuits → Generate proof → Call `submit_audit_result()`
+    - Public: Call `get_audit_result()` → Read structured findings
+    - LLM: Generate report "ABC Corp has 2.3% gender pay gap affecting 150 employees..."
+  - **Natural language queries (LLM)**:
+    - User: "Show me all critical audit findings"
+    - LLM: Query blockchain → Return results in prose
+
+    Example Usage:
+
+  Pay Equity Audit:
+  audit_type: 1
+  findings: [
+    {finding_type: 1 (gender_gap), severity: 3, affected_employees: 150, value: 230 (2.3%)},
+    {finding_type: 2 (role_inequity), severity: 2, affected_employees: 45, value: 1500000 (cents)}
+  ]
+  metrics: [
+    {metric_type: 1 (avg_male_salary), value: 7500000},
+    {metric_type: 2 (avg_female_salary), value: 7325000}
+  ]
+
+  Fraud Detection Audit:
+  audit_type: 3
+  findings: [
+    {finding_type: 10 (duplicate_payments), severity: 4, affected_employees: 3, value: 45000000
+  (cents)},
+    {finding_type: 11 (ghost_employees), severity: 4, affected_employees: 2, value: 30000000}
+  ]
+  metrics: [
+    {metric_type: 20 (total_fraud_amount), value: 75000000}
+  ]
 
 ---
 
@@ -431,6 +686,59 @@ LENDER:
 
 - [ ] Update pay-ui to show credit scoring feature
 - [ ] Build employee credit score checker UI
+- [ ] **Natural Language Interface:**
+  - [ ] Integrate LLM (GPT-4/Claude) for natural language queries
+  - [ ] "Show me my payment history" → LLM queries blockchain → Returns prose
+  - [ ] "Do I qualify for a loan?" → LLM checks credit score → Returns explanation
+  - [ ] "Show audit results for ABC Corp" → LLM reads blockchain → Generates report
+- [ ] **Audit Dashboard:**
+  - [ ] Display structured audit findings (read from blockchain)
+  - [ ] LLM-generated human-readable reports
+  - [ ] Natural language explanations of irregularities
+  - [ ] PDF export with LLM-generated prose
+
+---
+
+## Phase 4: LLM Integration (Human Interface Layer)
+
+**🔒 Important:** This phase is entirely OFF-CHAIN. LLMs do NOT generate ZK proofs, they only make blockchain data human-readable.
+
+### Report Generation Service
+- [ ] Build API service that reads AuditReport from blockchain
+- [ ] Integrate LLM (OpenAI API or Claude API)
+- [ ] Generate human-readable reports from structured findings
+- [ ] Templates:
+  - [ ] PDF audit reports for regulators
+  - [ ] Email summaries for company executives
+  - [ ] Dashboard cards with plain English summaries
+- [ ] Example: Turn `{finding_type: 1, severity: 3, value: 230}` into "Gender pay gap of 2.3% (medium severity)"
+
+### Natural Language Query Interface
+- [ ] Build query API that translates natural language to blockchain queries
+- [ ] User types: "Show me all critical audit findings from last quarter"
+- [ ] LLM translates to: `filter(audit_reports, where: {overall_status: 3, timestamp: > Q3_start})`
+- [ ] Returns results with LLM-generated explanations
+- [ ] Conversational follow-ups: "What was the most common issue?" → LLM analyzes findings
+
+### Anomaly Explanation Engine
+- [ ] When fraud/irregularities detected, LLM generates explanations
+- [ ] Input: Structured finding `{finding_type: 10 (duplicate_payments), affected_employees: [123, 456], value: 45000}`
+- [ ] Output: "Employees #123 and #456 received duplicate payments totaling $450.00 on March 15th and March 16th. This pattern suggests a payroll processing error."
+- [ ] Helps auditors understand what ML models detected
+
+### Regulatory Compliance Checker
+- [ ] LLM validates audit reports against known regulations
+- [ ] Input: AuditReport structure
+- [ ] LLM checks against: EEOC, FLSA, IRS guidelines, state laws
+- [ ] Output: "This audit meets EEOC requirements for pay equity reporting" or "Warning: Missing required FLSA overtime analysis"
+
+**Architecture:**
+```
+Blockchain (structured data) → LLM Service (off-chain) → Human-readable output
+- AuditReport (on-chain)    → GPT-4/Claude            → PDF reports
+- Credit scores (encrypted)  → GPT-4/Claude            → Plain English summaries
+- Payment history (on-chain) → GPT-4/Claude            → Natural language queries
+```
 
 ---
 
@@ -758,10 +1066,78 @@ LENDER:
 
 ---
 
-## Phase 4: Deployment & Demo
+## Phase 5: Deployment & Demo
 
 - [ ] Deploy contracts to Midnight testnet
+- [ ] Deploy LLM service (report generation, natural language queries)
 - [ ] Create demo with 50 employees on testnet
+- [ ] Demo scenarios:
+  - [ ] Credit scoring: Employee gets loan approval via ZK proof
+  - [ ] Fraud detection: Auditor finds duplicate payments via ZKML
+  - [ ] Pay equity: Company proves fairness via ZK-SNARK proof
+  - [ ] Natural language: User asks "Show me audit findings" via LLM
+
+---
+
+## Phase 6: Token Vesting (Future Enhancement - Out of Scope)
+
+**Status:** NOT IN SCOPE for current MVP
+**Documentation:** See `VESTING_DESIGN.md` for complete specification
+**Timeline:** 4-6 weeks after MVP launch (when customers request it)
+
+**Overview:**
+Token vesting extends zkSalaria to include equity/token compensation with time-locked grants. This is separate from payroll - while payroll is "pay-as-you-go" (work → paid), vesting is "grant-upfront" (tokens locked → unlock over time).
+
+**Key Features:**
+- [ ] Vesting schedules with cliff periods (e.g., 12-month cliff, 48-month total)
+- [ ] Linear continuous unlock or monthly chunk unlock
+- [ ] Encrypted grant amounts (amounts stay private, schedules are public)
+- [ ] Employee can withdraw vested tokens anytime
+- [ ] Company can cancel unvested tokens if employee leaves
+- [ ] Vesting timeline visualization in UI
+- [ ] ZKML enhancement: Prove "I have vested tokens worth > $X" without revealing exact amount
+
+**Smart Contracts:**
+- [ ] VestingContract.compact with circuits:
+  - [ ] `grant_vesting(employee_id, total_amount, cliff_months, duration_months)`
+  - [ ] `calculate_vested_amount(employee_id, current_timestamp)` (pure function)
+  - [ ] `withdraw_vested(employee_id, amount)`
+  - [ ] `cancel_vesting(employee_id)` (company only)
+  - [ ] `accelerate_vesting(employee_id, new_schedule)` (for acquisitions)
+- [ ] Add vesting ledger state:
+  - `vesting_schedules: Map<Bytes<32>, VestingGrant>`
+  - `vesting_withdrawn_amounts: Map<Bytes<32>, Uint<64>>`
+  - `vesting_cancelled: Map<Bytes<32>, Bool>`
+
+**API Layer:**
+- [ ] Create vesting-api package (following payroll-api patterns)
+- [ ] VestingAPI class with RxJS reactive state
+- [ ] Methods: grantVesting(), getVestingSchedule(), withdrawVested(), cancelVesting()
+
+**UI Development:**
+- [ ] Add "Vesting" tab to company dashboard (separate from Payroll)
+- [ ] Add "My Vesting" tab to employee dashboard (separate from My Salary)
+- [ ] Grant vesting modal with schedule preview
+- [ ] Vesting timeline visualization (interactive chart showing unlock progress)
+- [ ] Withdraw vested tokens modal with available balance
+
+**Why Defer to Phase 6:**
+- ✅ Focus on payroll first (core value prop)
+- ✅ ZKML integration more valuable than vesting for MVP
+- ✅ Sablier already exists for public vesting (we differentiate with payroll + ZKML)
+- ✅ Build vesting ONLY when customers explicitly request it
+
+**Competitive Positioning:**
+- **Sablier:** Public vesting (all amounts visible)
+- **zkSalaria Phase 6:** Private vesting (encrypted amounts, ZK proofs)
+- **Value Prop:** "The only private compensation platform: salary + equity, all encrypted"
+
+**See:** `docs/technical/VESTING_DESIGN.md` for:
+- Complete UX wireframes (company and employee views)
+- Smart contract implementation details
+- Vesting calculation examples
+- Privacy trade-offs and ZKML enhancements
+- 4-6 week implementation roadmap
 
 ---
 
@@ -784,19 +1160,28 @@ LENDER:
   - `verify_employment_proof()` - Verify ZK proof of employment
   - `verify_audit_proof()` - Verify ZK proof of fair pay analysis
 
-**ZKML Pattern (Phase 2 - when verification circuits are added):**
+**ZKML Pattern (Phase 2 - Two-Circuit Architecture):**
 ```
-1. Authorization (CURRENT - Phase 0-1):
-   Employee/Company grants permission via grant_*_disclosure() circuits
+1. Authorization (Phase 0-1 - CURRENT):
+   Employee calls grant_credit_disclosure() → Store permission on ledger → NOT ZKML
 
-2. OFF-CHAIN (Employee/Auditor device - PHASE 2):
-   Download payment txids → Decrypt amounts → Run ML model (EZKL) → Generate ZK proof
+2. OFF-CHAIN (Employee's device - Phase 2):
+   Employee: Download payment txids → Decrypt amounts → Run EZKL locally → Generate ZK proof
 
-3. ON-CHAIN (Smart contract verification - PHASE 2):
-   Call verify_*_proof() → Verify txids exist → Verify Merkle root → Verify ZK proof → Store approval (YES/NO)
+3. ON-CHAIN SUBMIT (Phase 2 - ZKML CIRCUIT):
+   Employee calls submit_credit_proof() → Verify proof + txids → Store encrypted score on ledger
+   ↑ THIS IS A ZKML CIRCUIT (verifies ZK proof from EZKL)
+
+4. ON-CHAIN VERIFY (Phase 2 - ZKML VERIFICATION CIRCUIT):
+   Third party calls verify_credit_proof(employee_id) → Check authorization → Decrypt score → Return YES/NO
+   ↑ THIS IS A ZKML VERIFICATION CIRCUIT (checks encrypted score)
 ```
 
-**Key Insight:** The grant circuits are just authorization (permission storage). The actual ZKML happens in Phase 2 with verify_*_proof() circuits that check ZK proofs generated off-chain.
+**Key Insight:**
+- **grant circuits** = Authorization (just permission storage, NOT ZKML)
+- **submit circuits** = Employee submits encrypted proof (ZKML - verifies ZK proof)
+- **verify circuits** = Third party checks encrypted score (ZKML VERIFICATION - decrypts if authorized)
+- Follows encrypted balance pattern: `encrypted_credit_scores` + `credit_score_mappings`
 
 ---
 
@@ -810,10 +1195,18 @@ LENDER:
 - ✅ Balance decryption verified (22 comprehensive tests passing)
 - ✅ **ZKML foundation ready**: Authorization + payment history in place, ZKML verification circuits deferred to Phase 2
 
-**🔄 Next Steps - Choose Your Path:**
-1. **API Layer** - Build TypeScript API to integrate contract with UI/ZKML
-2. **ZKML** - Build credit scoring with EZKL (requires payment history, already on ledger)
-3. **UI** - Build React frontend for companies/employees (requires API layer first)
+**🔄 Next Steps - Three-Layer Architecture:**
+1. **ZK Proof Layer (Phase 2)** - Build proof generation:
+   - ZKML (EZKL) for credit scoring, fraud detection
+   - ZK-SNARK for pay equity, tax compliance
+2. **Smart Contract Layer (Phase 2)** - Add verification circuits:
+   - submit_credit_proof(), verify_credit_proof()
+   - submit_audit_result(), get_audit_result()
+3. **LLM Layer (Phase 4)** - Human interface:
+   - Report generation (GPT-4/Claude)
+   - Natural language queries
+   - Anomaly explanations
+4. **UI Layer (Phase 3)** - Build React frontend with LLM integration
 
 **Completed:**
 
@@ -926,13 +1319,21 @@ LENDER:
 - Batch payments blocked by Compact loop constraints (deferred to post-hackathon)
 
 **Timeline:**
-- ✅ Phase 0: Privacy & Architecture Fixes - COMPLETED (encrypted balances, employment verification)
-- ✅ Phase 1: Contract Testing & Validation - COMPLETED (22 multi-party tests, balance decryption)
-- 🔄 Phase 2: API Integration - NOT STARTED (recommended next)
-- ⏸️ Phase 3: ZKML Integration - WAITING
-- ⏸️ Phase 4: UI Development - WAITING
-- On track for 3-week hackathon timeline
-- Current priority: Choose between API layer or ZKML integration
+- ✅ **Phase 0**: Privacy & Architecture Fixes - COMPLETED (encrypted balances, employment verification)
+- ✅ **Phase 1**: Contract Testing & Validation - COMPLETED (22 multi-party tests, balance decryption)
+- ⏸️ **Phase 2**: ZK Proof Integration - NOT STARTED
+  - ZKML (EZKL) for credit scoring, fraud detection
+  - ZK-SNARK for pay equity, tax compliance
+  - Smart contract verification circuits
+- ⏸️ **Phase 3**: UI Development - NOT STARTED
+  - React frontend with natural language interface
+- ⏸️ **Phase 4**: LLM Integration - NOT STARTED
+  - Report generation service (GPT-4/Claude)
+  - Natural language query interface
+  - Anomaly explanation engine
+- ⏸️ **Phase 5**: Deployment & Demo - NOT STARTED
+- **Extended timeline**: Now 5 phases (added LLM layer)
+- **Current priority**: Phase 2 - ZK proof generation (ZKML + ZK-SNARK)
 
 ---
 

@@ -869,6 +869,56 @@ RetentionAnalysis.compact:
 
 ---
 
+## Future Enhancement: Token Vesting
+
+**Status:** Out of scope for hackathon MVP
+**Documentation:** See `VESTING_DESIGN.md` for complete specification
+
+**What is it:**
+Token vesting extends zkSalaria beyond payroll to include **equity/token compensation** with time-locked grants. While payroll is "pay-as-you-go" (work → get paid), vesting is "grant-upfront" (tokens locked → unlock over time).
+
+**Why consider it:**
+- Completes the compensation story (salary + equity = total comp)
+- Competitive differentiation from Sablier (adds ZK privacy to vesting)
+- Natural fit for web3 companies (many pay salary + token grants)
+- Reuses zkSalaria's encrypted balance infrastructure
+
+**Example Use Case:**
+- Company grants employee 100,000 tokens on Jan 1, 2024
+- 1-year cliff (no tokens until Jan 1, 2025)
+- 4-year linear vesting (fully vested Jan 1, 2028)
+- After cliff: 2,083 tokens unlock per month
+- Employee can withdraw vested tokens anytime
+- If employee leaves, company reclaims unvested tokens
+
+**Technical Highlights:**
+- Vesting schedules stored on public ledger (dates are public)
+- Token amounts encrypted (grant amount, vested amount stay private)
+- Smart contract calculates vested amount using `current_timestamp`
+- Employee withdraws via `withdraw_vested()` circuit
+- Company can cancel via `cancel_vesting()` circuit
+
+**Privacy Trade-off:**
+- Schedule dates must be public (contract needs them for calculations)
+- Token amounts stay encrypted (privacy preserved)
+- ZKML enhancement: Employee can prove "I have vested tokens worth > $X" without revealing exact amount
+
+**Implementation Effort:**
+- ~4-6 weeks after MVP launch
+- Reuses existing encrypted balance primitives
+- New circuits: grant_vesting, withdraw_vested, cancel_vesting
+- New UI: Vesting timeline, grant modal, withdrawal interface
+
+**Positioning vs Sablier:**
+- **Sablier:** Public vesting (all amounts visible)
+- **zkSalaria:** Private vesting (encrypted amounts, ZK proofs)
+
+**Recommendation:** Build payroll first, add vesting after product-market fit
+
+**See:** `docs/technical/VESTING_DESIGN.md` for complete specification with UX wireframes, smart contract code, and implementation roadmap.
+
+---
+
 ## Appendix: ZKML Technical Details
 
 ### Why ZKML is Hard (and Why That's Good)
