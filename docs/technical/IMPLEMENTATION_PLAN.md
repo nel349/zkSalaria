@@ -397,30 +397,83 @@ RetentionAnalysis.compact:
 
 ## 3-Week Build Plan
 
-### Week 1: Foundation (Nov 1-7)
+### Week 1: Foundation + UX-Driven Enhancements (Nov 1-7)
 
-**Goal:** Core private payroll infrastructure (Aleo-equivalent features)
+**Goal:** Core private payroll infrastructure + UX-required features (Aleo-equivalent + recurring payments + batch payroll)
 
 **Smart Contracts:**
-- Day 1-2: Set up Midnight development environment
-  - Install Compact compiler
-  - Configure testnet connection
-  - Create project structure
-- Day 3-4: Build PayrollRegistry.compact
-  - Company registration
-  - Employee addition
-  - Treasury management
-  - Basic access control
-- Day 5-6: Build PrivatePayroll.compact
-  - Shielded salary transfers
-  - Batch payment processing
-  - Event emission (no details)
-- Day 7: Testing & deployment to testnet
-  - Unit tests for circuits
-  - Integration tests
-  - Deploy contracts
+- Day 1-2: Core infrastructure completed ✅
+  - payroll.compact with 11 circuits (working)
+  - Encrypted balance system (bank.compact pattern)
+  - Selective disclosure authorizations
+  - Payment history tracking (for ZKML)
+  - API layer with 31 passing tests
 
-**Deliverable:** Working private payroll (send/receive salaries privately)
+- Day 3-4: **Recurring Payments System (Phase 1.5.1)** - HIGH PRIORITY
+  - Add RecurringPayment struct in PayrollCommons.compact
+  - Add ledger state: `recurring_payments: Map<Bytes<32>, RecurringPayment>`
+  - Add frequency constants (WEEKLY, BIWEEKLY, MONTHLY)
+  - Add status constants (ACTIVE, PAUSED, CANCELLED)
+  - Implement 6 circuits:
+    - `create_recurring_payment(employee_id, amount, frequency, start_date, end_date)`
+    - `pause_recurring_payment(recurring_payment_id)`
+    - `resume_recurring_payment(recurring_payment_id)`
+    - `edit_recurring_payment(recurring_payment_id, new_amount)`
+    - `cancel_recurring_payment(recurring_payment_id)`
+    - `process_recurring_payment(recurring_payment_id)`
+  - Update API layer: Add 6 new methods to PayrollAPI
+  - Write 9 integration tests
+  - Reference: `docs/design/PAYROLL_PAGES_WIREFRAMES.md` (Recurring Payments Setup)
+
+- Day 5: **Payment Status Tracking (Phase 1.5.3)** - MEDIUM PRIORITY
+  - Update PaymentRecord struct with new fields:
+    - `encrypted_memo: Bytes<128>`
+    - `status: Uint<8>` (pending/completed/failed/cancelled)
+    - `payment_id: Bytes<32>`
+  - Add payment status constants in PayrollCommons
+  - Add ledger state: `pending_payments: Map<Bytes<32>, PaymentRecord>`
+  - Update `pay_employee` circuit to set status
+  - Implement `cancel_pending_payment(payment_id)` circuit
+  - Update API layer: Return payment_id, add cancelPendingPayment()
+  - Write 5 integration tests
+  - Reference: `docs/design/PAYROLL_LIST_VIEW_WIREFRAME.md` (Status column)
+
+- Day 6: **Batch Payroll Processing (Phase 1.5.2)** - MEDIUM PRIORITY
+  - Research Compact loop constraints and maximum vector sizes
+  - Choose implementation approach:
+    - Option A: Fixed-size vector circuit (e.g., max 50 employees)
+    - Option B: API layer batching (multiple pay_employee calls)
+  - If Option A: Implement `batch_pay_employees(employee_ids, amounts, batch_size)` circuit
+  - If Option B: Implement `batchPayEmployees()` method in API with progress tracking
+  - Handle partial failures (continue on error)
+  - Write 5 integration tests
+  - Reference: `docs/design/PAYROLL_PAGES_WIREFRAMES.md` (Batch Payroll)
+
+- Day 7: **Payment Memos + Company Metadata (Phase 1.5.4 + 1.5.5)** - LOW PRIORITY
+  - Update `pay_employee` circuit to accept `memo: Bytes<128>` parameter
+  - Encrypt memo with employee's key
+  - Implement `update_company_name(new_name: Bytes<64>)` circuit
+  - Update API layer: Add memo parameter, add updateCompanyName()
+  - Write 4 integration tests
+  - Testing & deployment to testnet:
+    - Run full test suite (expect 50+ tests)
+    - Fix any integration issues
+    - Deploy updated contract to testnet
+  - Reference: `docs/design/PAYROLL_PAGES_WIREFRAMES.md` (Payment memo), `docs/design/SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Company settings)
+
+**Compilation Target:** 20+ circuits (currently 11 + 9 new)
+
+**Test Coverage Goal:** 50+ tests (currently 31 + 19 new)
+
+**Deliverables:**
+- ✅ Working private payroll (send/receive salaries privately)
+- ✅ Recurring payments (create, pause, resume, edit, cancel, process)
+- ✅ Batch payroll processing (50 employees at once)
+- ✅ Payment status tracking (pending/completed/failed/cancelled)
+- ✅ Payment memos (encrypted)
+- ✅ Company metadata updates
+- ✅ All circuits compiling and tested
+- ✅ Ready for UI integration (Week 3)
 
 ---
 
@@ -464,44 +517,411 @@ RetentionAnalysis.compact:
 
 **Goal:** Production-quality demo + pitch preparation
 
-**Frontend Development:**
-- Day 15-16: Company Admin Dashboard
-  - Employee management UI
-  - Payroll processing interface
-  - Fair pay analysis dashboard
-  - Treasury management
+**Design References:**
+- `docs/design/1_ONBOARDING_WIREFRAME.md` - Landing page
+- `docs/design/2_APP_DASHBOARD_WIREFRAME.md` - Company & Employee dashboards
+- `docs/design/3_PAYROLL_LIST_VIEW_WIREFRAME.md` - Payment history table
+- `docs/design/PAYROLL_PAGES_WIREFRAMES.md` - Add employee, pay employee, recurring payments, batch payroll
+- `docs/design/PAYMENT_DETAIL_PAGE_WIREFRAME.md` - Individual payment details
+- `docs/design/AUTHENTICATION_ONBOARDING_WIREFRAMES.md` - Wallet connection, onboarding
+- `docs/design/SETTINGS_NOTIFICATIONS_WIREFRAMES.md` - Settings, funding, notifications
+- `docs/design/MISC_UX_COMPONENTS.md` - Help center, loading states, accessibility, error pages
 
-- Day 17: Employee Portal
-  - Payment history view
-  - Credit score checker
-  - Proof generator UI
-  - Midnight wallet integration
+---
 
-- Day 18: Verifier Portal
-  - Landlord/lender interface
-  - Proof verification
-  - Clean results display
+**Day 15: Foundation & Authentication (AUTHENTICATION_ONBOARDING_WIREFRAMES.md)**
 
-**Demo Preparation:**
-- Day 19: Create Demo Data
-  - Mock company with 50 employees
-  - Run actual payroll on testnet
-  - Generate real ZK proofs
-  - Test full user flows
+**Landing Page (ONBOARDING_WIREFRAME.md):**
+- Hero section with animated encrypted balance particles background
+- Main headline: "Private Payroll, Verified On-Chain"
+- Primary CTA: "Open App" (orange), Secondary: "View Documentation" (cyan)
+- Social proof stats: "552,800+ Private Payments", "297,500+ Verified Employees"
+- 4-column Use Cases grid (DAOs, Web3 Companies, Privacy-First Teams, Traditional Companies)
+- Expandable Features accordion (Encrypted Payroll, ZK Proofs, ZKML Credit Scoring, Fair Pay Analysis, Fraud Detection)
+- Developer Integration section with code snippets
+- 4-column footer (Product, Developers, Company, Legal)
 
-- Day 20: Polish & Practice
-  - UI/UX improvements
-  - Fix bugs
-  - Practice pitch (2 minutes)
-  - Record backup video demo
+**Authentication Flow:**
+- Wallet Connection modal with Midnight Wallet install detection
+- "Wallet Not Installed" modal with install link and instructions
+- Network validation (Midnight Mainnet check)
+- "Wrong Network" modal with auto-switch option
+- Connection rejection handling with retry/cancel options
+- Role detection via smart contract (company, employee, dual role, new user)
+- Dual role selection modal ("Continue as Company" / "Continue as Employee")
 
-- Day 21: Final Prep
-  - Deploy to production testnet
-  - Create pitch deck
-  - Prepare for live demo
-  - Test on-site (if possible)
+**Onboarding Flows:**
+- Company onboarding: Company name, wallet address auto-fill, success confirmation
+- Employee onboarding: Email input (optional), explanation of privacy features, success confirmation
+- Session management: auto-reconnect on page load, timeout warnings (15 min idle), concurrent session detection
 
-**Deliverable:** Competition-ready demo + pitch
+**Components to Build:**
+- `components/landing/`: Hero, UseCases, Features, DeveloperSection, Footer
+- `components/auth/`: WalletConnect, NetworkCheck, RoleDetection, OnboardingWizard
+- `hooks/useAuth.ts`: Wallet connection, role detection, session management
+
+---
+
+**Day 16: App Dashboard & Navigation (APP_DASHBOARD_WIREFRAME.md)**
+
+**Top Navigation:**
+- Logo + App title
+- Tab navigation: Dashboard, Payroll, History, Settings
+- Account dropdown: View Profile, Switch Role (if dual), Disconnect Wallet
+- Notification bell with unread count badge
+
+**Alert Banners:**
+- Warning banner: "Low balance warning: You have 3.5 months of runway" (dismissible)
+- Info banner: Wallet address display with copy button
+- Success banner: Transaction confirmations (auto-dismiss after 5s)
+
+**Company Dashboard View:**
+- Quick Stats grid (4 columns): Total Payroll This Month, Active Employees, Pending Payments, Total Payments Made
+- Feature Cards (2x2 grid):
+  - Pay Employee (3D illustration, "Send encrypted payroll payments")
+  - Recurring Payments (3D illustration, "Set up automated monthly salaries")
+  - Add Employee (3D illustration, "Onboard new team members privately")
+  - Fair Pay Analysis (3D illustration, "Run ZK-powered equity audit")
+- Featured Companies carousel (privacy-preserving company list)
+- Quick Actions floating panel (bottom-right): Pay Employee +, Add Employee +
+
+**Employee Dashboard View:**
+- Quick Stats grid (4 columns): Current Balance, This Month Received, Pending Payments, Total Payments Received
+- Feature Cards:
+  - Withdraw Funds (withdraw to external wallet)
+  - Payment History (view all payments)
+  - Generate Proof (create ZK proofs for third parties)
+  - Settings (account management)
+- Recent Payments table (last 5 payments with decrypt buttons)
+
+**Empty States:**
+- No employees yet: "Add your first employee to get started" with CTA
+- No payments yet: "No payment history yet" with helpful tips
+
+**Components to Build:**
+- `components/layout/`: AppNavigation, AlertBanner, QuickActions
+- `components/dashboard/`: FeatureCard, StatsGrid, FeaturedCompanies, EmptyState
+- `components/shared/`: NotificationBell, AccountDropdown
+
+---
+
+**Day 17: Payroll Operations (PAYROLL_PAGES_WIREFRAMES.md)**
+
+**Add Employee Page:**
+- Form: Employee wallet address, monthly salary, role/title, start date, notes (optional)
+- Validation: address format check, duplicate detection, minimum salary check
+- Success flow: Confirmation modal → redirect to employee list
+- Blockchain transaction with loading state and gas fee display
+
+**Pay Employee (One-Time Payment):**
+- Employee selection dropdown with search
+- Amount input with token selector (USDC/DUST)
+- Payment memo (optional, encrypted)
+- Balance check and insufficient funds warning
+- Confirmation modal with transaction summary
+- Success state with transaction hash and "View on Explorer" link
+
+**Recurring Payments Setup:**
+- Form: Employee, amount, frequency (weekly/bi-weekly/monthly), start date, end date (optional)
+- Auto-debit approval explanation
+- Transaction authorization with wallet signature
+- Success state showing next payment date
+
+**Batch Payroll:**
+- CSV upload interface with template download
+- Preview table showing all payments to be processed
+- Total amount calculation and balance check
+- Bulk approval with single signature
+- Progress indicator during batch processing (1/50, 2/50...)
+- Success summary: "50 payments sent successfully"
+
+**Recurring Management:**
+- List of all active recurring payments
+- Actions: Pause, Resume, Edit Amount, Cancel
+- Edit modal: Update amount, change frequency
+- Pause confirmation: "Subscription paused until you resume"
+- Cancel confirmation with warning: "This cannot be undone"
+
+**Components to Build:**
+- `components/payroll/`: AddEmployeeForm, PaymentForm, RecurringSetup, BatchUpload, RecurringManager
+- `components/shared/`: ConfirmationModal, TransactionStatus, SuccessAnimation
+
+---
+
+**Day 18: Payment History & Details (PAYROLL_LIST_VIEW_WIREFRAME.md, PAYMENT_DETAIL_PAGE_WIREFRAME.md)**
+
+**Payroll List View (Company):**
+- Tab navigation: All, Received, Sent, Search
+- Primary CTA: "Pay Employee +"
+- Table columns: Status (icon), Employee/Company, Amount, Date, Type, Actions
+- Row hover state with payment metadata
+- Actions dropdown per row: View Details, Generate Proof, Download Receipt, Cancel (if pending)
+- Pagination: 20 per page with page selector
+- Empty states with actionable cards
+
+**Payroll List View (Employee):**
+- Privacy banner: "Amounts encrypted. Click 🔓 to decrypt locally"
+- Table with encrypted amounts shown as "••••••"
+- 🔓 icon on each row for individual decryption
+- "Decrypt All Amounts" button at top
+- Decryption interaction: click 🔓 → loading animation → show amount → icon changes to 🔒
+- All other features same as company view
+
+**Search Modal:**
+- Filter options: Employee (dropdown), Date Range (calendar), Amount Range (min/max), Payment Type (one-time/recurring), Status (pending/completed/failed), Network (testnet/mainnet)
+- Clear All button
+- Show Results button with count preview
+- Applied filters shown as removable chips
+
+**Payment Detail Page:**
+- Visual center: Large payment card with amount, status, date
+- Attributes panel: From/To, Payment Type, Network, Transaction Hash (with copy), Block Number
+- Balance Status panel: Previous balance, amount, new balance (company view)
+- Transaction Details: Gas fee, confirmation time, memo (if present)
+- Action buttons: Withdraw (employee), Generate Proof, Download Receipt, Cancel (if pending)
+
+**Withdraw Modal:**
+- Current balance display
+- Amount to withdraw input (with "Max" button)
+- Destination address (pre-filled with connected wallet)
+- Gas fee estimate
+- Confirmation with transaction hash
+
+**Generate Proof Modal:**
+- Proof type selector: Income Proof, Employment Proof, Credit Score Proof
+- Date range selector
+- "What can verifier see?" explanation
+- Generate button with loading state
+- Success: QR code + copyable proof string + expiration notice
+
+**Download Receipt Modal:**
+- Receipt preview (PDF format)
+- Format selector: PDF, CSV
+- Download button
+- Email option (optional enhancement)
+
+**Components to Build:**
+- `components/payroll/`: PayrollList, PayrollRow, PayrollSearchModal, DecryptButton, PrivacyBanner
+- `components/payment/`: PaymentDetail, WithdrawModal, GenerateProofModal, ReceiptModal
+- `utils/encryption.ts`: Local decryption utilities
+
+---
+
+**Day 19: Settings & Notifications (SETTINGS_NOTIFICATIONS_WIREFRAMES.md)**
+
+**Settings Layout:**
+- Left sidebar navigation: Account, Wallet, Notifications, Privacy, Help & Support
+- Content area with section-specific forms
+- Auto-save indicators
+- Unsaved changes warning on navigation
+
+**Company Settings:**
+- Account tab: Company name, email, logo upload, timezone
+- Wallet Management:
+  - Payroll account balance display (large)
+  - Next payment estimate (date + amount)
+  - Balance after next payment calculation
+  - Low balance warning (configurable threshold)
+  - "Fund Account" CTA button
+  - Transaction history link
+- Notifications: Email preferences, low balance alerts, payment confirmations
+- Privacy: Data export, account deletion
+
+**Fund Account Flow (Modal):**
+- Current balance display
+- Upcoming payments summary (next 30 days total)
+- Balance after payments (calculated)
+- Runway estimate (months)
+- Amount to deposit input
+- Token selector (USDC dropdown)
+- Deposit from: Connected wallet / External transfer
+- Available balance check (if connected wallet)
+- Summary panel: Deposit amount, gas fee, new balance, new runway
+- Confirm Deposit button
+- Transaction status with progress indicator
+
+**Employee Settings:**
+- Account tab: Display name, email, profile picture
+- Connected Wallet: Address display with copy button, disconnect option
+- Backup & Recovery: Seed phrase warning, backup reminder
+- Notifications: Payment alerts, proof request alerts, system updates
+- Privacy: View data, export data, delete account
+
+**Notification System:**
+- Bell dropdown (top nav):
+  - Header: "Notifications" with unread count
+  - Notification list (max 5 recent)
+  - Each item: Icon, title, time, mark as read
+  - "View All" link to full notification center
+  - "Mark All as Read" action
+- Toast notifications (bottom-right):
+  - Success: Green with checkmark icon, 5s auto-dismiss
+  - Error: Red with X icon, persistent until dismissed
+  - Info: Blue with i icon, 5s auto-dismiss
+  - Warning: Orange with ! icon, 7s auto-dismiss
+  - Action button optional (e.g., "View", "Undo")
+
+**Components to Build:**
+- `components/settings/`: SettingsLayout, AccountSettings, WalletSettings, NotificationSettings, PrivacySettings
+- `components/modals/`: FundAccountModal
+- `components/notifications/`: NotificationBell, NotificationDropdown, Toast
+- `services/NotificationService.ts`: Centralized notification management
+
+---
+
+**Day 20: Help, Accessibility & Polish (MISC_UX_COMPONENTS.md)**
+
+**Help Center:**
+- Help icon in top nav (? icon)
+- Help modal with:
+  - Search bar ("Search for help...")
+  - Category tabs: Getting Started, Payments, Proofs, Troubleshooting
+  - FAQ accordion (10-15 common questions)
+  - Contact Support button (email/Discord)
+  - Video tutorial links (YouTube/Loom)
+
+**Contextual Help:**
+- Tooltips on all complex UI elements (i icon with hover)
+- Inline hints for form fields (light gray text below inputs)
+- "Learn more" links throughout UI
+
+**Tutorial System:**
+- First-time user product tour (Shepherd.js or similar):
+  - Step 1: "This is your dashboard"
+  - Step 2: "Pay employees here"
+  - Step 3: "View payment history here"
+  - Step 4: "Generate ZK proofs here"
+  - Skip button + progress dots
+- Inline hints that appear on first visit to each page
+- "Show Tutorial Again" option in settings
+
+**Loading States:**
+- Skeleton screens for all major views (dashboard, payment list, payment detail)
+- Shimmer animation on skeleton elements
+- Progress indicators for long operations:
+  - Circular spinner for <5s operations
+  - Progress bar for batch operations (with percentage)
+  - Step indicator for multi-step flows (1/4, 2/4...)
+- Optimistic UI: Show action immediately, confirm asynchronously
+
+**Accessibility (WCAG 2.1 AA Compliance):**
+- Keyboard Navigation:
+  - Tab/Shift+Tab through all interactive elements
+  - Enter/Space activates buttons
+  - Escape closes modals/dropdowns
+  - Arrow keys navigate dropdowns/lists
+  - Focus indicators: 2px solid cyan with 4px offset
+  - "Skip to main content" link at top
+- Screen Reader Support:
+  - Semantic HTML (header, nav, main, section, footer)
+  - ARIA labels on all icon buttons
+  - ARIA live regions for toast notifications (aria-live="polite")
+  - ARIA live regions for errors (aria-live="assertive")
+  - Focus management (trap focus in modals)
+- Color Contrast:
+  - All text meets WCAG AA (4.5:1 minimum)
+  - Interactive elements meet AAA (7:1)
+  - Status indicators use icons + text (not color alone)
+- Alt text on all images and 3D illustrations
+
+**Error Pages:**
+- 404 Not Found: Friendly illustration + "Go Home" button
+- 500 Server Error: Apology + "Try Again" button
+- Network Error: Offline detection + "Retry Connection" button
+- Maintenance Mode: Scheduled maintenance notice + countdown
+
+**Browser Compatibility:**
+- Unsupported browser detection (IE, old Chrome/Firefox)
+- Unsupported browser modal with browser download links
+- Mobile browser detection: "Best viewed on desktop" notice (for complex features)
+
+**Mobile Responsive Design:**
+- Breakpoints: Desktop (>1024px), Tablet (768-1024px), Mobile (<768px)
+- Mobile navigation: Hamburger menu instead of tabs
+- Mobile tables: Card layout instead of table (stack columns vertically)
+- Mobile modals: Full-screen instead of centered
+- Touch-friendly targets: Minimum 44x44px hit areas
+- Mobile quick actions: Bottom sheet instead of floating panel
+
+**UI Polish:**
+- Micro-interactions: Button hover states, ripple effects, smooth transitions
+- Empty state illustrations (custom or from unDraw)
+- 3D illustrations for feature cards (Spline or similar)
+- Consistent spacing (8px grid system)
+- Typography hierarchy (3 font sizes max)
+- Color palette consistency (primary, secondary, success, error, warning, info)
+- Dark mode support (optional - if time permits)
+
+**Component Architecture:**
+- `components/help/`: HelpCenter, FAQAccordion, VideoTutorial, ContextualHelp
+- `components/tutorial/`: ProductTour, InlineHint
+- `components/loading/`: SkeletonScreen, Spinner, ProgressBar, StepIndicator
+- `components/errors/`: ErrorPage404, ErrorPage500, NetworkError, MaintenanceMode
+- `components/a11y/`: SkipLink, FocusTrap, ScreenReaderOnly
+- `hooks/useKeyboardNav.ts`: Keyboard navigation utilities
+- `utils/a11y.ts`: Accessibility helper functions
+
+---
+
+**Day 21: Demo Preparation & Final Testing**
+
+**Create Demo Data:**
+- Mock company: "Midnight DAO" with realistic logo
+- 50 mock employees with diverse names and addresses
+- Historical payments: 6 months of payment history (300+ transactions)
+- Run actual payroll on Midnight testnet
+- Generate real ZK proofs (credit scoring, fair pay analysis)
+- Test full user flows:
+  - Company: Add employee → pay employee → run fair pay analysis → generate proof
+  - Employee: View payment → decrypt amount → generate income proof → withdraw funds
+  - Verifier: Receive proof → verify proof → view results
+
+**Testing Checklist:**
+- Functional testing: All features work end-to-end
+- Cross-browser testing: Chrome, Firefox, Safari, Edge
+- Mobile testing: iOS Safari, Android Chrome (basic responsiveness check)
+- Accessibility testing: Keyboard navigation, screen reader (NVDA/VoiceOver)
+- Performance testing: Page load times, proof generation times
+- Security testing: XSS prevention, SQL injection checks (if applicable), CSRF protection
+- Error handling: Test all error states (network failure, insufficient funds, etc.)
+- Edge cases: Empty states, very long names, large numbers, special characters
+
+**Polish & Practice:**
+- UI/UX final pass: Consistent spacing, alignment, typography
+- Copy editing: Fix typos, improve button labels, clarify instructions
+- Fix critical bugs only (defer minor issues)
+- Practice pitch (2 minutes):
+  - Opening (15s): Problem statement
+  - Demo Part 1 (30s): Show public payroll problem (Etherscan)
+  - Demo Part 2 (30s): Show zkSalaria private payroll
+  - Demo Part 3 (45s): Show ZKML features (credit scoring + fair pay)
+  - Close (15s): Differentiation vs Aleo, call to action
+- Record backup video demo (in case live demo fails)
+
+**Final Deployment:**
+- Deploy frontend to Vercel/Netlify (production build)
+- Deploy smart contracts to Midnight testnet (if not already deployed)
+- Configure custom domain (optional)
+- Set up analytics (privacy-preserving - Plausible or similar)
+- Create pitch deck (10 slides max):
+  - Slide 1: Title + tagline
+  - Slide 2: Problem (public salaries)
+  - Slide 3: Market validation (Aleo's $4M)
+  - Slide 4: Solution overview
+  - Slide 5: ZKML features
+  - Slide 6: Technical architecture
+  - Slide 7: Competitive positioning
+  - Slide 8: Business model
+  - Slide 9: Traction/roadmap
+  - Slide 10: Team + contact
+
+**Pre-Demo Checklist:**
+- Test on-site network (if possible)
+- Backup: Pre-loaded demo data, pre-recorded video, static screenshots
+- Prepare for questions: Technical depth, scalability, business model, regulatory
+- Charge laptop, bring chargers, test HDMI/display connection
+
+**Deliverable:** Competition-ready demo + pitch + backup materials
 
 ---
 

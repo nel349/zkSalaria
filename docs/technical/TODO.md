@@ -448,6 +448,354 @@ export ledger audit_reports: Map<Bytes<32>, AuditReport>;             // company
 
 ---
 
+## Phase 1.5: UX-Driven Contract Enhancements
+
+**Context:** Based on comprehensive UX wireframes (`docs/design/*.md`), the smart contract needs additional features to support the production-ready UI.
+
+**References:**
+- `docs/design/PAYROLL_PAGES_WIREFRAMES.md` - Recurring payments, batch payroll
+- `docs/design/PAYROLL_LIST_VIEW_WIREFRAME.md` - Payment status tracking
+- `docs/design/PAYMENT_DETAIL_PAGE_WIREFRAME.md` - Cancel pending payments
+- `docs/design/SETTINGS_NOTIFICATIONS_WIREFRAMES.md` - Company metadata
+
+### 1.5.1 Recurring Payments System (HIGH PRIORITY)
+
+**UX Requirement:** From PAYROLL_PAGES_WIREFRAMES.md - "Recurring Payments Setup" and "Recurring Management" pages
+
+**Ledger State to Add:**
+- [ ] Add `RecurringPayment` struct in PayrollCommons.compact:
+  ```compact
+  export struct RecurringPayment {
+    recurring_payment_id: Bytes<32>;       // Unique ID
+    company_id: Bytes<32>;                  // Which company
+    employee_id: Bytes<32>;                 // Which employee
+    encrypted_amount: Bytes<32>;            // Encrypted payment amount
+    frequency: Uint<8>;                     // 0=weekly, 1=bi-weekly, 2=monthly
+    start_date: Uint<32>;                   // When payments start
+    end_date: Uint<32>;                     // When payments end (0=never)
+    next_payment_date: Uint<32>;            // Next scheduled payment
+    status: Uint<8>;                        // 0=active, 1=paused, 2=cancelled
+    created_at: Uint<32>;
+    last_updated: Uint<32>;
+  }
+  ```
+- [ ] Add `export ledger recurring_payments: Map<Bytes<32>, RecurringPayment>;`
+- [ ] Add frequency constants in PayrollCommons:
+  ```compact
+  export pure circuit FREQUENCY_WEEKLY(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit FREQUENCY_BIWEEKLY(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit FREQUENCY_MONTHLY(): Uint<8> { return 2 as Uint<8>; }
+  ```
+- [ ] Add recurring payment status constants:
+  ```compact
+  export pure circuit RECURRING_STATUS_ACTIVE(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit RECURRING_STATUS_PAUSED(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit RECURRING_STATUS_CANCELLED(): Uint<8> { return 2 as Uint<8>; }
+  ```
+
+**Circuits to Implement:**
+- [ ] `create_recurring_payment(employee_id, amount, frequency, start_date, end_date)`:
+  - Verify employee exists
+  - Encrypt payment amount with employee key
+  - Generate unique recurring_payment_id
+  - Calculate first next_payment_date based on frequency
+  - Set status to ACTIVE
+  - Store in recurring_payments map
+- [ ] `pause_recurring_payment(recurring_payment_id)`:
+  - Verify payment exists and is ACTIVE
+  - Update status to PAUSED
+  - Update last_updated timestamp
+- [ ] `resume_recurring_payment(recurring_payment_id)`:
+  - Verify payment exists and is PAUSED
+  - Update status to ACTIVE
+  - Recalculate next_payment_date from current_timestamp
+  - Update last_updated timestamp
+- [ ] `edit_recurring_payment(recurring_payment_id, new_amount)`:
+  - Verify payment exists and is ACTIVE or PAUSED
+  - Encrypt new amount with employee key
+  - Update encrypted_amount
+  - Update last_updated timestamp
+- [ ] `cancel_recurring_payment(recurring_payment_id)`:
+  - Verify payment exists
+  - Update status to CANCELLED
+  - Update last_updated timestamp
+  - Note: Cannot be resumed after cancellation
+- [ ] `process_recurring_payment(recurring_payment_id)`:
+  - Verify payment exists and is ACTIVE
+  - Check if current_timestamp >= next_payment_date
+  - If yes:
+    - Decrypt amount
+    - Execute payment (call internal pay_employee logic)
+    - Calculate next_payment_date based on frequency:
+      - Weekly: +7 days
+      - Bi-weekly: +14 days
+      - Monthly: +30 days (simplified)
+    - Update next_payment_date
+    - If end_date > 0 and next_payment_date > end_date:
+      - Set status to CANCELLED
+  - If no: revert with "Payment not due yet"
+
+**API Layer Updates:**
+- [ ] Add `createRecurringPayment()` method to PayrollAPI
+- [ ] Add `pauseRecurringPayment()` method
+- [ ] Add `resumeRecurringPayment()` method
+- [ ] Add `editRecurringPayment()` method
+- [ ] Add `cancelRecurringPayment()` method
+- [ ] Add `processRecurringPayment()` method
+- [ ] Add `getRecurringPayments(companyId)` query
+- [ ] Add recurring payment state to PayrollDerivedState
+
+**Tests:**
+- [ ] Test: Create weekly recurring payment
+- [ ] Test: Process recurring payment when due
+- [ ] Test: Process recurring payment before due (should fail)
+- [ ] Test: Pause and resume recurring payment
+- [ ] Test: Edit recurring payment amount
+- [ ] Test: Cancel recurring payment (cannot resume)
+- [ ] Test: Recurring payment auto-cancels after end_date
+- [ ] Test: Monthly recurring payment calculation
+- [ ] Test: Multiple recurring payments for different employees
+
+### 1.5.2 Batch Payroll Processing (MEDIUM PRIORITY)
+
+**UX Requirement:** From PAYROLL_PAGES_WIREFRAMES.md - "Batch Payroll" page for processing 50+ employees at once
+
+**Challenge:** Compact may have loop constraints - need to research maximum batch size
+
+**Approach Options:**
+1. **Option A: Fixed-size vector** (e.g., max 50 employees per batch)
+2. **Option B: Multiple transactions** (API layer batches into multiple calls)
+3. **Option C: Research Compact's loop capabilities** (may support dynamic vectors)
+
+**Implementation:**
+- [ ] Research Compact loop constraints and maximum vector sizes
+- [ ] Decide on approach based on findings
+- [ ] If Option A (fixed vector):
+  ```compact
+  export circuit batch_pay_employees(
+    employee_ids: Vector<50, Bytes<32>>,
+    amounts: Vector<50, Uint<64>>,
+    batch_size: Uint<8>  // Actual number of employees (1-50)
+  ): [] {
+    // Loop through batch_size employees
+    // For each: execute pay_employee logic inline
+    // Track success/failure per employee
+  }
+  ```
+- [ ] If Option B (API layer batching):
+  - Keep existing `pay_employee` circuit
+  - Add `batchPayEmployees()` method in PayrollAPI that calls `pay_employee` N times
+  - Add progress tracking in API layer
+- [ ] Implement chosen approach
+- [ ] Add batch payment counter to ledger (optional): `total_batch_payments: Counter`
+
+**API Layer Updates:**
+- [ ] Add `batchPayEmployees(payments: Array<{employeeId, amount}>)` method
+- [ ] Add progress callback/observable for UI progress bar
+- [ ] Handle partial failures (continue on error, report which failed)
+
+**Tests:**
+- [ ] Test: Batch pay 10 employees successfully
+- [ ] Test: Batch pay 50 employees (max batch size)
+- [ ] Test: Batch pay with insufficient funds (partial failure)
+- [ ] Test: Batch pay with invalid employee (skip and continue)
+- [ ] Test: Progress tracking during batch operation
+
+### 1.5.3 Payment Status Tracking (MEDIUM PRIORITY)
+
+**UX Requirement:** From PAYROLL_LIST_VIEW_WIREFRAME.md - Payment table shows Status column with icons (pending/completed/failed/cancelled)
+
+**Current Issue:** All payments are instant - no status tracking
+
+**Design Decision:**
+- Most payments will be instant (completed immediately)
+- Status tracking needed for: recurring payments, batch payments, failed transactions
+- Add status field to PaymentRecord
+
+**Changes to PayrollCommons.compact:**
+- [ ] Update `PaymentRecord` struct:
+  ```compact
+  export struct PaymentRecord {
+    timestamp: Uint<32>;
+    encrypted_amount: Bytes<32>;
+    company_id: Bytes<32>;
+    payment_type: Uint<8>;           // Existing
+    encrypted_memo: Bytes<128>;      // NEW (see 1.5.4)
+    status: Uint<8>;                 // NEW: 0=pending, 1=completed, 2=failed, 3=cancelled
+    payment_id: Bytes<32>;           // NEW: Unique payment ID for cancellation
+  }
+  ```
+- [ ] Add payment status constants:
+  ```compact
+  export pure circuit PAYMENT_STATUS_PENDING(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit PAYMENT_STATUS_COMPLETED(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit PAYMENT_STATUS_FAILED(): Uint<8> { return 2 as Uint<8>; }
+  export pure circuit PAYMENT_STATUS_CANCELLED(): Uint<8> { return 3 as Uint<8>; }
+  ```
+- [ ] Add helper to create payment record with all fields:
+  ```compact
+  export pure circuit create_full_payment_record(
+    timestamp: Uint<32>,
+    encrypted_amount: Bytes<32>,
+    company_id: Bytes<32>,
+    payment_type: Uint<8>,
+    encrypted_memo: Bytes<128>,
+    status: Uint<8>,
+    payment_id: Bytes<32>
+  ): PaymentRecord
+  ```
+
+**Ledger State to Add:**
+- [ ] Add `export ledger pending_payments: Map<Bytes<32>, PaymentRecord>;`
+  - Stores payments that are pending (for cancellation)
+  - Key: payment_id
+  - Value: Full payment record
+
+**Circuit Updates:**
+- [ ] Update `pay_employee` circuit:
+  - For instant payments: Set status = COMPLETED immediately
+  - Generate unique payment_id
+  - Add payment to history with COMPLETED status
+- [ ] Update `process_recurring_payment` circuit:
+  - Create payment with PENDING status first
+  - Add to pending_payments map
+  - Execute transfer
+  - Update status to COMPLETED
+  - Update in pending_payments map (or remove)
+- [ ] Add `cancel_pending_payment(payment_id)`:
+  - Verify payment exists in pending_payments
+  - Verify status is PENDING
+  - Update status to CANCELLED
+  - If funds were deducted, refund them
+  - Update payment history
+
+**API Layer Updates:**
+- [ ] Update `payEmployee()` to return payment_id
+- [ ] Add `cancelPendingPayment(paymentId)` method
+- [ ] Update payment history queries to include status
+
+**Tests:**
+- [ ] Test: Instant payment has COMPLETED status
+- [ ] Test: Recurring payment starts as PENDING
+- [ ] Test: Cancel pending payment successfully
+- [ ] Test: Cannot cancel completed payment
+- [ ] Test: Cannot cancel already cancelled payment
+
+### 1.5.4 Payment Memos (LOW PRIORITY)
+
+**UX Requirement:** From PAYROLL_PAGES_WIREFRAMES.md - "Payment memo (optional, encrypted)" in Pay Employee form
+
+**Implementation:**
+- [ ] Already included in PaymentRecord update (1.5.3)
+- [ ] Update `pay_employee` circuit to accept optional memo:
+  ```compact
+  export circuit pay_employee(
+    employee_id: Bytes<32>,
+    salary_amount: Uint<64>,
+    memo: Bytes<128>  // NEW: Optional encrypted memo (empty if none)
+  ): []
+  ```
+- [ ] Encrypt memo with employee's key (same pattern as amount)
+- [ ] Add encrypted memo to PaymentRecord
+- [ ] Employee can decrypt locally in UI
+
+**API Layer Updates:**
+- [ ] Add `memo?: string` parameter to `payEmployee()`
+- [ ] Encrypt memo before submitting to circuit
+- [ ] Add memo decryption in payment history queries
+
+**Tests:**
+- [ ] Test: Pay employee with memo
+- [ ] Test: Pay employee without memo (empty bytes)
+- [ ] Test: Employee can decrypt memo
+- [ ] Test: Memo is not readable by company
+
+### 1.5.5 Company Metadata Updates (LOW PRIORITY)
+
+**UX Requirement:** From SETTINGS_NOTIFICATIONS_WIREFRAMES.md - Company Settings page allows updating company name
+
+**Current State:** Company name set in constructor, cannot be updated
+
+**Implementation:**
+- [ ] Add circuit `update_company_name(new_name: Bytes<64>)`:
+  - Verify caller is the company (via API layer authentication)
+  - Update company_name on ledger
+  - Update last_updated timestamp
+- [ ] Other metadata (email, logo, timezone) should be stored OFF-CHAIN (database/IPFS)
+  - Not sensitive data requiring blockchain storage
+  - Can be stored in traditional database linked to company_id
+  - Saves gas/storage costs
+
+**API Layer Updates:**
+- [ ] Add `updateCompanyName(newName)` method
+- [ ] Document that email/logo/timezone are off-chain
+
+**Tests:**
+- [ ] Test: Company can update name
+- [ ] Test: Updated name persists on ledger
+
+### 1.5.6 Query Optimization (MEDIUM PRIORITY)
+
+**UX Requirement:** UI needs to query employee balances, company balance, recurring payments efficiently
+
+**Current State:** All queries done via API layer reading ledger state (acceptable)
+
+**Potential Optimizations:**
+- [ ] Review API layer query patterns
+- [ ] Add caching layer if needed (rxjs operators)
+- [ ] Add pagination for employee lists (if >50 employees)
+- [ ] Add filtering/sorting in API layer (client-side for now)
+
+**No contract changes needed** - this is API layer work
+
+### Implementation Timeline
+
+**Week 1 (Days 3-7):**
+- [ ] Day 3-4: Implement recurring payments system (1.5.1)
+  - Add structs, ledger state, constants
+  - Implement 6 circuits
+  - Update API layer
+  - Write tests
+- [ ] Day 5: Implement payment status tracking (1.5.3)
+  - Update PaymentRecord struct
+  - Add pending_payments map
+  - Implement cancel circuit
+  - Update API layer
+- [ ] Day 6: Implement batch payroll (1.5.2)
+  - Research Compact constraints
+  - Choose approach
+  - Implement circuit or API batching
+  - Write tests
+- [ ] Day 7: Implement payment memos (1.5.4) and company metadata (1.5.5)
+  - Update pay_employee circuit
+  - Add update_company_name circuit
+  - Update API layer
+  - Write tests
+
+**Compilation Target:** 20+ circuits total (currently 11 + 9 new)
+
+**Test Coverage Goal:** 50+ total tests (currently 31 + 19 new)
+
+### Success Criteria
+
+- [ ] Recurring payments work end-to-end (create → process → pause → resume → cancel)
+- [ ] Batch payroll processes 50 employees in single operation
+- [ ] Payment status tracking shows pending/completed/failed/cancelled
+- [ ] Payment memos encrypted and decryptable by employee
+- [ ] Company can update their name
+- [ ] All circuits compile successfully
+- [ ] All tests passing
+- [ ] API layer supports all new features
+- [ ] UI can consume all new API methods
+
+**Notes:**
+- ✅ These features are required for production-ready UX
+- ⚠️ Prioritize recurring payments (most complex, highest UX value)
+- ⚠️ Batch payroll may have Compact limitations (research first)
+- ✅ Payment memos and metadata are nice-to-have (can defer if tight on time)
+
+---
+
 ## Phase 2: ZKML Integration
 
 **🚨 IMPORTANT:** This phase adds ZK proof circuits (ZKML + ZK-SNARK) and LLM layer. Phase 0-1 only has authorization circuits (grant/revoke).
@@ -684,18 +1032,438 @@ struct AuditMetric {
 
 ## Phase 3: UI Development
 
-- [ ] Update pay-ui to show credit scoring feature
-- [ ] Build employee credit score checker UI
-- [ ] **Natural Language Interface:**
+**References:**
+- `docs/design/1_ONBOARDING_WIREFRAME.md` - Landing page
+- `docs/design/2_APP_DASHBOARD_WIREFRAME.md` - Company & Employee dashboards
+- `docs/design/3_PAYROLL_LIST_VIEW_WIREFRAME.md` - Payment history table
+- `docs/design/PAYROLL_PAGES_WIREFRAMES.md` - Add employee, pay employee, recurring payments, batch payroll
+- `docs/design/PAYMENT_DETAIL_PAGE_WIREFRAME.md` - Individual payment details
+- `docs/design/AUTHENTICATION_ONBOARDING_WIREFRAMES.md` - Wallet connection, onboarding
+- `docs/design/SETTINGS_NOTIFICATIONS_WIREFRAMES.md` - Settings, funding, notifications
+- `docs/design/MISC_UX_COMPONENTS.md` - Help center, loading states, accessibility, error pages
+
+### 3.1 Landing Page (Public Marketing Site)
+- [ ] **Hero Section** (from ONBOARDING_WIREFRAME.md):
+  - [ ] Animated background with floating encrypted balance particles
+  - [ ] Main headline: "Private Payroll, Verified On-Chain"
+  - [ ] Primary CTA: "Open App" button (orange)
+  - [ ] Secondary CTA: "View Documentation" button (cyan border)
+  - [ ] Social proof stats: "552,800+ Private Payments", "297,500+ Verified Employees"
+- [ ] **Use Cases Section** (4-column grid):
+  - [ ] Card: Private Payroll (encrypted balances)
+  - [ ] Card: ZK Credit Scoring (ZKML proofs)
+  - [ ] Card: Compliance Audits (AI-powered)
+  - [ ] Card: Natural Language Reports (LLM)
+- [ ] **Features Section** (Expandable accordion):
+  - [ ] Feature: Encrypted Balances (with code snippet)
+  - [ ] Feature: ZKML Verification (flow diagram)
+  - [ ] Feature: Tax & Benefits (automated compliance)
+  - [ ] Feature: Recurring Payments (timeline)
+  - [ ] Feature: Multi-Currency (global payroll)
+- [ ] **Developer Section** (3-column layout):
+  - [ ] Column: Explore (zkApps, ZKML, LLM, contract patterns)
+  - [ ] Column: Validate (sandbox, proof verification)
+  - [ ] Column: Integrate (TypeScript SDK, API docs, React components)
+  - [ ] Code example section with syntax highlighting
+- [ ] **Social Proof Section** (metrics grid):
+  - [ ] Animated count-up: $12.5M Total Paid, 552,800+ Payments, 297,500+ Employees, 99.9% Uptime
+- [ ] **Footer** (4 columns):
+  - [ ] Brand column with tagline
+  - [ ] Product links (Features, Pricing, Use Cases, Roadmap)
+  - [ ] Developer links (Documentation, SDK, API, GitHub)
+  - [ ] Company links (About, Blog, Careers, Contact)
+  - [ ] Social icons (Twitter, GitHub, Discord)
+
+### 3.2 Authentication & Wallet Connection (AUTHENTICATION_ONBOARDING_WIREFRAMES.md)
+- [ ] **Wallet Connection Flow**:
+  - [ ] Check Midnight Wallet installation
+  - [ ] Show "Wallet Not Installed" modal with install link
+  - [ ] "Connect Your Wallet" modal with explanation
+  - [ ] Handle wallet connection request
+  - [ ] Handle connection rejection with retry option
+  - [ ] Network validation (Midnight Mainnet required)
+  - [ ] Wrong network modal with auto-switch option
+- [ ] **Role Detection**:
+  - [ ] Query smart contract for company/employee status
+  - [ ] Show role selector for new users (Company vs Employee)
+  - [ ] Show dual role switcher if user is both
+  - [ ] Loading state while fetching data
+- [ ] **Company Onboarding**:
+  - [ ] Company registration form (name, industry, size, email)
+  - [ ] Terms of service checkbox
+  - [ ] Smart contract transaction with MetaMask popup
+  - [ ] Processing state with progress indicator
+  - [ ] Success modal with next steps
+  - [ ] Onboarding wizard (3 steps):
+    - [ ] Step 1: Fund payroll account
+    - [ ] Step 2: Add first employee
+    - [ ] Step 3: Setup recurring payment
+  - [ ] Wizard complete screen with summary
+- [ ] **Employee Onboarding**:
+  - [ ] Scenario A: Employee already added (welcome screen)
+  - [ ] Scenario B: Employee not added yet (pending state with copy wallet address)
+  - [ ] Email instructions to employer template
+- [ ] **Session Management**:
+  - [ ] Auto-reconnect on page reload
+  - [ ] Disconnect wallet confirmation modal
+  - [ ] Network switch detection with banner
+  - [ ] Wallet disconnected error modal
+  - [ ] Session timeout warning (30 min inactivity)
+  - [ ] Session expired modal with reconnect
+  - [ ] Concurrent session detection warning
+- [ ] **Error Handling**:
+  - [ ] Transaction failed modal with retry
+  - [ ] Network error modal with status check
+  - [ ] Account already registered warning
+  - [ ] Insufficient funds (gas) modal with buy link
+
+### 3.3 App Dashboard (APP_DASHBOARD_WIREFRAME.md)
+- [ ] **Top Navigation Bar** (sticky):
+  - [ ] zkSalaria logo (clickable to home)
+  - [ ] Navigation tabs: Home, Payroll, Verification, Audits
+  - [ ] Notification bell with badge
+  - [ ] Network selector (Midnight Network)
+  - [ ] Wallet connection status (truncated address)
+  - [ ] Wallet dropdown: Copy address, View explorer, Disconnect
+  - [ ] Role switcher (if dual role)
+- [ ] **Alert Banner** (optional, dismissible):
+  - [ ] Show relevant alerts (new features, low balance, payment status)
+  - [ ] Different alerts for company vs employee
+- [ ] **Company View - Overview Page**:
+  - [ ] Feature Card 1: Private Payroll (3D illustration, stats, CTA)
+  - [ ] Feature Card 2: ZK Verification (3D illustration, stats, CTA)
+  - [ ] Feature Card 3: Compliance & Audits (3D illustration, stats, CTA)
+  - [ ] Quick Stats Grid (4 columns): Total Paid, Employees, Payments This Month, Compliance %
+  - [ ] Featured Companies Carousel (horizontal scroll)
+  - [ ] Quick Actions (floating panel bottom-right): Pay Employee, Add Employee, Generate Proof, Run Audit
+  - [ ] Zero states for all cards (when no data)
+- [ ] **Employee View - Overview Page**:
+  - [ ] Feature Card 1: My Salary (encrypted balance, payment history)
+  - [ ] Feature Card 2: Verification Proofs (generate ZK proofs, grant disclosures)
+  - [ ] Feature Card 3: Employment Status (view details, benefits, tax)
+  - [ ] Quick Stats Grid (4 columns): Current Balance, Last Payment, Payments This Year, Employment Status
+  - [ ] Quick Actions (floating panel): Withdraw Salary, Generate Proof, Grant Disclosure, Download W-2
+- [ ] **Modals**:
+  - [ ] Pay Employee Modal (company)
+  - [ ] Add Employee Modal (company)
+  - [ ] Generate Proof Modal (both, with progress states)
+  - [ ] Run Audit Modal (company)
+  - [ ] Withdraw Salary Modal (employee)
+  - [ ] Grant Disclosure Modal (employee)
+  - [ ] Download W-2 Modal (employee)
+
+### 3.4 Payroll Pages (PAYROLL_PAGES_WIREFRAMES.md)
+- [ ] **Add Employee Page**:
+  - [ ] Form: Employee Name, Wallet Address (with paste), Email, Role, Base Salary, Start Date
+  - [ ] Field validation with real-time error states
+  - [ ] Privacy notice about encryption
+  - [ ] Success flow with redirect to recurring payment setup
+- [ ] **Pay Employee Page** (one-time payment):
+  - [ ] Employee dropdown (searchable, shows role + last paid date)
+  - [ ] Amount selection: Use Base Salary vs Custom Amount (radio toggle)
+  - [ ] Payment Type dropdown (Salary, Bonus, Commission, etc.)
+  - [ ] Memo field (optional, internal note)
+  - [ ] Summary panel (employee, amount, type, gas, total)
+  - [ ] Success modal with transaction details
+- [ ] **Setup Recurring Payment Page**:
+  - [ ] Employee selection dropdown
+  - [ ] Payment amount input
+  - [ ] Frequency dropdown (Weekly, Biweekly, Semi-monthly, Monthly)
+  - [ ] Start date picker
+  - [ ] End date: No end vs Specific date (radio toggle)
+  - [ ] Preview Schedule modal (next 10 payments with calendar)
+  - [ ] Summary with automated payment notice
+  - [ ] Success with redirect to Recurring Payments page
+- [ ] **Run Payroll Page** (batch payment):
+  - [ ] Pay period dropdown
+  - [ ] Select All checkbox
+  - [ ] Employee table with checkboxes, amounts (base vs custom), warnings
+  - [ ] Payment summary panel (selected count, total, gas)
+  - [ ] Confirmation modal with employee list
+  - [ ] Progress modal with percentage bar
+  - [ ] Success modal with download payroll report (PDF)
+- [ ] **Recurring Payments Management Page**:
+  - [ ] Filters: All, Active, Search
+  - [ ] Setup New Recurring Payment button (cyan)
+  - [ ] Recurring payment cards grid (shows next payment, started date, payment count)
+  - [ ] Card states: Active, Paused, Cancelled, Ending Soon
+  - [ ] Action modals: Pause, Resume, Cancel, Edit
+  - [ ] Empty state (no recurring payments)
+
+### 3.5 Payment History & Detail (PAYROLL_LIST_VIEW_WIREFRAME.md, PAYMENT_DETAIL_PAGE_WIREFRAME.md)
+- [ ] **Payment History - Company View**:
+  - [ ] Tab navigation: All, Received, Sent, Search
+  - [ ] Primary CTA: "Pay Employee +"
+  - [ ] Table columns: Status, Employee/Company, Amount, Date, Type, Actions
+  - [ ] Row hover state with metadata (payment ID, transaction link)
+  - [ ] Actions dropdown: View Details, Generate Proof, Download Receipt, Cancel (if pending)
+  - [ ] Empty state (no payments) with two cards: Start Paying Employees, Import CSV
+  - [ ] Search modal with filters (employee, date range, amount range, type, status)
+- [ ] **Payment History - Employee View**:
+  - [ ] Tab navigation: Received, Sent, Search
+  - [ ] Primary CTA: "Withdraw Salary +"
+  - [ ] Privacy banner: "Amounts encrypted. Click 🔓 to decrypt"
+  - [ ] Table with encrypted amounts ("••••••") and 🔓 icon
+  - [ ] Decrypt All Amounts button
+  - [ ] Decryption interaction (click 🔓 → loading → show amount)
+  - [ ] Empty state: Waiting for First Payment, Set Up Direct Deposit
+- [ ] **Payment Detail Page**:
+  - [ ] Left panel: Payment card with visual center (amount, date, type)
+  - [ ] Right panel: Attributes (sender, recipient, amount, date, chain, payment ID)
+  - [ ] Balance Status section (Employee view): Paid, Withdrawn, Available (with progress bars)
+  - [ ] Transaction Details section (tx hash, block, gas, explorer link)
+  - [ ] Actions section: View Details, History, Generate Proof, Download Receipt, Withdraw (employee only)
+  - [ ] Details Modal with tabs: Overview, Accounting (employee only), History
+  - [ ] Withdraw Modal (employee only)
+  - [ ] Generate Proof Modal (employee only)
+  - [ ] Download Receipt Modal (both)
+
+### 3.6 Settings & Account Management (SETTINGS_NOTIFICATIONS_WIREFRAMES.md)
+- [ ] **Settings Page Layout**:
+  - [ ] Sidebar navigation (desktop): Company, Payroll, Preferences, Advanced
+  - [ ] Stacked navigation (mobile)
+- [ ] **Company Settings**:
+  - [ ] Profile: Logo upload, Company name, Industry, Size, Admin email
+  - [ ] Wallet Management:
+    - [ ] Connected wallet display (address, status, network, balance)
+    - [ ] Disconnect wallet button
+    - [ ] Payroll account balance (with low balance warning)
+    - [ ] Fund Account button (orange) → Fund Account Modal
+    - [ ] View Transaction History link
+    - [ ] Gas fee reserve display
+  - [ ] Team Management: Admins list, Add team member (future feature)
+- [ ] **Employee Settings**:
+  - [ ] Profile: Name, Email, Role (read-only), Wallet, Employment info (read-only)
+  - [ ] Privacy & Disclosure:
+    - [ ] Generated Proofs list (income proof, employment proof) with revoke/download
+    - [ ] Granted Disclosures list (third parties with access) with revoke
+    - [ ] Generate New Proof button
+    - [ ] Grant New Disclosure button
+- [ ] **Notification Preferences** (both):
+  - [ ] Email notifications checkboxes (Payment Executed, Failed, Low Balance, etc.)
+  - [ ] Email threshold settings (Low Balance: 2 months of runway)
+  - [ ] In-app notifications checkboxes (toast, bell badge, sound)
+  - [ ] Webhook integration (company only): URL, events, test webhook
+- [ ] **Privacy & Security**:
+  - [ ] Encryption status display
+  - [ ] Data visibility settings (who can see salaries)
+  - [ ] Session management: Active sessions list, Revoke session, Revoke all other sessions
+- [ ] **Fund Account Flow** (modal):
+  - [ ] Current balance + upcoming payments summary
+  - [ ] Recommended funding amount
+  - [ ] Amount to deposit input
+  - [ ] Token dropdown (USDC, DUST, DAI)
+  - [ ] Deposit from: Connected Wallet vs External Wallet (radio)
+  - [ ] Summary (deposit, gas, new balance, runway)
+  - [ ] MetaMask approval popup
+  - [ ] MetaMask transaction popup
+  - [ ] Processing modal
+  - [ ] Success modal with transaction details
+
+### 3.7 Notifications System (SETTINGS_NOTIFICATIONS_WIREFRAMES.md)
+- [ ] **Notification Bell** (header):
+  - [ ] Badge with unread count
+  - [ ] Dropdown on click
+- [ ] **Notification Dropdown**:
+  - [ ] Unread count header with "Mark All Read"
+  - [ ] Notification list (icon, title, description, timestamp, action button)
+  - [ ] Notification types: Payment, Success, Warning, Error, Employee, Security
+  - [ ] View All Notifications link
+- [ ] **Toast Notifications** (bottom-right):
+  - [ ] Success toast (green, auto-dismiss 5s)
+  - [ ] Error toast (red, auto-dismiss 7s)
+  - [ ] Warning toast (yellow/orange, auto-dismiss 5s)
+  - [ ] Action buttons in toast (View, Dismiss, Fund Account, etc.)
+
+### 3.8 Help & Support (MISC_UX_COMPONENTS.md)
+- [ ] **Help Center Page**:
+  - [ ] Search help input
+  - [ ] Popular Topics grid (6 cards): Getting Started, Making Payment, Privacy & ZK, Recurring, For Employees, Troubleshooting
+  - [ ] Each card with topic list + Learn More link
+  - [ ] Still need help section: Contact Support, Join Discord, Read Docs
+- [ ] **FAQ Section**:
+  - [ ] Expandable accordion with 10-15 common questions
+  - [ ] Questions: What is zkSalaria, How encryption works, What is ZK proof, etc.
+- [ ] **Contextual Help** (tooltips):
+  - [ ] (?) icons throughout app
+  - [ ] Tooltip on hover with explanation
+  - [ ] Examples: Wallet Address field, Base Salary field
+- [ ] **Video Tutorials**:
+  - [ ] Embedded videos in Help Center
+  - [ ] Topics: Getting Started (3:45), Pay First Employee (2:30), Setup Recurring (4:15), Generate ZK Proof (3:00)
+
+### 3.9 Tutorial System (MISC_UX_COMPONENTS.md)
+- [ ] **Interactive Product Tour** (first login):
+  - [ ] Welcome modal with "Start Tour" vs "Skip for Now"
+  - [ ] Step 1/5: Dashboard Overview (highlight Private Payroll card)
+  - [ ] Step 2/5: Quick Actions (highlight Pay Employee button)
+  - [ ] Step 3/5: Privacy & Encryption (explain encrypted amounts)
+  - [ ] Step 4/5: Recurring Payments (explain automation)
+  - [ ] Step 5/5: Get Started (next steps with checkbox "Don't show again")
+  - [ ] Navigation: Back, Next, progress indicator (1/5)
+- [ ] **Inline Hints** (progressive disclosure):
+  - [ ] Hint on hover for complex features
+  - [ ] Example: Encrypted amount display hint "Click 🔓 to decrypt locally"
+
+### 3.10 Loading States (MISC_UX_COMPONENTS.md)
+- [ ] **Skeleton Screens**:
+  - [ ] Dashboard loading (shimmer animation)
+  - [ ] Table loading (rows with gray bars)
+  - [ ] Card loading
+- [ ] **Progress Indicators**:
+  - [ ] Transaction processing modal (percentage bar, steps checklist)
+  - [ ] Batch payroll progress (percentage + employee count)
+- [ ] **Infinite Scroll Loading**:
+  - [ ] Payment history bottom loader (spinner + "Loading More...")
+- [ ] **Optimistic UI Updates**:
+  - [ ] Instant feedback before blockchain confirmation
+  - [ ] Example: Pay Employee → immediately show "Pending" in table → update to "Completed" after confirmation
+  - [ ] If failed: Remove from list + error toast
+
+### 3.11 Accessibility (MISC_UX_COMPONENTS.md - WCAG 2.1 AA Compliance)
+- [ ] **Keyboard Navigation**:
+  - [ ] Tab/Shift+Tab through all interactive elements
+  - [ ] Enter key activates buttons
+  - [ ] Escape key closes modals
+  - [ ] Arrow keys navigate dropdowns
+  - [ ] Focus indicators: 2px solid cyan with 4px offset
+  - [ ] Skip to main content link
+- [ ] **Screen Reader Support**:
+  - [ ] Semantic HTML (header, nav, main, section, footer)
+  - [ ] ARIA labels on all icons and buttons
+  - [ ] Live regions for toast notifications (aria-live="polite")
+  - [ ] Live regions for errors (aria-live="assertive")
+  - [ ] Focus management (trap in modals)
+- [ ] **Color Contrast**:
+  - [ ] All text meets WCAG AA (4.5:1 ratio minimum)
+  - [ ] Interactive elements meet AAA (7:1 ratio)
+  - [ ] Status badges use icons + text (not color alone)
+
+### 3.12 Error Pages (MISC_UX_COMPONENTS.md)
+- [ ] **404 Page Not Found**:
+  - [ ] 🔍 icon
+  - [ ] "Oops! Page not found" message
+  - [ ] Popular pages list (Dashboard, Payment History, Add Employee, Settings)
+  - [ ] Go to Dashboard button
+  - [ ] Report an Issue link
+- [ ] **500 Internal Server Error**:
+  - [ ] ⚠️ icon
+  - [ ] "We're having technical difficulties" message
+  - [ ] Error ID for support
+  - [ ] What you can do: Refresh, Try again, Check status page
+  - [ ] Refresh Page button
+  - [ ] Contact Support button
+- [ ] **Network Error Page**:
+  - [ ] 🌐 icon
+  - [ ] "Cannot connect to Midnight Network" message
+  - [ ] Checklist: Internet connection, Network status, Firewall settings
+  - [ ] Network status display (Offline, Last connection time)
+  - [ ] Retry Connection button
+  - [ ] View Cached Data button (if available)
+- [ ] **Maintenance Mode Page**:
+  - [ ] 🛠️ icon
+  - [ ] "Scheduled Maintenance" message
+  - [ ] Expected duration, start time, completion time
+  - [ ] What's happening list (upgrades, improvements, enhancements)
+  - [ ] Check Status button
+  - [ ] Subscribe to Updates button
+
+### 3.13 Browser Compatibility (MISC_UX_COMPONENTS.md)
+- [ ] **Unsupported Browser Detection**:
+  - [ ] Check browser version on page load
+  - [ ] Minimum versions: Chrome 100+, Firefox 100+, Safari 15+
+  - [ ] Show warning banner if unsupported
+  - [ ] Banner: Browser recommendations, Download links, Continue Anyway
+- [ ] **Mobile Browser Notice**:
+  - [ ] Detect mobile device
+  - [ ] Show tip for desktop-optimized pages
+  - [ ] "This page works best on desktop" message
+  - [ ] Continue on Mobile vs Dismiss
+
+### 3.14 Analytics & Event Tracking (MISC_UX_COMPONENTS.md)
+- [ ] **Privacy-Preserving Analytics**:
+  - [ ] Track user actions: wallet_connected, company_registered, employee_added, payment_sent, recurring_setup, proof_generated
+  - [ ] Track page views: Dashboard, Payment History
+  - [ ] Track errors: error_occurred with type and message
+  - [ ] DO NOT track: Exact salary amounts, Employee names, Wallet addresses, Transaction hashes
+  - [ ] DO track: Aggregate metrics, User actions, Error rates, Performance metrics
+
+### 3.15 Feature Announcements (MISC_UX_COMPONENTS.md)
+- [ ] **What's New Modal** (on login after releases):
+  - [ ] Version header (e.g., "What's New in zkSalaria v2.1 🎉")
+  - [ ] New Features section (3-4 items)
+  - [ ] Improvements section (3-4 items)
+  - [ ] Bug Fixes section (2-3 items)
+  - [ ] Learn More button
+  - [ ] Close button
+  - [ ] Checkbox: "Don't show announcements again"
+- [ ] **Changelog Page** (/changelog):
+  - [ ] Version history list (reverse chronological)
+  - [ ] Each version: Date, Added items, Improved items, Fixed items
+  - [ ] View Full Changelog on GitHub link
+
+### 3.16 Natural Language Interface (LLM Integration)
+- [ ] **Natural Language Query**:
   - [ ] Integrate LLM (GPT-4/Claude) for natural language queries
   - [ ] "Show me my payment history" → LLM queries blockchain → Returns prose
   - [ ] "Do I qualify for a loan?" → LLM checks credit score → Returns explanation
   - [ ] "Show audit results for ABC Corp" → LLM reads blockchain → Generates report
-- [ ] **Audit Dashboard:**
+- [ ] **Audit Dashboard**:
   - [ ] Display structured audit findings (read from blockchain)
   - [ ] LLM-generated human-readable reports
   - [ ] Natural language explanations of irregularities
   - [ ] PDF export with LLM-generated prose
+
+### 3.17 Mobile Responsive Design (All wireframes)
+- [ ] **Breakpoints**:
+  - [ ] Desktop: >1024px (3-column grids, full tables)
+  - [ ] Tablet: 768-1024px (2-column grids, condensed tables)
+  - [ ] Mobile: <768px (1-column stacks, card-based layout)
+- [ ] **Mobile Optimizations**:
+  - [ ] Forms: Full-width inputs, larger touch targets (48px min), sticky buttons
+  - [ ] Tables: Switch to card layout, swipe to reveal actions
+  - [ ] Navigation: Hamburger menu
+  - [ ] Stats: 2×2 grid instead of 4 columns
+  - [ ] Featured companies: Horizontal scroll with snap
+  - [ ] Quick actions: FAB (floating action button) instead of panel
+
+### 3.18 Component Architecture
+- [ ] **Layout Components**:
+  - [ ] AppNavigation.tsx (top nav with tabs)
+  - [ ] AlertBanner.tsx (dismissible notifications)
+  - [ ] Footer.tsx (4-column footer)
+  - [ ] QuickActions.tsx (floating panel)
+- [ ] **Dashboard Components**:
+  - [ ] FeatureCard.tsx (3D illustration + stats + CTA)
+  - [ ] StatsGrid.tsx (4-column metrics)
+  - [ ] FeaturedCompanies.tsx (carousel)
+  - [ ] EmptyState.tsx (empty state cards)
+- [ ] **Payroll Components**:
+  - [ ] PayrollList.tsx (table/card layout)
+  - [ ] PayrollRow.tsx (individual row)
+  - [ ] PayrollSearchModal.tsx (filters)
+  - [ ] PayrollActions.tsx (dropdown)
+  - [ ] DecryptButton.tsx (🔓 icon + logic)
+  - [ ] PrivacyBanner.tsx (encryption notice)
+- [ ] **Settings Components**:
+  - [ ] SettingsSidebar.tsx (navigation)
+  - [ ] FundAccountModal.tsx (deposit flow)
+  - [ ] NotificationPreferences.tsx (checkboxes)
+- [ ] **Modal Components**:
+  - [ ] PayEmployeeModal.tsx
+  - [ ] AddEmployeeModal.tsx
+  - [ ] GenerateProofModal.tsx
+  - [ ] WithdrawSalaryModal.tsx
+  - [ ] GrantDisclosureModal.tsx
+- [ ] **Shared UI Components**:
+  - [ ] Button.tsx (variants: primary, secondary, outline)
+  - [ ] Input.tsx (with validation states)
+  - [ ] Select.tsx (dropdown)
+  - [ ] Card.tsx (container)
+  - [ ] Modal.tsx (base modal)
+  - [ ] StatusBadge.tsx (status indicators)
+  - [ ] TableSkeleton.tsx (loading states)
+  - [ ] Toast.tsx (notifications)
 
 ---
 
