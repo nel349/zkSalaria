@@ -23,7 +23,7 @@ export ledger employee_accounts: Map<Bytes<32>, Bytes<32>>;  // employee_id -> h
 // ENCRYPTED BALANCE SYSTEM (Bank Contract Pattern)
 // Employee balances encrypted on ledger, only decryptable with proper keys
 export ledger encrypted_employee_balances: Map<Bytes<32>, Bytes<32>>; // employee_id -> encrypted_balance
-export ledger balance_mappings: Map<Bytes<32>, Uint<64>>;             // encrypted_balance -> actual_amount
+export ledger value_decryption_map: Map<Bytes<32>, Uint<64>>;        // encrypted_value -> plaintext_value (balances, payment amounts, etc.)
 
 // Token system state (PUBLIC)
 export ledger nonce: Bytes<32>;
@@ -218,7 +218,7 @@ export circuit withdraw_employee_salary(
   const current_encrypted = encrypted_employee_balances.lookup(disclose(employee_id));
 
   // Decrypt to get actual amount
-  const current_balance = balance_mappings.lookup(current_encrypted);
+  const current_balance = value_decryption_map.lookup(current_encrypted);
 
   // Verify sufficient balance
   assert(current_balance >= disclose(amount), "Insufficient balance");
@@ -233,7 +233,7 @@ export circuit withdraw_employee_salary(
   encrypted_employee_balances.insert(disclose(employee_id), new_encrypted);
 
   // Update balance mapping for decryption
-  balance_mappings.insert(new_encrypted, new_balance);
+  value_decryption_map.insert(new_encrypted, new_balance);
 
   // Send payroll tokens from contract reserve to employee (REAL token transfer)
   assert(total_supply >= disclose(amount), "Insufficient token reserve");
@@ -279,8 +279,8 @@ export circuit pay_employee(
   // Decrypt employee balance (or initialize to 0 if new)
   const employee_encrypted = encrypted_employee_balances.member(disclose(employee_id)) ?
     encrypted_employee_balances.lookup(disclose(employee_id)) : encrypt_balance(0 as Uint<64>, employee_key);
-  const employee_balance = balance_mappings.member(employee_encrypted) ?
-    balance_mappings.lookup(employee_encrypted) : 0 as Uint<64>;
+  const employee_balance = value_decryption_map.member(employee_encrypted) ?
+    value_decryption_map.lookup(employee_encrypted) : 0 as Uint<64>;
 
   // Add payment to employee balance
   const new_employee_balance = (employee_balance + disclose(salary_amount)) as Uint<64>;
@@ -292,7 +292,7 @@ export circuit pay_employee(
   encrypted_employee_balances.insert(disclose(employee_id), new_employee_encrypted);
 
   // Update balance mapping for decryption
-  balance_mappings.insert(new_employee_encrypted, new_employee_balance);
+  value_decryption_map.insert(new_employee_encrypted, new_employee_balance);
 
   // Read employee payment history from LEDGER (for ZKML tracking)
   // NOTE: Now stored on ledger so company can update it when paying
@@ -301,9 +301,9 @@ export circuit pay_employee(
   // Encrypt payment amount with employee's key (privacy - only employee can decrypt for ZKML)
   const encrypted_payment_amount = encrypt_balance(disclose(salary_amount), employee_key);
 
-  // Add encrypted amount to balance_mappings for decryption (bank.compact pattern)
+  // Add encrypted amount to value_decryption_map for decryption (bank.compact pattern)
   // This allows employee (and authorized parties with disclosure) to decrypt amounts
-  balance_mappings.insert(encrypted_payment_amount, disclose(salary_amount));
+  value_decryption_map.insert(encrypted_payment_amount, disclose(salary_amount));
 
   // Create new payment record (with ENCRYPTED amount for privacy)
   const new_payment = PC_create_payment_record(
@@ -673,8 +673,8 @@ export circuit create_recurring_payment(
   // Encrypt payment amount with employee key (for privacy)
   const encrypted_amount = encrypt_balance(disclose(amount), employee_key);
 
-  // Add encrypted amount to balance_mappings for later decryption in process_recurring_payment
-  balance_mappings.insert(encrypted_amount, disclose(amount));
+  // Add encrypted amount to value_decryption_map for later decryption in process_recurring_payment
+  value_decryption_map.insert(encrypted_amount, disclose(amount));
 
   // Generate unique recurring payment ID
   const recurring_payment_id = PC_generate_recurring_payment_id(
@@ -805,8 +805,8 @@ export circuit edit_recurring_payment(
   const employee_key = generate_balance_key(payment.employee_id);
   const new_encrypted_amount = encrypt_balance(disclose(new_amount), employee_key);
 
-  // Add new encrypted amount to balance_mappings for later decryption
-  balance_mappings.insert(new_encrypted_amount, disclose(new_amount));
+  // Add new encrypted amount to value_decryption_map for later decryption
+  value_decryption_map.insert(new_encrypted_amount, disclose(new_amount));
 
   // Update payment record
   const updated_payment = PC_RecurringPayment {
@@ -849,8 +849,8 @@ export circuit process_recurring_payment(
     "Payment not due yet"
   );
 
-  // Decrypt payment amount (lookup in balance_mappings)
-  const payment_amount = balance_mappings.lookup(payment.encrypted_amount);
+  // Decrypt payment amount (lookup in value_decryption_map)
+  const payment_amount = value_decryption_map.lookup(payment.encrypted_amount);
 
   // Execute payment (inline pay_employee logic)
   // 1. Verify company has sufficient balance in token reserve
@@ -862,8 +862,8 @@ export circuit process_recurring_payment(
   // 3. Decrypt employee balance (or create if new)
   const employee_encrypted = encrypted_employee_balances.member(payment.employee_id) ?
     encrypted_employee_balances.lookup(payment.employee_id) : encrypt_balance(0 as Uint<64>, employee_key);
-  const employee_balance = balance_mappings.member(employee_encrypted) ?
-    balance_mappings.lookup(employee_encrypted) : 0 as Uint<64>;
+  const employee_balance = value_decryption_map.member(employee_encrypted) ?
+    value_decryption_map.lookup(employee_encrypted) : 0 as Uint<64>;
 
   // 4. Add payment to employee balance
   const new_employee_balance = (employee_balance + payment_amount) as Uint<64>;
@@ -875,11 +875,11 @@ export circuit process_recurring_payment(
   encrypted_employee_balances.insert(payment.employee_id, new_employee_hash);
 
   // 7. Update balance mapping for decryption
-  balance_mappings.insert(new_employee_hash, new_employee_balance);
+  value_decryption_map.insert(new_employee_hash, new_employee_balance);
 
   // 8. Encrypt payment amount with employee's key (for payment history)
   const encrypted_payment_amount = encrypt_balance(payment_amount, employee_key);
-  balance_mappings.insert(encrypted_payment_amount, payment_amount);
+  value_decryption_map.insert(encrypted_payment_amount, payment_amount);
 
   // 9. Record payment in history
   const payment_record = PC_create_payment_record(

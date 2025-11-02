@@ -391,10 +391,10 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Helper: Decrypt payment amount from encrypted_amount field
-  // Uses balance_mappings ledger to decrypt (bank.compact pattern)
+  // Uses value_decryption_map ledger to decrypt (bank.compact pattern)
   decryptPaymentAmount(encryptedAmount: Uint8Array): bigint | null {
     const ledgerState = this.getLedgerState();
-    const balanceMappings = ledgerState.balance_mappings as any;
+    const balanceMappings = ledgerState.value_decryption_map as any;
 
     // Check if this encrypted amount has a mapping
     if (balanceMappings.member(encryptedAmount)) {
@@ -405,13 +405,13 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Helper: Get ACTUAL employee balance from ledger (decrypt from encrypted balance)
-  // Uses encrypted_employee_balances + balance_mappings to decrypt
+  // Uses encrypted_employee_balances + value_decryption_map to decrypt
   getActualEmployeeBalance(employeeId: string): bigint | null {
     const ledgerState = this.getLedgerState();
     const employeeIdBytes = stringToBytes32(employeeId);
 
     const encryptedBalances = ledgerState.encrypted_employee_balances as any;
-    const balanceMappings = ledgerState.balance_mappings as any;
+    const balanceMappings = ledgerState.value_decryption_map as any;
 
     // Look up employee's encrypted balance
     if (!encryptedBalances.member(employeeIdBytes)) {
@@ -420,7 +420,7 @@ export class PayrollMultiPartyTestSetup {
 
     const encryptedBalance = encryptedBalances.lookup(employeeIdBytes);
 
-    // Decrypt using balance_mappings
+    // Decrypt using value_decryption_map
     if (!balanceMappings.member(encryptedBalance)) {
       return null; // Cannot decrypt - no mapping found
     }

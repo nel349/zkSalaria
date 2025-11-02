@@ -492,7 +492,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       // Act - Decrypt employee balance from shared public ledger
       const actualBalance = payroll.getActualEmployeeBalance(employeeId);
 
-      // Assert - Balance can be decrypted from encrypted_employee_balances + balance_mappings
+      // Assert - Balance can be decrypted from encrypted_employee_balances + value_decryption_map
       expect(actualBalance).not.toBeNull();
       expect(actualBalance).toBe(salaryAmount);
 
@@ -621,7 +621,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('├─ Public ledger shared by all participants');
       console.log('├─ Each employee balance encrypted independently');
       console.log('├─ Company can pay, employees can withdraw');
-      console.log('└─ Balance decryption uses encrypted_employee_balances + balance_mappings');
+      console.log('└─ Balance decryption uses encrypted_employee_balances + value_decryption_map');
 
       payroll.addEmployee(emp1);
       payroll.addEmployee(emp2);
@@ -644,7 +644,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       console.log('\n💡 Privacy achieved: Balances encrypted on shared ledger!');
       console.log('💡 Each participant has separate private state');
-      console.log('💡 Decryption works via balance_mappings map');
+      console.log('💡 Decryption works via value_decryption_map map');
 
       console.log('\n✅ Multi-party: Privacy preserved with encrypted balances on shared ledger!');
     });
@@ -1049,6 +1049,393 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('✅ Recurring payment auto-cancelled correctly!');
       console.log(`   - Status: ACTIVE → CANCELLED ✓`);
       console.log(`   - Reason: next_payment_date (${processedPayment.next_payment_date}) > end_date (${endDate}) ✓`);
+    });
+
+    // Additional comprehensive tests for process_recurring_payment
+    test('should process biweekly payment and calculate correct next date', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_BIWEEKLY_PROCESS');
+      payroll.depositCompanyFunds(1000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const frequency = BigInt(RecurringPaymentFrequency.BIWEEKLY); // 14 days
+      const amount = 300000n;
+      const nextPaymentDate = startDate + 20n;
+
+      console.log('🔁 Creating biweekly recurring payment...');
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_BIWEEKLY_PROCESS',
+        amount,
+        frequency,
+        startDate,
+        0n, // No end date
+        nextPaymentDate,
+        1n, // 1st of month
+        15n, // 15th of month
+        0n
+      );
+
+      // Advance time to make payment due
+      payroll.updateTimestamp(Number(nextPaymentDate + 10n));
+
+      // Process payment
+      payroll.processRecurringPayment(companyId, 'EMP_BIWEEKLY_PROCESS');
+
+      // Verify next payment date is 14 days later
+      const payment = payroll.getRecurringPaymentForEmployee('EMP_BIWEEKLY_PROCESS');
+      expect(payment).not.toBeNull();
+      if (!payment) return;
+
+      const expectedNextDate = nextPaymentDate + 1209600n; // 14 days in seconds
+      expect(payment.next_payment_date).toBe(expectedNextDate);
+      expect(payment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
+
+      console.log('✅ Biweekly payment processed correctly!');
+      console.log(`   - Next payment: ${payment.next_payment_date} (14 days later) ✓`);
+    });
+
+    test('should process monthly payment and calculate correct next date', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_MONTHLY_PROCESS');
+      payroll.depositCompanyFunds(1000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const frequency = BigInt(RecurringPaymentFrequency.MONTHLY); // 30 days
+      const amount = 500000n;
+      const nextPaymentDate = startDate + 20n;
+
+      console.log('🔁 Creating monthly recurring payment...');
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_MONTHLY_PROCESS',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        1n, // 1st of month
+        0n,
+        0n
+      );
+
+      // Advance time to make payment due
+      payroll.updateTimestamp(Number(nextPaymentDate + 10n));
+
+      // Process payment
+      payroll.processRecurringPayment(companyId, 'EMP_MONTHLY_PROCESS');
+
+      // Verify next payment date is 30 days later
+      const payment = payroll.getRecurringPaymentForEmployee('EMP_MONTHLY_PROCESS');
+      expect(payment).not.toBeNull();
+      if (!payment) return;
+
+      const expectedNextDate = nextPaymentDate + 2592000n; // 30 days in seconds
+      expect(payment.next_payment_date).toBe(expectedNextDate);
+      expect(payment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
+
+      console.log('✅ Monthly payment processed correctly!');
+      console.log(`   - Next payment: ${payment.next_payment_date} (30 days later) ✓`);
+    });
+
+    test('should fail to process payment that is not due yet', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_NOT_DUE');
+      payroll.depositCompanyFunds(1000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const nextPaymentDate = startDate + 1000n; // Far in future
+
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_NOT_DUE',
+        200000n,
+        BigInt(RecurringPaymentFrequency.WEEKLY),
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Try to process payment before it's due
+      console.log('🔄 Attempting to process payment before due date...');
+      expect(() => {
+        payroll.processRecurringPayment(companyId, 'EMP_NOT_DUE');
+      }).toThrow(/Payment not due yet/);
+
+      console.log('✅ Correctly rejected processing payment before due date!');
+    });
+
+    test('should fail to process paused recurring payment', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_PROCESS_PAUSED');
+      payroll.depositCompanyFunds(1000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const nextPaymentDate = startDate + 20n;
+
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_PROCESS_PAUSED',
+        200000n,
+        BigInt(RecurringPaymentFrequency.WEEKLY),
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Pause the payment
+      payroll.pauseRecurringPayment(companyId, 'EMP_PROCESS_PAUSED');
+
+      // Advance time to make payment due
+      payroll.updateTimestamp(Number(nextPaymentDate + 10n));
+
+      // Try to process paused payment
+      console.log('🔄 Attempting to process paused payment...');
+      expect(() => {
+        payroll.processRecurringPayment(companyId, 'EMP_PROCESS_PAUSED');
+      }).toThrow(/not active/);
+
+      console.log('✅ Correctly rejected processing paused payment!');
+    });
+
+    test('should fail to process with insufficient company balance', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_INSUFFICIENT');
+      payroll.depositCompanyFunds(50000n); // Only $500
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const nextPaymentDate = startDate + 20n;
+      const amount = 100000n; // $1,000 - more than company has
+
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_INSUFFICIENT',
+        amount,
+        BigInt(RecurringPaymentFrequency.WEEKLY),
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Advance time to make payment due
+      payroll.updateTimestamp(Number(nextPaymentDate + 10n));
+
+      // Try to process payment with insufficient balance
+      console.log('🔄 Attempting to process payment with insufficient balance...');
+      expect(() => {
+        payroll.processRecurringPayment(companyId, 'EMP_INSUFFICIENT');
+      }).toThrow(/Insufficient/);
+
+      console.log('✅ Correctly rejected processing with insufficient balance!');
+    });
+
+    test('should process multiple cycles correctly', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_MULTI_CYCLE');
+      payroll.depositCompanyFunds(5000000n); // $50,000 - enough for multiple payments
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const frequency = BigInt(RecurringPaymentFrequency.WEEKLY);
+      const amount = 200000n; // $2,000
+      const nextPaymentDate = startDate + 20n;
+
+      console.log('🔁 Creating recurring payment for multiple cycles...');
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_MULTI_CYCLE',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Track payment dates
+      const paymentDates: bigint[] = [];
+
+      // Process 3 payments
+      for (let i = 0; i < 3; i++) {
+        const payment = payroll.getRecurringPaymentForEmployee('EMP_MULTI_CYCLE');
+        expect(payment).not.toBeNull();
+        if (!payment) return;
+
+        const dueDate = payment.next_payment_date;
+        paymentDates.push(dueDate);
+
+        // Advance time to make payment due
+        payroll.updateTimestamp(Number(dueDate + 10n));
+
+        // Process payment
+        console.log(`🔄 Processing payment cycle ${i + 1}...`);
+        payroll.processRecurringPayment(companyId, 'EMP_MULTI_CYCLE');
+      }
+
+      // Verify each payment was 7 days apart
+      expect(paymentDates[1] - paymentDates[0]).toBe(604800n); // 7 days
+      expect(paymentDates[2] - paymentDates[1]).toBe(604800n); // 7 days
+
+      // Verify employee received 3 payments
+      const history = payroll.getEmployeePaymentHistory('EMP_MULTI_CYCLE');
+      expect(history.filter(r => r.timestamp > 0n).length).toBe(3);
+
+      console.log('✅ Multiple payment cycles processed correctly!');
+      console.log(`   - Cycle 1: ${paymentDates[0]}`);
+      console.log(`   - Cycle 2: ${paymentDates[1]} (+7 days) ✓`);
+      console.log(`   - Cycle 3: ${paymentDates[2]} (+7 days) ✓`);
+      console.log(`   - Total payments in history: 3 ✓`);
+    });
+
+    test('should process payment after editing amount', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_EDIT_THEN_PROCESS');
+      payroll.depositCompanyFunds(1000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const originalAmount = 200000n; // $2,000
+      const nextPaymentDate = startDate + 20n;
+
+      console.log('🔁 Creating recurring payment...');
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_EDIT_THEN_PROCESS',
+        originalAmount,
+        BigInt(RecurringPaymentFrequency.WEEKLY),
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Edit the amount
+      const newAmount = 350000n; // $3,500
+      console.log(`✏️  Editing amount from $2,000 to $3,500...`);
+      payroll.editRecurringPayment(companyId, 'EMP_EDIT_THEN_PROCESS', newAmount);
+
+      // Advance time to make payment due
+      payroll.updateTimestamp(Number(nextPaymentDate + 10n));
+
+      // Process payment
+      console.log('🔄 Processing payment with edited amount...');
+      payroll.processRecurringPayment(companyId, 'EMP_EDIT_THEN_PROCESS');
+
+      // Verify payment was processed successfully
+      const payment = payroll.getRecurringPaymentForEmployee('EMP_EDIT_THEN_PROCESS');
+      expect(payment).not.toBeNull();
+      if (!payment) return;
+
+      // Verify status is still ACTIVE (not cancelled or paused)
+      expect(payment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
+
+      // Verify employee received the payment
+      const paymentHistory = payroll.getEmployeePaymentHistory('EMP_EDIT_THEN_PROCESS');
+      expect(paymentHistory.filter(r => r.timestamp > 0n).length).toBe(1);
+
+      console.log('✅ Payment processed with edited amount!');
+      console.log(`   - Original amount: ${originalAmount}`);
+      console.log(`   - Edited amount: ${newAmount}`);
+      console.log(`   - Payment successfully processed with new amount ✓`);
+    });
+
+    test('should process payment exactly at due time', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_EXACT_DUE');
+      payroll.depositCompanyFunds(1000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const nextPaymentDate = startDate + 20n;
+
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_EXACT_DUE',
+        200000n,
+        BigInt(RecurringPaymentFrequency.WEEKLY),
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Advance time to EXACTLY the due date (not after)
+      console.log('⏰ Advancing to exactly due date...');
+      payroll.updateTimestamp(Number(nextPaymentDate));
+
+      // Process payment - should work since current_timestamp >= next_payment_date
+      console.log('🔄 Processing payment at exact due time...');
+      payroll.processRecurringPayment(companyId, 'EMP_EXACT_DUE');
+
+      const payment = payroll.getRecurringPaymentForEmployee('EMP_EXACT_DUE');
+      expect(payment).not.toBeNull();
+      if (!payment) return;
+
+      expect(payment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
+      console.log('✅ Payment processed successfully at exact due time!');
+    });
+
+    test('should handle payment near end date correctly', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_NEAR_END');
+      payroll.depositCompanyFunds(2000000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const frequency = BigInt(RecurringPaymentFrequency.WEEKLY); // 7 days
+      const nextPaymentDate = startDate + 20n;
+      const endDate = nextPaymentDate + 500000n; // 5.7 days after first payment
+
+      console.log('🔁 Creating payment that will end after 1 cycle...');
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_NEAR_END',
+        200000n,
+        frequency,
+        startDate,
+        endDate,
+        nextPaymentDate,
+        0n,
+        0n,
+        5n
+      );
+
+      // Process first payment
+      payroll.updateTimestamp(Number(nextPaymentDate + 10n));
+      console.log('🔄 Processing first payment...');
+      payroll.processRecurringPayment(companyId, 'EMP_NEAR_END');
+
+      // Verify it was cancelled (next would be 7 days later, which is > end_date)
+      const payment = payroll.getRecurringPaymentForEmployee('EMP_NEAR_END');
+      expect(payment).not.toBeNull();
+      if (!payment) return;
+
+      expect(payment.status).toBe(BigInt(RecurringPaymentStatus.CANCELLED));
+
+      console.log('✅ Payment auto-cancelled correctly near end date!');
+      console.log(`   - End date: ${endDate}`);
+      console.log(`   - Next would be: ${payment.next_payment_date}`);
+      console.log(`   - Auto-cancelled because next > end ✓`);
     });
   });
 
