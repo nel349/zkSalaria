@@ -177,6 +177,50 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
+  // Test method: Batch pay multiple employees in one transaction
+  batchPayEmployees(payments: Array<{ employeeId: string; amount: bigint }>): Ledger {
+    console.log(`💸💸 ${this.companyName} batch paying ${payments.length} employees`);
+
+    // Convert payments to Vector<10, BatchPaymentEntry> format
+    // Fill unused slots with empty entries (amount=0)
+    const batchEntries: Array<{ employee_id: Uint8Array; amount: bigint }> = [];
+
+    for (let i = 0; i < 10; i++) {
+      if (i < payments.length) {
+        const payment = payments[i];
+        batchEntries.push({
+          employee_id: stringToBytes32(payment.employeeId),
+          amount: payment.amount
+        });
+      } else {
+        // Empty slot
+        batchEntries.push({
+          employee_id: new Uint8Array(32),
+          amount: 0n
+        });
+      }
+    }
+
+    // Execute batch payment circuit
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, ...entries) => this.contract.impureCircuits.batch_pay_employees(ctx, entries),
+      ...batchEntries
+    );
+
+    // Update trackers for all non-empty payments
+    for (const payment of payments) {
+      if (payment.amount > 0n) {
+        this.allocatedToEmployeesTracker += payment.amount;
+        const currentBalance = this.employeeBalanceTrackers.get(payment.employeeId) || 0n;
+        this.employeeBalanceTrackers.set(payment.employeeId, currentBalance + payment.amount);
+        console.log(`  ✓ Paid ${payment.employeeId}: ${payment.amount} tokens`);
+      }
+    }
+
+    return this.getLedgerState();
+  }
+
   // Test method: Withdraw employee salary (executed by employee participant)
   withdrawEmployeeSalary(employeeId: string, amount: bigint): Ledger {
     console.log(`💵 ${employeeId} withdrawing ${amount} tokens`);

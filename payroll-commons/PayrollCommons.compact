@@ -209,6 +209,40 @@ module PayrollCommons {
     ]);
   }
 
+  // Batch payment entry for processing multiple employees in one transaction
+  export struct BatchPaymentEntry {
+    employee_id: Bytes<32>;
+    amount: Uint<64>;
+  }
+
+  // Helper to create an empty batch payment entry (for filling unused slots)
+  export pure circuit create_empty_batch_entry(): BatchPaymentEntry {
+    return BatchPaymentEntry {
+      employee_id: pad(32, ""),
+      amount: 0 as Uint<64>
+    };
+  }
+
+  // Calculate total amount in a batch (sum all non-zero amounts)
+  export pure circuit calculate_batch_total(
+    payments: Vector<10, BatchPaymentEntry>
+  ): Uint<64> {
+    // Sum all amounts (empty slots have amount=0, so they don't affect the sum)
+    // NOTE: We disclose each amount to allow summing (total is not sensitive)
+    return (
+      disclose(payments[0].amount) +
+      disclose(payments[1].amount) +
+      disclose(payments[2].amount) +
+      disclose(payments[3].amount) +
+      disclose(payments[4].amount) +
+      disclose(payments[5].amount) +
+      disclose(payments[6].amount) +
+      disclose(payments[7].amount) +
+      disclose(payments[8].amount) +
+      disclose(payments[9].amount)
+    ) as Uint<64>;
+  }
+
   // NOTE: Date calculations are now handled by API layer using JavaScript Date libraries
   // The contract just stores calendar configuration and validates API-provided dates
 

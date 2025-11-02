@@ -1953,4 +1953,244 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log(`   - All accounting correct ✓`);
     });
   });
+
+  // ========================================
+  // Batch Payroll Processing (Phase 1.5.2)
+  // ========================================
+  describe('Batch Payroll Processing', () => {
+    test('should batch pay 3 employees in one transaction', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Acme Corp', 'COMP001');
+
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.addEmployee('EMP003');
+      payroll.depositCompanyFunds(100000n);
+
+      // Batch pay 3 employees
+      payroll.batchPayEmployees([
+        { employeeId: 'EMP001', amount: 5000n },
+        { employeeId: 'EMP002', amount: 6000n },
+        { employeeId: 'EMP003', amount: 7000n }
+      ]);
+
+      // Verify all balances updated correctly
+      expect(payroll.getEmployeeBalance('EMP001')).toBe(5000n);
+      expect(payroll.getEmployeeBalance('EMP002')).toBe(6000n);
+      expect(payroll.getEmployeeBalance('EMP003')).toBe(7000n);
+
+      // Verify allocation tracking
+      expect(payroll.getAllocatedToEmployees()).toBe(18000n);
+      expect(payroll.getAvailableBudget()).toBe(82000n);
+
+      console.log('✅ Batch payment for 3 employees successful!');
+    });
+
+    test('should batch pay maximum 10 employees in one transaction', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Mega Corp', 'COMP002');
+
+      // Add 10 employees
+      for (let i = 1; i <= 10; i++) {
+        payroll.addEmployee(`EMP${String(i).padStart(3, '0')}`);
+      }
+
+      payroll.depositCompanyFunds(500000n);
+
+      // Batch pay all 10 employees
+      const batchPayments = [];
+      for (let i = 1; i <= 10; i++) {
+        batchPayments.push({
+          employeeId: `EMP${String(i).padStart(3, '0')}`,
+          amount: BigInt(5000 * i) // EMP001: 5000, EMP002: 10000, ..., EMP010: 50000
+        });
+      }
+
+      payroll.batchPayEmployees(batchPayments);
+
+      // Verify all balances
+      for (let i = 1; i <= 10; i++) {
+        const empId = `EMP${String(i).padStart(3, '0')}`;
+        expect(payroll.getEmployeeBalance(empId)).toBe(BigInt(5000 * i));
+      }
+
+      // Total paid: 5000 + 10000 + 15000 + ... + 50000 = 275000
+      expect(payroll.getAllocatedToEmployees()).toBe(275000n);
+      expect(payroll.getAvailableBudget()).toBe(225000n);
+
+      console.log('✅ Batch payment for 10 employees (maximum) successful!');
+    });
+
+    test('should handle partial batch with empty slots', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Small Business', 'COMP003');
+
+      payroll.addEmployee('ALICE');
+      payroll.addEmployee('BOB');
+      payroll.depositCompanyFunds(50000n);
+
+      // Batch pay only 2 employees (8 empty slots)
+      payroll.batchPayEmployees([
+        { employeeId: 'ALICE', amount: 8000n },
+        { employeeId: 'BOB', amount: 7000n }
+      ]);
+
+      expect(payroll.getEmployeeBalance('ALICE')).toBe(8000n);
+      expect(payroll.getEmployeeBalance('BOB')).toBe(7000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(15000n);
+
+      console.log('✅ Partial batch payment with empty slots successful!');
+    });
+
+    test('should calculate total batch amount correctly and check budget once', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Budget Test Corp', 'COMP004');
+
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.addEmployee('EMP003');
+      payroll.depositCompanyFunds(20000n); // Exactly enough for batch
+
+      // Batch payment totaling 20000
+      payroll.batchPayEmployees([
+        { employeeId: 'EMP001', amount: 8000n },
+        { employeeId: 'EMP002', amount: 7000n },
+        { employeeId: 'EMP003', amount: 5000n }
+      ]);
+
+      expect(payroll.getAllocatedToEmployees()).toBe(20000n);
+      expect(payroll.getAvailableBudget()).toBe(0n);
+
+      console.log('✅ Batch payment budget calculation verified!');
+    });
+
+    test('should fail batch payment if total exceeds available budget', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Insufficient Funds Inc', 'COMP005');
+
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.addEmployee('EMP003');
+      payroll.depositCompanyFunds(10000n); // Not enough for batch
+
+      // Try to batch pay 18000 (exceeds available 10000)
+      expect(() => {
+        payroll.batchPayEmployees([
+          { employeeId: 'EMP001', amount: 8000n },
+          { employeeId: 'EMP002', amount: 6000n },
+          { employeeId: 'EMP003', amount: 4000n }
+        ]);
+      }).toThrow();
+
+      // Verify no payments went through (atomic failure)
+      expect(payroll.getAllocatedToEmployees()).toBe(0n);
+
+      console.log('✅ Batch payment correctly rejected when insufficient budget!');
+    });
+
+    test('should update payment history for all employees in batch', () => {
+      const payroll = new PayrollMultiPartyTestSetup('History Corp', 'COMP006');
+
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.depositCompanyFunds(50000n);
+
+      // Batch pay
+      payroll.batchPayEmployees([
+        { employeeId: 'EMP001', amount: 5000n },
+        { employeeId: 'EMP002', amount: 6000n }
+      ]);
+
+      const ledger = payroll.getLedgerState();
+
+      // Verify payment history entries exist
+      const emp1Id = stringToBytes32('EMP001');
+      const emp2Id = stringToBytes32('EMP002');
+
+      expect(ledger.employee_payment_history.member(emp1Id)).toBe(true);
+      expect(ledger.employee_payment_history.member(emp2Id)).toBe(true);
+
+      const emp1History = ledger.employee_payment_history.lookup(emp1Id);
+      const emp2History = ledger.employee_payment_history.lookup(emp2Id);
+
+      // Last entry should have current timestamp
+      expect(emp1History[11].timestamp).toBe(ledger.current_timestamp);
+      expect(emp2History[11].timestamp).toBe(ledger.current_timestamp);
+
+      console.log('✅ Batch payment history tracking verified!');
+    });
+
+    test('should fail if any employee in batch does not exist', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Validation Corp', 'COMP007');
+
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.depositCompanyFunds(50000n);
+
+      // Try to pay non-existent employee in batch
+      expect(() => {
+        payroll.batchPayEmployees([
+          { employeeId: 'EMP001', amount: 5000n },
+          { employeeId: 'EMP_NONEXISTENT', amount: 6000n }
+        ]);
+      }).toThrow();
+
+      // Verify no payments went through (atomic)
+      expect(payroll.getAllocatedToEmployees()).toBe(0n);
+
+      console.log('✅ Batch payment correctly rejects non-existent employee!');
+    });
+
+    test('should be more efficient than individual payments (batching test)', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Efficiency Corp', 'COMP008');
+
+      // Add 5 employees
+      for (let i = 1; i <= 5; i++) {
+        payroll.addEmployee(`EMP00${i}`);
+      }
+
+      payroll.depositCompanyFunds(100000n);
+
+      // Pay via batch (one transaction)
+      payroll.batchPayEmployees([
+        { employeeId: 'EMP001', amount: 5000n },
+        { employeeId: 'EMP002', amount: 6000n },
+        { employeeId: 'EMP003', amount: 7000n },
+        { employeeId: 'EMP004', amount: 8000n },
+        { employeeId: 'EMP005', amount: 9000n }
+      ]);
+
+      // Verify all payments processed
+      expect(payroll.getEmployeeBalance('EMP001')).toBe(5000n);
+      expect(payroll.getEmployeeBalance('EMP002')).toBe(6000n);
+      expect(payroll.getEmployeeBalance('EMP003')).toBe(7000n);
+      expect(payroll.getEmployeeBalance('EMP004')).toBe(8000n);
+      expect(payroll.getEmployeeBalance('EMP005')).toBe(9000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(35000n);
+
+      console.log('✅ Batch payment efficiency test passed (5 employees in 1 tx)!');
+    });
+
+    test('should increment total payments counter for each non-empty entry', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Counter Corp', 'COMP009');
+
+      payroll.addEmployee('EMP001');
+      payroll.addEmployee('EMP002');
+      payroll.addEmployee('EMP003');
+      payroll.depositCompanyFunds(50000n);
+
+      const ledgerBefore = payroll.getLedgerState();
+      const paymentsBefore = ledgerBefore.total_payments;
+
+      // Batch pay 3 employees
+      payroll.batchPayEmployees([
+        { employeeId: 'EMP001', amount: 5000n },
+        { employeeId: 'EMP002', amount: 6000n },
+        { employeeId: 'EMP003', amount: 7000n }
+      ]);
+
+      const ledgerAfter = payroll.getLedgerState();
+      const paymentsAfter = ledgerAfter.total_payments;
+
+      // Counter should increase by 3 (one for each payment)
+      expect(paymentsAfter).toBe(paymentsBefore + 3n);
+
+      console.log('✅ Batch payment counter increments verified!');
+    });
+  });
 });

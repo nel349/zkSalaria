@@ -336,8 +336,75 @@ export circuit pay_employee(
   total_payments.increment(1);
 }
 
-// TODO: Add batch payment processing (requires understanding Compact loop constraints)
-// export circuit batch_pay_employees(...)
+// Batch pay multiple employees in a single transaction
+// NOTE: Supports up to 10 employees per batch. Empty slots (amount=0) are skipped.
+// NOTE: Uses same logic as pay_employee but processes multiple employees efficiently
+export circuit batch_pay_employees(
+  payments: Vector<10, PC_BatchPaymentEntry>
+): [] {
+  // Calculate total amount needed for this batch (using helper function)
+  const total_needed = PC_calculate_batch_total(payments);
+
+  // Check available budget once for entire batch
+  assert(total_supply >= allocated_to_employees, "Accounting error: allocated exceeds supply");
+  const available_budget = (total_supply - allocated_to_employees) as Uint<64>;
+  assert(available_budget >= total_needed, "Insufficient available budget for batch");
+
+  // Allocate total funds upfront
+  allocated_to_employees = (allocated_to_employees + total_needed) as Uint<64>;
+
+  // Process each payment in the batch
+  for (const payment of payments) {
+    // Skip empty slots (amount = 0)
+    if (disclose(payment.amount) > 0 as Uint<64>) {
+      // Verify employee exists
+      assert(employee_accounts.member(disclose(payment.employee_id)), "Employee not found in batch");
+
+      // Generate encryption key for employee
+      const employee_key = generate_balance_key(payment.employee_id);
+
+      // Decrypt employee balance (or initialize to 0 if new)
+      const employee_encrypted = encrypted_employee_balances.member(disclose(payment.employee_id)) ?
+        encrypted_employee_balances.lookup(disclose(payment.employee_id)) : encrypt_balance(0 as Uint<64>, employee_key);
+      const employee_balance = value_decryption_map.member(employee_encrypted) ?
+        value_decryption_map.lookup(employee_encrypted) : 0 as Uint<64>;
+
+      // Add payment to employee balance
+      const new_employee_balance = (employee_balance + disclose(payment.amount)) as Uint<64>;
+
+      // Re-encrypt employee balance
+      const new_employee_encrypted = encrypt_balance(new_employee_balance, employee_key);
+
+      // Update encrypted employee balance on ledger
+      encrypted_employee_balances.insert(disclose(payment.employee_id), new_employee_encrypted);
+
+      // Update balance mapping for decryption
+      value_decryption_map.insert(new_employee_encrypted, new_employee_balance);
+
+      // Read employee payment history from LEDGER (for ZKML tracking)
+      const history = employee_payment_history.lookup(disclose(payment.employee_id));
+
+      // Encrypt payment amount with employee's key (privacy)
+      const encrypted_payment_amount = encrypt_balance(disclose(payment.amount), employee_key);
+      value_decryption_map.insert(encrypted_payment_amount, disclose(payment.amount));
+
+      // Create new payment record (with ENCRYPTED amount for privacy)
+      const payment_record = PC_create_payment_record(
+        current_timestamp,
+        encrypted_payment_amount,
+        company_id,
+        PC_PAYMENT_TYPE_SALARY()
+      );
+
+      // Append to history and save to LEDGER
+      const updated_history = PC_append_to_history(history, payment_record);
+      employee_payment_history.insert(disclose(payment.employee_id), updated_history);
+
+      // Increment payment counter for each non-empty payment
+      total_payments.increment(1);
+    }
+  }
+}
 
 // ========================================
 // SELECTIVE DISCLOSURE CIRCUITS
