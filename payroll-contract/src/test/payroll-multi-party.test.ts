@@ -1745,4 +1745,212 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log(`   - Aligns to original anchor day-of-week ✓`);
     });
   });
+
+  describe('Token Allocation Model (Over-Commitment Prevention)', () => {
+    test('should prevent over-commitment when paying multiple employees', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('ALICE');
+      payroll.addEmployee('BOB');
+
+      // Deposit 10,000 tokens
+      payroll.depositCompanyFunds(10000n);
+
+      // Verify initial state
+      expect(payroll.getActualCompanyBalance()).toBe(10000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(0n);
+      expect(payroll.getAvailableBudget()).toBe(10000n);
+
+      // Pay Alice 6,000 (should succeed)
+      payroll.payEmployee('ALICE', 6000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(6000n);
+      expect(payroll.getAvailableBudget()).toBe(4000n);
+
+      // Pay Bob 7,000 (should FAIL - only 4,000 available)
+      expect(() => {
+        payroll.payEmployee('BOB', 7000n);
+      }).toThrow();
+
+      // Verify Alice's payment went through but Bob's didn't
+      expect(payroll.getEmployeeBalance('ALICE')).toBe(6000n);
+      expect(payroll.getEmployeeBalance('BOB')).toBe(0n);
+      expect(payroll.getAllocatedToEmployees()).toBe(6000n);
+
+      console.log('✅ Over-commitment prevented!');
+      console.log(`   - Deposited: 10,000`);
+      console.log(`   - Paid Alice: 6,000 ✓`);
+      console.log(`   - Tried to pay Bob: 7,000 ✗ (only 4,000 available)`);
+    });
+
+    test('should free allocation when employee withdraws', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('ALICE');
+      payroll.addEmployee('BOB');
+
+      // Deposit 10,000 tokens
+      payroll.depositCompanyFunds(10000n);
+
+      // Pay Alice 6,000
+      payroll.payEmployee('ALICE', 6000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(6000n);
+      expect(payroll.getAvailableBudget()).toBe(4000n);
+
+      // Alice withdraws 4,000 (frees allocation)
+      payroll.withdrawEmployeeSalary('ALICE', 4000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(2000n);
+      expect(payroll.getAvailableBudget()).toBe(4000n); // Still 4,000 because total_supply also decreased
+
+      // Alice should have 2,000 remaining balance
+      expect(payroll.getEmployeeBalance('ALICE')).toBe(2000n);
+
+      // Now Bob can be paid 4,000 (because available budget is 4,000)
+      payroll.payEmployee('BOB', 4000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(6000n); // 2000 (Alice) + 4000 (Bob)
+      expect(payroll.getAvailableBudget()).toBe(0n);
+
+      console.log('✅ Allocation freed on withdrawal!');
+      console.log(`   - Alice withdrew 4,000, freed allocation`);
+      console.log(`   - Bob could then be paid 4,000 ✓`);
+    });
+
+    test('should prevent over-commitment with recurring payments', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('ALICE');
+
+      // Deposit 10,000 tokens
+      payroll.depositCompanyFunds(10000n);
+
+      // Create recurring payment for 7,000/week
+      const startDate = payroll.getLedgerState().current_timestamp;
+      const nextPaymentDate = startDate + 86400n;  // Due tomorrow
+      payroll.createRecurringPayment(
+        companyId,
+        'ALICE',
+        7000n,
+        RecurringPaymentFrequency.WEEKLY,
+        startDate,
+        0n,  // No end date
+        nextPaymentDate,
+        0n, 0n, 1n  // Weekly Monday
+      );
+
+      // Process first payment (should succeed)
+      payroll.updateTimestamp(Number(startDate + 86400n + 1n));
+      payroll.processRecurringPayment(companyId, 'ALICE');
+      expect(payroll.getAllocatedToEmployees()).toBe(7000n);
+      expect(payroll.getAvailableBudget()).toBe(3000n);
+
+      // Advance to next payment date
+      payroll.updateTimestamp(Number(startDate + 86400n * 8n));
+
+      // Process second payment (should FAIL - only 3,000 available)
+      expect(() => {
+        payroll.processRecurringPayment(companyId, 'ALICE');
+      }).toThrow();
+
+      // Allocation should still be 7,000 (second payment didn't go through)
+      expect(payroll.getAllocatedToEmployees()).toBe(7000n);
+      expect(payroll.getEmployeeBalance('ALICE')).toBe(7000n);
+
+      console.log('✅ Recurring payment over-commitment prevented!');
+      console.log(`   - First payment: 7,000 ✓`);
+      console.log(`   - Second payment: 7,000 ✗ (only 3,000 available)`);
+    });
+
+    test('should allow recurring payment after employee withdrawal frees budget', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('ALICE');
+
+      // Deposit 15,000 tokens (enough for two 7,000 payments)
+      payroll.depositCompanyFunds(15000n);
+
+      // Create recurring payment for 7,000/week
+      const startDate = payroll.getLedgerState().current_timestamp;
+      const nextPaymentDate = startDate + 86400n;
+      payroll.createRecurringPayment(
+        companyId,
+        'ALICE',
+        7000n,
+        RecurringPaymentFrequency.WEEKLY,
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n, 0n, 1n
+      );
+
+      // Process first payment
+      payroll.updateTimestamp(Number(startDate + 86400n + 1n));
+      payroll.processRecurringPayment(companyId, 'ALICE');
+      expect(payroll.getAllocatedToEmployees()).toBe(7000n);
+      expect(payroll.getAvailableBudget()).toBe(8000n); // 15000 - 7000
+
+      // Alice withdraws 5,000 (frees allocation)
+      payroll.withdrawEmployeeSalary('ALICE', 5000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(2000n);
+      expect(payroll.getAvailableBudget()).toBe(8000n); // 10000 (remaining) - 2000 (allocated)
+
+      // Advance to next payment date
+      payroll.updateTimestamp(Number(startDate + 86400n * 8n));
+
+      // Process second payment (should succeed - 8000 available, need 7000)
+      payroll.processRecurringPayment(companyId, 'ALICE');
+      expect(payroll.getAllocatedToEmployees()).toBe(9000n); // 2000 + 7000
+      expect(payroll.getEmployeeBalance('ALICE')).toBe(9000n); // 2000 remaining + 7000 new
+      expect(payroll.getAvailableBudget()).toBe(1000n); // 10000 - 9000
+
+      console.log('✅ Recurring payment succeeded after withdrawal freed budget!');
+      console.log(`   - Initial deposit: 15,000`);
+      console.log(`   - After withdrawal, had 8,000 available`);
+      console.log(`   - Second payment: 7,000 ✓`);
+    });
+
+    test('should correctly track allocation across multiple employees and operations', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('ALICE');
+      payroll.addEmployee('BOB');
+      payroll.addEmployee('CHARLIE');
+
+      // Scenario: Complex multi-employee payroll with deposits and withdrawals
+
+      // 1. Deposit 20,000
+      payroll.depositCompanyFunds(20000n);
+      expect(payroll.getAvailableBudget()).toBe(20000n);
+
+      // 2. Pay Alice 8,000
+      payroll.payEmployee('ALICE', 8000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(8000n);
+      expect(payroll.getAvailableBudget()).toBe(12000n);
+
+      // 3. Pay Bob 7,000
+      payroll.payEmployee('BOB', 7000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(15000n);
+      expect(payroll.getAvailableBudget()).toBe(5000n);
+
+      // 4. Alice withdraws 3,000
+      payroll.withdrawEmployeeSalary('ALICE', 3000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(12000n); // 15000 - 3000
+      expect(payroll.getAvailableBudget()).toBe(5000n); // Same as before (both total_supply and allocated decreased)
+
+      // 5. Pay Charlie 5,000 (should succeed)
+      payroll.payEmployee('CHARLIE', 5000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(17000n);
+      expect(payroll.getAvailableBudget()).toBe(0n);
+
+      // 6. Bob withdraws all 7,000
+      payroll.withdrawEmployeeSalary('BOB', 7000n);
+      expect(payroll.getAllocatedToEmployees()).toBe(10000n); // 17000 - 7000
+
+      // 7. Now available budget should be 0 (total_supply is 10,000, allocated is 10,000)
+      expect(payroll.getAvailableBudget()).toBe(0n);
+
+      // 8. Verify final balances
+      expect(payroll.getEmployeeBalance('ALICE')).toBe(5000n); // 8000 - 3000
+      expect(payroll.getEmployeeBalance('BOB')).toBe(0n); // 7000 - 7000
+      expect(payroll.getEmployeeBalance('CHARLIE')).toBe(5000n);
+
+      console.log('✅ Complex multi-employee allocation tracking verified!');
+      console.log(`   - Final allocated: 10,000 (Alice: 5,000 + Charlie: 5,000)`);
+      console.log(`   - Final available: 0`);
+      console.log(`   - All accounting correct ✓`);
+    });
+  });
 });

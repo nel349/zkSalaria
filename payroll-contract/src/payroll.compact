@@ -28,7 +28,8 @@ export ledger value_decryption_map: Map<Bytes<32>, Uint<64>>;        // encrypte
 // Token system state (PUBLIC)
 export ledger nonce: Bytes<32>;
 export ledger token_counter: Counter;
-export ledger total_supply: Uint<64>;                         // Total tokens in this company's contract
+export ledger total_supply: Uint<64>;                         // Total tokens in this company's contract (treasury)
+export ledger allocated_to_employees: Uint<64>;                // Tokens allocated to employee balances (outstanding claims)
 export ledger token_reserve: QualifiedCoinInfo;                // This company's token reserve
 
 // Counters for metrics
@@ -69,6 +70,7 @@ constructor(
   company_name = disclose(companyName);
   current_timestamp = disclose(initialTimestamp);
   total_supply = 0 as Uint<64>;
+  allocated_to_employees = 0 as Uint<64>;
 }
 
 // ========================================
@@ -251,6 +253,10 @@ export circuit withdraw_employee_salary(
   }
   // Note: If no change, reserve is fully spent but will be replenished on next deposit
 
+  // Free up allocation (tokens no longer owed to employees)
+  assert(allocated_to_employees >= disclose(amount), "Accounting error: withdrawal exceeds allocation");
+  allocated_to_employees = (allocated_to_employees - disclose(amount)) as Uint<64>;
+
   // Decrease total supply (public - aggregate metric)
   total_supply = (total_supply - disclose(amount)) as Uint<64>;
 }
@@ -270,8 +276,15 @@ export circuit pay_employee(
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
   assert(disclose(salary_amount) > 0 as Uint<64>, "Amount must be positive");
 
-  // Verify company has sufficient balance in token reserve
-  assert(total_supply >= disclose(salary_amount), "Insufficient company funds");
+  // Calculate available budget (total_supply - allocated_to_employees)
+  assert(total_supply >= allocated_to_employees, "Accounting error: allocated exceeds supply");
+  const available_budget = (total_supply - allocated_to_employees) as Uint<64>;
+
+  // Verify company has sufficient available budget
+  assert(available_budget >= disclose(salary_amount), "Insufficient available budget");
+
+  // Allocate funds to employee
+  allocated_to_employees = (allocated_to_employees + disclose(salary_amount)) as Uint<64>;
 
   // Generate encryption key for employee
   const employee_key = generate_balance_key(employee_id);
@@ -853,35 +866,42 @@ export circuit process_recurring_payment(
   const payment_amount = value_decryption_map.lookup(payment.encrypted_amount);
 
   // Execute payment (inline pay_employee logic)
-  // 1. Verify company has sufficient balance in token reserve
-  assert(total_supply >= payment_amount, "Insufficient company balance");
+  // 1. Calculate available budget (total_supply - allocated_to_employees)
+  assert(total_supply >= allocated_to_employees, "Accounting error: allocated exceeds supply");
+  const available_budget = (total_supply - allocated_to_employees) as Uint<64>;
 
-  // 2. Generate encryption key for employee
+  // 2. Verify company has sufficient available budget
+  assert(available_budget >= payment_amount, "Insufficient available budget");
+
+  // 3. Allocate funds to employee
+  allocated_to_employees = (allocated_to_employees + payment_amount) as Uint<64>;
+
+  // 4. Generate encryption key for employee
   const employee_key = generate_balance_key(payment.employee_id);
 
-  // 3. Decrypt employee balance (or create if new)
+  // 5. Decrypt employee balance (or create if new)
   const employee_encrypted = encrypted_employee_balances.member(payment.employee_id) ?
     encrypted_employee_balances.lookup(payment.employee_id) : encrypt_balance(0 as Uint<64>, employee_key);
   const employee_balance = value_decryption_map.member(employee_encrypted) ?
     value_decryption_map.lookup(employee_encrypted) : 0 as Uint<64>;
 
-  // 4. Add payment to employee balance
+  // 6. Add payment to employee balance
   const new_employee_balance = (employee_balance + payment_amount) as Uint<64>;
 
-  // 5. Re-encrypt employee balance
+  // 7. Re-encrypt employee balance
   const new_employee_hash = encrypt_balance(new_employee_balance, employee_key);
 
-  // 6. Update encrypted employee balance on ledger
+  // 8. Update encrypted employee balance on ledger
   encrypted_employee_balances.insert(payment.employee_id, new_employee_hash);
 
-  // 7. Update balance mapping for decryption
+  // 9. Update balance mapping for decryption
   value_decryption_map.insert(new_employee_hash, new_employee_balance);
 
-  // 8. Encrypt payment amount with employee's key (for payment history)
+  // 10. Encrypt payment amount with employee's key (for payment history)
   const encrypted_payment_amount = encrypt_balance(payment_amount, employee_key);
   value_decryption_map.insert(encrypted_payment_amount, payment_amount);
 
-  // 9. Record payment in history
+  // 11. Record payment in history
   const payment_record = PC_create_payment_record(
     current_timestamp,
     encrypted_payment_amount,  // Use encrypted amount for privacy
@@ -893,10 +913,10 @@ export circuit process_recurring_payment(
   const updated_history = PC_append_to_history(current_history, payment_record);
   employee_payment_history.insert(payment.employee_id, updated_history);
 
-  // 10. Increment payment counter
+  // 12. Increment payment counter
   total_payments.increment(1);
 
-  // 11. Calculate next payment date
+  // 13. Calculate next payment date
   const next_date = PC_calculate_next_payment_date(
     disclose(payment.next_payment_date),
     payment.frequency

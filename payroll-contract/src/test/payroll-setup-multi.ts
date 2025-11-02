@@ -29,6 +29,7 @@ export class PayrollMultiPartyTestSetup {
   // Manual balance tracking (since actual balances are encrypted on ledger)
   private companyBalanceTracker: bigint = 0n;
   private employeeBalanceTrackers: Map<string, bigint> = new Map();
+  private allocatedToEmployeesTracker: bigint = 0n; // Track allocated_to_employees for over-commitment tests
 
   // Track recurring payment data for testing
   private recurringPaymentTimestamps: Map<string, bigint> = new Map(); // employeeId -> timestamp when created
@@ -160,17 +161,18 @@ export class PayrollMultiPartyTestSetup {
 
     const employeeIdBytes = stringToBytes32(employeeId);
 
-    // Track balance transfer: company -> employee
-    this.companyBalanceTracker -= amount;
-    const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
-    this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance + amount);
-
+    // Execute circuit first, then update trackers only on success
     this.executeAsParticipant(
       this.companyId,
       (ctx, eidBytes, amt) => this.contract.impureCircuits.pay_employee(ctx, eidBytes, amt),
       employeeIdBytes,
       amount
     );
+
+    // Track allocation: total_supply unchanged, allocated_to_employees increases
+    this.allocatedToEmployeesTracker += amount;
+    const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
+    this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance + amount);
 
     return this.getLedgerState();
   }
@@ -181,7 +183,9 @@ export class PayrollMultiPartyTestSetup {
 
     const employeeIdBytes = stringToBytes32(employeeId);
 
-    // Track employee balance decrease
+    // Track withdrawal: total_supply decreases, allocated_to_employees decreases, employee balance decreases
+    this.companyBalanceTracker -= amount;
+    this.allocatedToEmployeesTracker -= amount;
     const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
     this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance - amount);
 
@@ -338,25 +342,27 @@ export class PayrollMultiPartyTestSetup {
 
     const recurringPaymentId = lookupMap.lookup(employeeIdBytes);
 
-    // Get current payment amount for balance tracking
+    // Get current payment amount for balance tracking (before execution)
     const recurringPaymentMap = ledgerState.recurring_payments;
+    let amount: bigint | null = null;
     if (recurringPaymentMap.member(recurringPaymentId)) {
       const payment = recurringPaymentMap.lookup(recurringPaymentId);
-      const amount = this.decryptPaymentAmount(payment.encrypted_amount);
-
-      // Update balance trackers (simulate the payment execution)
-      if (amount !== null) {
-        this.companyBalanceTracker -= amount;
-        const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
-        this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance + amount);
-      }
+      amount = this.decryptPaymentAmount(payment.encrypted_amount);
     }
 
+    // Execute circuit first
     this.executeAsParticipant(
       companyId,
       (ctx, rpId) => this.contract.impureCircuits.process_recurring_payment(ctx, rpId),
       recurringPaymentId
     );
+
+    // Update balance trackers only after successful execution
+    if (amount !== null) {
+      this.allocatedToEmployeesTracker += amount;
+      const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
+      this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance + amount);
+    }
 
     return this.getLedgerState();
   }
@@ -431,6 +437,18 @@ export class PayrollMultiPartyTestSetup {
   // Helper: Get company balance (token reserve = company balance)
   getActualCompanyBalance(): bigint {
     return this.getTokenReserveBalance();
+  }
+
+  getAllocatedToEmployees(): bigint {
+    return this.allocatedToEmployeesTracker;
+  }
+
+  getAvailableBudget(): bigint {
+    return this.companyBalanceTracker - this.allocatedToEmployeesTracker;
+  }
+
+  getEmployeeBalance(employeeId: string): bigint {
+    return this.employeeBalanceTrackers.get(employeeId) || 0n;
   }
 
   // Helper: Payment history access (now on public ledger)
