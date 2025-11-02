@@ -659,4 +659,20 @@ export class PayrollMultiPartyTestSetup {
 
     return result;
   }
+
+  // Test method: Cancel a pending payment (executed by company participant)
+  cancelPendingPayment(paymentId: string): Ledger {
+    console.log(`❌ Company ${this.companyId} cancelling payment ${paymentId}`);
+
+    const paymentIdBytes = stringToBytes32(paymentId);
+
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, pidBytes) =>
+        this.contract.impureCircuits.cancel_pending_payment(ctx, pidBytes),
+      paymentIdBytes
+    );
+
+    return this.getLedgerState();
+  }
 }

@@ -12,7 +12,8 @@ export const PaymentType = {
 export const PaymentStatus = {
   PENDING: 0n,
   COMPLETED: 1n,
-  FAILED: 2n
+  FAILED: 2n,
+  CANCELLED: 3n
 } as const;
 
 // Employment status (matches PayrollCommons.compact)
@@ -49,11 +50,12 @@ export const RecurringPaymentFrequency = {
 // NOTE: All numeric types use bigint to match Compact runtime expectations
 // NOTE: Amounts are ENCRYPTED for privacy - employee decrypts locally for ZKML
 export interface PaymentRecord {
-  timestamp: bigint;  // Uint<32> in Compact
-  encrypted_amount: Uint8Array;  // Bytes<32> in Compact (encrypted with employee key)
-  company_id: Uint8Array; // Bytes<32> in Compact
-  payment_type: bigint;   // Uint<8> in Compact (0=salary, 1=advance, 2=bonus)
-  status: bigint;         // Uint<8> in Compact (0=pending, 1=completed, 2=failed)
+  payment_id: Uint8Array;         // Bytes<32> - Unique payment identifier (for cancellation)
+  timestamp: bigint;              // Uint<32> in Compact
+  encrypted_amount: Uint8Array;   // Bytes<32> in Compact (encrypted with employee key)
+  company_id: Uint8Array;         // Bytes<32> in Compact
+  payment_type: bigint;           // Uint<8> in Compact (0=salary, 1=advance, 2=bonus)
+  status: bigint;                 // Uint<8> in Compact (0=pending, 1=completed, 2=failed, 3=cancelled)
 }
 
 // Recurring payment structure (matches PayrollCommons.compact RecurringPayment)

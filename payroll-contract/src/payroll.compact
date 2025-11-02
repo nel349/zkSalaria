@@ -59,6 +59,10 @@ export ledger recurring_payments: Map<Bytes<32>, PC_RecurringPayment>;
 // Helper map: employee_id -> recurring_payment_id (for easy lookup in tests)
 export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
 
+// Pending payments (for cancellation tracking)
+// Key: payment_id and Value: PC_PaymentRecord
+export ledger pending_payments: Map<Bytes<32>, PC_PaymentRecord>;
+
 constructor(
   initNonce: Bytes<32>,
   companyId: Bytes<32>,
@@ -318,8 +322,12 @@ export circuit pay_employee(
   // This allows employee (and authorized parties with disclosure) to decrypt amounts
   value_decryption_map.insert(encrypted_payment_amount, disclose(salary_amount));
 
+  // Generate unique payment ID (for cancellation tracking)
+  const payment_id = PC_generate_payment_id(company_id, disclose(employee_id), current_timestamp);
+
   // Create new payment record (with ENCRYPTED amount for privacy)
   const new_payment = PC_create_payment_record(
+    payment_id,
     current_timestamp,
     encrypted_payment_amount,  // Encrypted amount (not plain text!)
     company_id,  // This contract's company ID (from ledger)
@@ -389,8 +397,12 @@ export circuit batch_pay_employees(
       const encrypted_payment_amount = encrypt_balance(disclose(payment.amount), employee_key);
       value_decryption_map.insert(encrypted_payment_amount, disclose(payment.amount));
 
+      // Generate unique payment ID (for cancellation tracking)
+      const payment_id = PC_generate_payment_id(company_id, disclose(payment.employee_id), current_timestamp);
+
       // Create new payment record (with ENCRYPTED amount for privacy)
       const payment_record = PC_create_payment_record(
+        payment_id,
         current_timestamp,
         encrypted_payment_amount,
         company_id,
@@ -970,8 +982,12 @@ export circuit process_recurring_payment(
   const encrypted_payment_amount = encrypt_balance(payment_amount, employee_key);
   value_decryption_map.insert(encrypted_payment_amount, payment_amount);
 
-  // 11. Record payment in history
+  // 11. Generate unique payment ID (for cancellation tracking)
+  const payment_id = PC_generate_payment_id(payment.company_id, payment.employee_id, current_timestamp);
+
+  // 12. Record payment in history
   const payment_record = PC_create_payment_record(
+    payment_id,
     current_timestamp,
     encrypted_payment_amount,  // Use encrypted amount for privacy
     payment.company_id,
@@ -1018,6 +1034,35 @@ export circuit process_recurring_payment(
   };
 
   recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
+}
+
+// Cancel a pending payment
+// NOTE: Only PENDING payments can be cancelled. COMPLETED payments cannot be cancelled.
+export circuit cancel_pending_payment(payment_id: Bytes<32>): [] {
+  // 1. Verify payment exists in pending_payments map
+  assert(pending_payments.member(disclose(payment_id)), "Payment not found in pending payments");
+
+  // 2. Get the payment record
+  const payment = pending_payments.lookup(disclose(payment_id));
+
+  // 3. Verify payment status is PENDING (cannot cancel completed/failed payments)
+  assert(payment.status == PC_PAYMENT_STATUS_PENDING(), "Can only cancel pending payments");
+
+  // 4. Update status to CANCELLED
+  const cancelled_payment = PC_PaymentRecord {
+    payment_id: payment.payment_id,
+    timestamp: payment.timestamp,
+    encrypted_amount: payment.encrypted_amount,
+    company_id: payment.company_id,
+    payment_type: payment.payment_type,
+    status: PC_PAYMENT_STATUS_CANCELLED()  // Mark as cancelled
+  };
+
+  // 5. Update pending_payments map
+  pending_payments.insert(disclose(payment_id), cancelled_payment);
+
+  // NOTE: If payment had funds deducted, caller should handle refund in a separate transaction
+  // This circuit only marks the payment as cancelled
 }
 
 // ========================================

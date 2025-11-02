@@ -24,6 +24,20 @@ export const stringToBytes32 = (str: string): Uint8Array => {
   return bytes;
 };
 
+// Convert Bytes<32> to string (inverse of stringToBytes32)
+export const bytes32ToString = (bytes: Uint8Array): string => {
+  const decoder = new TextDecoder();
+  // Find the first null byte (end of string)
+  let end = bytes.length;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) {
+      end = i;
+      break;
+    }
+  }
+  return decoder.decode(bytes.slice(0, end));
+};
+
 // Convert string to Bytes<64> for contract calls
 export const stringToBytes64 = (str: string): Uint8Array => {
   const bytes = new Uint8Array(64);

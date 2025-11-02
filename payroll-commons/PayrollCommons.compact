@@ -12,6 +12,7 @@ module PayrollCommons {
   export pure circuit PAYMENT_STATUS_PENDING(): Uint<8> { return 0 as Uint<8>; }
   export pure circuit PAYMENT_STATUS_COMPLETED(): Uint<8> { return 1 as Uint<8>; }
   export pure circuit PAYMENT_STATUS_FAILED(): Uint<8> { return 2 as Uint<8>; }
+  export pure circuit PAYMENT_STATUS_CANCELLED(): Uint<8> { return 3 as Uint<8>; }
 
   // Disclosure permission types for selective disclosure
   export pure circuit PERMISSION_TYPE_INCOME_RANGE(): Uint<8> { return 0 as Uint<8>; }
@@ -22,11 +23,12 @@ module PayrollCommons {
   // Payment record for history tracking (used by ZKML credit scoring)
   // NOTE: Amounts are ENCRYPTED for privacy - employee decrypts locally for ZKML
   export struct PaymentRecord {
+    payment_id: Bytes<32>;         // Unique payment identifier (for cancellation)
     timestamp: Uint<32>;           // When payment was made
     encrypted_amount: Bytes<32>;   // Payment amount (encrypted with employee key)
     company_id: Bytes<32>;         // Which company paid
     payment_type: Uint<8>;         // 0=salary, 1=advance, 2=bonus
-    status: Uint<8>;               // 0=pending, 1=completed, 2=failed
+    status: Uint<8>;               // 0=pending, 1=completed, 2=failed, 3=cancelled
   }
 
   // Disclosure authorization for selective disclosure (bank.compact pattern)
@@ -91,6 +93,7 @@ module PayrollCommons {
 
   // Helper to create a new payment record (with encrypted amount)
   export pure circuit create_payment_record(
+    payment_id: Bytes<32>,
     timestamp: Uint<32>,
     encrypted_amount: Bytes<32>,
     company_id: Bytes<32>,
@@ -98,6 +101,7 @@ module PayrollCommons {
     status: Uint<8>
   ): PaymentRecord {
     return PaymentRecord {
+      payment_id: payment_id,
       timestamp: timestamp,
       encrypted_amount: encrypted_amount,
       company_id: company_id,
@@ -109,6 +113,7 @@ module PayrollCommons {
   // Helper to create empty payment history (for new employees)
   export pure circuit create_empty_history(): Vector<12, PaymentRecord> {
     const empty_record = PaymentRecord {
+      payment_id: pad(32, ""),       // Empty payment ID
       timestamp: 0 as Uint<32>,
       encrypted_amount: pad(32, ""),  // Empty encrypted amount
       company_id: pad(32, ""),
@@ -212,6 +217,20 @@ module PayrollCommons {
   ): Bytes<32> {
     return persistentHash<Vector<4, Bytes<32>>>([
       pad(32, "zksalaria:recurring:"),
+      company_id,
+      employee_id,
+      persistentHash<Uint<32>>(timestamp)
+    ]);
+  }
+
+  // Generate unique payment ID (for cancellation tracking)
+  export pure circuit generate_payment_id(
+    company_id: Bytes<32>,
+    employee_id: Bytes<32>,
+    timestamp: Uint<32>
+  ): Bytes<32> {
+    return persistentHash<Vector<4, Bytes<32>>>([
+      pad(32, "zksalaria:payment:"),
       company_id,
       employee_id,
       persistentHash<Uint<32>>(timestamp)

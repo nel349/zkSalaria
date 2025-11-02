@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
 import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus, PaymentStatus } from '../types.js';
-import { stringToBytes32 } from './utils.js';
+import { stringToBytes32, bytes32ToString } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
   let payroll: PayrollMultiPartyTestSetup;
@@ -2296,6 +2296,64 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       }
 
       console.log('✅ Empty payment records have status = 0 (PENDING)');
+    });
+  });
+
+  describe('Payment Cancellation', () => {
+    test('should fail to cancel a non-existent payment', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Cancel Test Corp', 'COMP_CANCEL_001');
+
+      payroll.addEmployee('EMP_CANCEL_001');
+
+      // Try to cancel a non-existent payment
+      expect(() => {
+        payroll.cancelPendingPayment('nonexistent_payment_id');
+      }).toThrow();
+
+      console.log('✅ Cannot cancel non-existent payment (expected failure)');
+    });
+
+    test('should fail to cancel a completed payment', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Cancel Test Corp', 'COMP_CANCEL_002');
+
+      // Setup: company deposits funds
+      payroll.depositCompanyFunds(100000n);
+
+      // Add employee
+      payroll.addEmployee('EMP_CANCEL_002');
+
+      // Pay employee (payment is COMPLETED immediately)
+      payroll.payEmployee('EMP_CANCEL_002', 10000n);
+
+      const ledger = payroll.getLedgerState();
+      const empId = stringToBytes32('EMP_CANCEL_002');
+      const history = ledger.employee_payment_history.lookup(empId);
+
+      // Get the payment_id from the last payment in history
+      const lastPayment = history[11]; // Last entry in Vector<12>
+      expect(lastPayment.status).toBe(PaymentStatus.COMPLETED);
+
+      // Convert payment_id to string for the test helper
+      // Note: This test will fail because completed payments cannot be cancelled
+      // and the payment is not in pending_payments ledger
+      const paymentIdStr = bytes32ToString(lastPayment.payment_id);
+
+      expect(() => {
+        payroll.cancelPendingPayment(paymentIdStr);
+      }).toThrow(); // Should fail with "Payment not found in pending payments"
+
+      console.log('✅ Cannot cancel completed payment (expected failure)');
+    });
+
+    // Note: We cannot test successfully canceling a PENDING payment because
+    // the current implementation marks all payments as COMPLETED immediately.
+    // To fully test cancellation, we would need to either:
+    // 1. Modify payment circuits to create PENDING payments in pending_payments ledger
+    // 2. Add a new circuit like create_pending_payment() for testing
+    test.skip('should successfully cancel a pending payment', () => {
+      // This test is skipped because there's currently no way to create
+      // a PENDING payment. All payments are immediately COMPLETED.
+      // TODO: Add circuit to create PENDING payments for testing cancellation
     });
   });
 });
