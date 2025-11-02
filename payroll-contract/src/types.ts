@@ -2,34 +2,41 @@
 // Used by: contract, API, UI
 
 // Payment types (matches PayrollCommons.compact)
-export enum PaymentType {
-  SALARY = 0,
-  ADVANCE = 1,
-  BONUS = 2
-}
+export const PaymentType = {
+  SALARY: 0n,
+  ADVANCE: 1n,
+  BONUS: 2n
+} as const;
+
+// Payment status (matches PayrollCommons.compact)
+export const PaymentStatus = {
+  PENDING: 0n,
+  COMPLETED: 1n,
+  FAILED: 2n
+} as const;
 
 // Employment status (matches PayrollCommons.compact)
-export enum EmploymentStatus {
-  INACTIVE = 0,
-  ACTIVE = 1,
-  TERMINATED = 2,
-  ON_LEAVE = 3
-}
+export const EmploymentStatus = {
+  INACTIVE: 0n,
+  ACTIVE: 1n,
+  TERMINATED: 2n,
+  ON_LEAVE: 3n
+} as const;
 
 // Recurring payment status (matches PayrollCommons.compact)
-export enum RecurringPaymentStatus {
-  ACTIVE = 0,
-  PAUSED = 1,
-  CANCELLED = 2
-}
+export const RecurringPaymentStatus = {
+  ACTIVE: 0n,
+  PAUSED: 1n,
+  CANCELLED: 2n
+} as const;
 
 // Permission types for selective disclosure (matches PayrollCommons.compact)
-export enum PermissionType {
-  INCOME_RANGE = 0,
-  EMPLOYMENT = 1,
-  CREDIT_SCORE = 2,
-  AUDIT = 3
-}
+export const PermissionType = {
+  INCOME_RANGE: 0n,
+  EMPLOYMENT: 1n,
+  CREDIT_SCORE: 2n,
+  AUDIT: 3n
+} as const;
 
 // Recurring payment frequency constants (matches PayrollCommons.compact)
 export const RecurringPaymentFrequency = {
@@ -46,6 +53,7 @@ export interface PaymentRecord {
   encrypted_amount: Uint8Array;  // Bytes<32> in Compact (encrypted with employee key)
   company_id: Uint8Array; // Bytes<32> in Compact
   payment_type: bigint;   // Uint<8> in Compact (0=salary, 1=advance, 2=bonus)
+  status: bigint;         // Uint<8> in Compact (0=pending, 1=completed, 2=failed)
 }
 
 // Recurring payment structure (matches PayrollCommons.compact RecurringPayment)

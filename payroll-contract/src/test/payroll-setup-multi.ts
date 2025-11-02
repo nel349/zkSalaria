@@ -626,7 +626,7 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Test method: Update employment status (executed by company participant)
-  updateEmploymentStatus(employeeId: string, newStatus: number): Ledger {
+  updateEmploymentStatus(employeeId: string, newStatus: bigint): Ledger {
     console.log(`📝 Company ${this.companyId} updating employment status for ${employeeId} to ${newStatus}`);
 
     const employeeIdBytes = stringToBytes32(employeeId);
@@ -636,7 +636,7 @@ export class PayrollMultiPartyTestSetup {
       (ctx, eidBytes, statusBigInt) =>
         this.contract.impureCircuits.update_employment_status(ctx, eidBytes, statusBigInt),
       employeeIdBytes,
-      BigInt(newStatus)
+      newStatus
     );
 
     return this.getLedgerState();

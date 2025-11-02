@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
-import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus } from '../types.js';
+import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus, PaymentStatus } from '../types.js';
 import { stringToBytes32 } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
@@ -2191,6 +2191,111 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(paymentsAfter).toBe(paymentsBefore + 3n);
 
       console.log('✅ Batch payment counter increments verified!');
+    });
+  });
+
+  describe('Payment Status Tracking', () => {
+    test('should set payment status to COMPLETED for single payment', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Status Test Corp', 'COMP_STATUS_001');
+
+      payroll.addEmployee('EMP_STATUS_001');
+      payroll.depositCompanyFunds(50000n);
+      payroll.payEmployee('EMP_STATUS_001', 5000n);
+
+      const ledger = payroll.getLedgerState();
+      const empId = stringToBytes32('EMP_STATUS_001');
+      const history = ledger.employee_payment_history.lookup(empId);
+
+      // Last entry should have status = COMPLETED (1)
+      expect(history[11].status).toBe(PaymentStatus.COMPLETED);
+
+      console.log('✅ Single payment status verified as COMPLETED (1)');
+    });
+
+    test('should set payment status to COMPLETED for batch payments', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Batch Status Corp', 'COMP_STATUS_002');
+
+      payroll.addEmployee('EMP_BATCH_1');
+      payroll.addEmployee('EMP_BATCH_2');
+      payroll.depositCompanyFunds(50000n);
+
+      payroll.batchPayEmployees([
+        { employeeId: 'EMP_BATCH_1', amount: 3000n },
+        { employeeId: 'EMP_BATCH_2', amount: 4000n }
+      ]);
+
+      const ledger = payroll.getLedgerState();
+
+      // Check both employees
+      const emp1Id = stringToBytes32('EMP_BATCH_1');
+      const emp2Id = stringToBytes32('EMP_BATCH_2');
+
+      const emp1History = ledger.employee_payment_history.lookup(emp1Id);
+      const emp2History = ledger.employee_payment_history.lookup(emp2Id);
+
+      // Both should have status = COMPLETED (1)
+      expect(emp1History[11].status).toBe(PaymentStatus.COMPLETED);
+      expect(emp2History[11].status).toBe(PaymentStatus.COMPLETED);
+
+      console.log('✅ Batch payment statuses verified as COMPLETED (1)');
+    });
+
+    test('should set payment status to COMPLETED for recurring payments', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Recurring Status Corp', 'COMP_STATUS_003');
+
+      payroll.addEmployee('EMP_RECURRING_STATUS');
+      payroll.depositCompanyFunds(500000n);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const nextPaymentDate = currentTimestamp + 30n;
+
+      // Create weekly recurring payment
+      payroll.createRecurringPayment(
+        'COMP_STATUS_003',        // company_id
+        'EMP_RECURRING_STATUS',  // employee_id
+        10000n,                   // amount
+        0n,                       // frequency (WEEKLY)
+        startDate,                // start_date
+        0n,                       // end_date (never)
+        nextPaymentDate,          // next_payment_date
+        0n,                       // payment_day_of_month_1
+        0n,                       // payment_day_of_month_2
+        5n                        // payment_day_of_week (Friday)
+      );
+
+      // Advance time to when payment is due
+      payroll.updateTimestamp(Number(currentTimestamp + 35n));
+
+      // Process the payment
+      payroll.processRecurringPayment('COMP_STATUS_003', 'EMP_RECURRING_STATUS');
+
+      const ledger = payroll.getLedgerState();
+      const empId = stringToBytes32('EMP_RECURRING_STATUS');
+      const history = ledger.employee_payment_history.lookup(empId);
+
+      // Last entry should have status = COMPLETED (1)
+      expect(history[11].status).toBe(PaymentStatus.COMPLETED);
+
+      console.log('✅ Recurring payment status verified as COMPLETED (1)');
+    });
+
+    test('should have status=0 for empty payment records', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Empty Status Corp', 'COMP_STATUS_004');
+
+      payroll.addEmployee('EMP_EMPTY');
+
+      const ledger = payroll.getLedgerState();
+      const empId = stringToBytes32('EMP_EMPTY');
+      const history = ledger.employee_payment_history.lookup(empId);
+
+      // All empty records should have status = 0 (PENDING)
+      for (let i = 0; i < 12; i++) {
+        expect(history[i].status).toBe(PaymentStatus.PENDING);
+        expect(history[i].timestamp).toBe(0n);
+      }
+
+      console.log('✅ Empty payment records have status = 0 (PENDING)');
     });
   });
 });

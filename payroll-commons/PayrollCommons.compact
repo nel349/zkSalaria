@@ -8,6 +8,11 @@ module PayrollCommons {
   export pure circuit PAYMENT_TYPE_ADVANCE(): Uint<8> { return 1 as Uint<8>; }
   export pure circuit PAYMENT_TYPE_BONUS(): Uint<8> { return 2 as Uint<8>; }
 
+  // Payment status constants for tracking payment state
+  export pure circuit PAYMENT_STATUS_PENDING(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit PAYMENT_STATUS_COMPLETED(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit PAYMENT_STATUS_FAILED(): Uint<8> { return 2 as Uint<8>; }
+
   // Disclosure permission types for selective disclosure
   export pure circuit PERMISSION_TYPE_INCOME_RANGE(): Uint<8> { return 0 as Uint<8>; }
   export pure circuit PERMISSION_TYPE_EMPLOYMENT(): Uint<8> { return 1 as Uint<8>; }
@@ -21,6 +26,7 @@ module PayrollCommons {
     encrypted_amount: Bytes<32>;   // Payment amount (encrypted with employee key)
     company_id: Bytes<32>;         // Which company paid
     payment_type: Uint<8>;         // 0=salary, 1=advance, 2=bonus
+    status: Uint<8>;               // 0=pending, 1=completed, 2=failed
   }
 
   // Disclosure authorization for selective disclosure (bank.compact pattern)
@@ -88,13 +94,15 @@ module PayrollCommons {
     timestamp: Uint<32>,
     encrypted_amount: Bytes<32>,
     company_id: Bytes<32>,
-    payment_type: Uint<8>
+    payment_type: Uint<8>,
+    status: Uint<8>
   ): PaymentRecord {
     return PaymentRecord {
       timestamp: timestamp,
       encrypted_amount: encrypted_amount,
       company_id: company_id,
-      payment_type: payment_type
+      payment_type: payment_type,
+      status: status
     };
   }
 
@@ -104,7 +112,8 @@ module PayrollCommons {
       timestamp: 0 as Uint<32>,
       encrypted_amount: pad(32, ""),  // Empty encrypted amount
       company_id: pad(32, ""),
-      payment_type: 0 as Uint<8>
+      payment_type: 0 as Uint<8>,
+      status: 0 as Uint<8>  // Empty records have no status
     };
 
     return [

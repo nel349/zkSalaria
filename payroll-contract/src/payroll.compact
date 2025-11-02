@@ -323,7 +323,8 @@ export circuit pay_employee(
     current_timestamp,
     encrypted_payment_amount,  // Encrypted amount (not plain text!)
     company_id,  // This contract's company ID (from ledger)
-    PC_PAYMENT_TYPE_SALARY()
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()  // Payment successful
   );
 
   // Append to history (shifts old records out)
@@ -393,7 +394,8 @@ export circuit batch_pay_employees(
         current_timestamp,
         encrypted_payment_amount,
         company_id,
-        PC_PAYMENT_TYPE_SALARY()
+        PC_PAYMENT_TYPE_SALARY(),
+        PC_PAYMENT_STATUS_COMPLETED()  // Payment successful
       );
 
       // Append to history and save to LEDGER
@@ -973,7 +975,8 @@ export circuit process_recurring_payment(
     current_timestamp,
     encrypted_payment_amount,  // Use encrypted amount for privacy
     payment.company_id,
-    PC_PAYMENT_TYPE_SALARY()
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()  // Payment successful
   );
 
   const current_history = employee_payment_history.lookup(payment.employee_id);
