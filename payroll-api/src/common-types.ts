@@ -65,6 +65,7 @@ export const emptyPayrollState: PayrollDerivedState = {
 export type CompanyInfo = {
   companyId: string;
   exists: boolean;
+  companyName?: string; // Only present if exists=true
   balance?: bigint; // Encrypted balance - requires decryption
 };
 

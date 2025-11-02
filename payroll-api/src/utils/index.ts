@@ -68,3 +68,29 @@ export const normalizeId = (id: string): string => {
   const truncated = encoded.slice(0, 32);
   return new TextDecoder().decode(truncated);
 };
+
+// Convert Bytes<32> to string (remove null padding)
+export const bytes32ToString = (bytes: Uint8Array): string => {
+  const decoder = new TextDecoder();
+  let end = bytes.length;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) {
+      end = i;
+      break;
+    }
+  }
+  return decoder.decode(bytes.slice(0, end));
+};
+
+// Convert Bytes<64> to string (remove null padding)
+export const bytes64ToString = (bytes: Uint8Array): string => {
+  const decoder = new TextDecoder();
+  let end = bytes.length;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) {
+      end = i;
+      break;
+    }
+  }
+  return decoder.decode(bytes.slice(0, end));
+};

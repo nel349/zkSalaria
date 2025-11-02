@@ -17,8 +17,25 @@ export {
 export {
   type PayrollPrivateState,
   type PaymentRecord,
+  type RecurringPayment,
   createPayrollPrivateState,
   payrollWitnesses,
+  // Payment constants
+  PaymentType,
+  PaymentStatus,
+  RecurringPaymentStatus,
+  RecurringPaymentFrequency,
+  EmploymentStatus,
+  PermissionType,
+  // Additional shared types
+  type CompanyData,
+  type EmployeeData,
+  type BalanceInfo,
+  type PaymentHistoryInfo,
+  type CreditScoreThreshold,
+  CREDIT_THRESHOLDS,
+  TransactionStatus,
+  CircuitName,
 } from '@zksalaria/payroll-contract';
 
 // Re-export common types

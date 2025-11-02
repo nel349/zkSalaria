@@ -44,3 +44,5 @@ yarn.lock
 payroll-api/public/
 competition/
 pay-ui/public/
+payroll-ui/public/
+payroll-api/managed/

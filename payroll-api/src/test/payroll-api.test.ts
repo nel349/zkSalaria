@@ -102,7 +102,8 @@ describe('PayrollAPI', () => {
       const employeeId = `lifecycle-employee-${Date.now()}`;
 
       logger.info('Deploying Payroll contract for lifecycle test…');
-      const contractAddress = await PayrollAPI.deploy(providers, logger);
+      // Note: Company registration happens during deployment
+      const contractAddress = await PayrollAPI.deploy(providers, companyId, companyName, logger);
 
       // Connect API instances
       logger.info('Connecting company API instance…');
@@ -117,14 +118,10 @@ describe('PayrollAPI', () => {
       let state = await firstValueFrom(companyAPI.state$);
       expect(state.totalSupply).toBeGreaterThan(0n);
 
-      // Register company
-      logger.info('Registering company…');
-      await companyAPI.registerCompany(companyId, companyName);
-      state = await firstValueFrom(companyAPI.state$);
-      expect(state.totalCompanies).toBe(1n);
-
+      // Verify company exists (registered during deployment)
       const companyInfo = await companyAPI.getCompanyInfo(companyId);
       expect(companyInfo.exists).toBe(true);
+      expect(companyInfo.companyName).toBe(companyName);
 
       // Deposit company funds
       logger.info('Depositing company funds…');
@@ -162,7 +159,7 @@ describe('PayrollAPI', () => {
 
     test('should update timestamp', async () => {
       logger.info('Deploying contract for timestamp test…');
-      const contractAddress = await PayrollAPI.deploy(providers, logger);
+      const contractAddress = await PayrollAPI.deploy(providers, 'test-company', 'Test Company', logger);
       const api = await PayrollAPI.connect(providers, contractAddress, 'timestamp-test', logger);
 
       const newTimestamp = Math.floor(Date.now() / 1000);
@@ -172,40 +169,37 @@ describe('PayrollAPI', () => {
       expect(state.currentTimestamp).toBe(newTimestamp);
     }, 2 * 60_000);
 
-    test('should handle multiple companies and employees', async () => {
-      logger.info('Deploying contract for multi-company test…');
-      const contractAddress = await PayrollAPI.deploy(providers, logger);
-      const api = await PayrollAPI.connect(providers, contractAddress, 'multi-test', logger);
+    test('should handle multiple employees', async () => {
+      logger.info('Deploying contract for multi-employee test…');
+      const companyId = 'test-company';
+      const contractAddress = await PayrollAPI.deploy(providers, companyId, 'Test Company', logger);
+      const api = await PayrollAPI.connect(providers, contractAddress, companyId, logger);
 
       // Mint tokens (1 tx)
       await api.mintTokens('1000000.00');
 
-      // Register 2 companies (2 tx)
-      await api.registerCompany('company-1', 'Company One');
-      await api.registerCompany('company-2', 'Company Two');
-
+      // Note: Company registered during deployment (totalCompanies always 1)
       let state = await firstValueFrom(api.state$);
-      expect(state.totalCompanies).toBe(2n);
+      expect(state.totalCompanies).toBe(1n);
 
-      // Add 2 employees (2 tx) - reduced from 3
-      await api.addEmployee('company-1', 'employee-1');
-      await api.addEmployee('company-2', 'employee-2');
+      // Add 2 employees (2 tx)
+      await api.addEmployee(companyId, 'employee-1');
+      await api.addEmployee(companyId, 'employee-2');
 
       state = await firstValueFrom(api.state$);
       expect(state.totalEmployees).toBe(2n);
 
-      // Deposit for companies (2 tx)
-      await api.depositCompanyFunds('company-1', '10000.00');
-      await api.depositCompanyFunds('company-2', '10000.00');
+      // Deposit company funds (1 tx)
+      await api.depositCompanyFunds(companyId, '20000.00');
 
-      // Pay employees (2 tx) - reduced from 3
-      await api.payEmployee('company-1', 'employee-1', '1000.00');
-      await api.payEmployee('company-2', 'employee-2', '2000.00');
+      // Pay employees (2 tx)
+      await api.payEmployee(companyId, 'employee-1', '1000.00');
+      await api.payEmployee(companyId, 'employee-2', '2000.00');
 
       state = await firstValueFrom(api.state$);
       expect(state.totalPayments).toBe(2n);
 
-      logger.info('✅ Multi-company test completed successfully');
-    }, 5 * 60_000); // 5 minutes - 10 transactions * ~24s each = ~240s
+      logger.info('✅ Multi-employee test completed successfully');
+    }, 5 * 60_000); // 5 minutes
   });
 });

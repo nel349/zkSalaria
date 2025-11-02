@@ -19,6 +19,11 @@ import {
   ledger,
   payrollWitnesses,
   type PaymentRecord,
+  type RecurringPayment,
+  RecurringPaymentFrequency,
+  calculateNextPaymentDate,
+  getStandardCalendarConfig,
+  toUnixTimestamp,
 } from '@zksalaria/payroll-contract';
 import * as utils from './utils/index';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
@@ -36,7 +41,7 @@ export interface DeployedPayrollAPI {
   readonly userId: string;
 
   // Company operations
-  registerCompany(companyId: string, companyName: string): Promise<void>;
+  // Note: Company registration happens during deploy(), not via separate method
   depositCompanyFunds(companyId: string, amount: string): Promise<void>;
   getCompanyInfo(companyId: string): Promise<CompanyInfo>;
 
@@ -52,6 +57,26 @@ export interface DeployedPayrollAPI {
   // System operations
   updateTimestamp(newTimestamp: number): Promise<void>;
   mintTokens(amount: string): Promise<void>;
+
+  // Recurring payment operations
+  createRecurringPayment(
+    companyId: string,
+    employeeId: string,
+    amount: string,
+    frequency: bigint,
+    startDate: Date,
+    endDate: Date | null,
+    dayOfWeek?: number
+  ): Promise<void>;
+  pauseRecurringPayment(recurringPaymentId: string): Promise<void>;
+  resumeRecurringPayment(recurringPaymentId: string): Promise<void>;
+  editRecurringPayment(recurringPaymentId: string, newAmount: string): Promise<void>;
+  processRecurringPayment(recurringPaymentId: string): Promise<void>;
+  getRecurringPayment(recurringPaymentId: string): Promise<RecurringPayment | null>;
+  getRecurringPaymentByEmployee(employeeId: string): Promise<RecurringPayment | null>;
+
+  // Batch payment operations
+  batchPayEmployees(companyId: string, payments: Array<{ employeeId: string; amount: string }>): Promise<void>;
 }
 
 /**
@@ -97,7 +122,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
       ],
       (ledgerState, privateState, userActions) => {
         const result: PayrollDerivedState = {
-          totalCompanies: ledgerState.total_companies,
+          // Note: One contract per company (battleship pattern), so totalCompanies always 1
+          totalCompanies: 1n,
           totalEmployees: ledgerState.total_employees,
           totalPayments: ledgerState.total_payments,
           totalSupply: ledgerState.total_supply,
@@ -127,17 +153,27 @@ export class PayrollAPI implements DeployedPayrollAPI {
   /**
    * Deploy a new payroll contract
    * Following bank-api deploy pattern with retry logic
+   * @param companyId - Unique identifier for the company
+   * @param companyName - Name of the company
    */
   static async deploy(
     providers: PayrollProviders,
+    companyId: string,
+    companyName: string,
     logger: Logger,
   ): Promise<ContractAddress> {
-    logger.info({ deployPayrollContract: {} });
+    logger.info({ deployPayrollContract: { companyId, companyName } });
 
     // Retry logic for transient failures
     const maxAttempts = 5;
     let lastError: unknown;
     let deployedPayrollContract: DeployedPayrollContract | undefined;
+
+    // Constructor parameters: initNonce, companyId, companyName, initialTimestamp
+    const initNonce = utils.randomBytes(32);
+    const companyIdBytes = utils.stringToBytes32(companyId);
+    const companyNameBytes = utils.stringToBytes64(companyName);
+    const initialTimestamp = BigInt(Math.floor(Date.now() / 1000));
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -145,7 +181,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
           privateStateId: 'deploy' as AccountId,
           contract: payrollContract,
           initialPrivateState: createPayrollPrivateState(),
-          args: [utils.randomBytes(32)],
+          args: [initNonce, companyIdBytes, companyNameBytes, initialTimestamp],
         });
         break;
       } catch (err) {
@@ -201,23 +237,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // COMPANY OPERATIONS
   // ========================================
 
-  async registerCompany(companyId: string, companyName: string): Promise<void> {
-    this.logger?.info({ registerCompany: { companyId, companyName } });
-    this.transactions$.next({
-      transaction: {
-        type: 'register_company',
-        timestamp: new Date(),
-        companyId,
-        companyName,
-      },
-      cancelledTransaction: undefined,
-    });
-
-    const companyIdBytes = utils.stringToBytes32(companyId);
-    const companyNameBytes = utils.stringToBytes64(companyName);
-
-    await this.deployedContract.callTx.register_company(companyIdBytes, companyNameBytes);
-  }
+  // Note: Company registration happens during contract deployment (constructor)
+  // No separate registerCompany() method needed
 
   async depositCompanyFunds(companyId: string, amount: string): Promise<void> {
     this.logger?.info({ depositCompanyFunds: { companyId, amount } });
@@ -231,14 +252,13 @@ export class PayrollAPI implements DeployedPayrollAPI {
       cancelledTransaction: undefined,
     });
 
-    const companyIdBytes = utils.stringToBytes32(companyId);
-
-    await this.deployedContract.callTx.deposit_company_funds(companyIdBytes, utils.parseAmount(amount));
+    // Note: deposit_company_funds circuit only takes amount parameter
+    // CompanyId is stored in contract ledger state (one contract per company)
+    await this.deployedContract.callTx.deposit_company_funds(utils.parseAmount(amount));
   }
 
   async getCompanyInfo(companyId: string): Promise<CompanyInfo> {
     const normalizedId = utils.normalizeId(companyId);
-    const companyIdBytes = utils.stringToBytes32(normalizedId);
 
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {
@@ -246,13 +266,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     const ledgerState = ledger(state.data);
-    const exists = ledgerState.company_accounts.member(companyIdBytes);
+    // Note: One contract per company - check if company_id matches
+    const storedCompanyId = utils.bytes32ToString(ledgerState.company_id);
+    const exists = storedCompanyId === normalizedId;
 
-    // Note: Balance is encrypted - would need decryption key to read actual value
-    // For now, just return whether company exists
     return {
       companyId: normalizedId,
       exists,
+      companyName: exists ? utils.bytes64ToString(ledgerState.company_name) : undefined,
     };
   }
 
@@ -272,10 +293,11 @@ export class PayrollAPI implements DeployedPayrollAPI {
       cancelledTransaction: undefined,
     });
 
-    const companyIdBytes = utils.stringToBytes32(companyId);
     const employeeIdBytes = utils.stringToBytes32(employeeId);
 
-    await this.deployedContract.callTx.add_employee(companyIdBytes, employeeIdBytes);
+    // Note: add_employee circuit signature: (employee_id)
+    // CompanyId comes from contract ledger state (one contract per company)
+    await this.deployedContract.callTx.add_employee(employeeIdBytes);
   }
 
   async withdrawEmployeeSalary(employeeId: string, amount: string): Promise<void> {
@@ -311,8 +333,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
     let paymentHistoryCount = 0;
     if (exists && ledgerState.employee_payment_history.member(employeeIdBytes)) {
       const history = ledgerState.employee_payment_history.lookup(employeeIdBytes);
-      // Count non-zero payments (empty records have amount = 0)
-      paymentHistoryCount = history.filter((record: PaymentRecord) => record.amount > 0n).length;
+      // Count non-empty payments (empty records have timestamp = 0)
+      paymentHistoryCount = history.filter((record: PaymentRecord) => record.timestamp > 0).length;
     }
 
     return {
@@ -339,10 +361,11 @@ export class PayrollAPI implements DeployedPayrollAPI {
       cancelledTransaction: undefined,
     });
 
-    const companyIdBytes = utils.stringToBytes32(companyId);
     const employeeIdBytes = utils.stringToBytes32(employeeId);
 
-    await this.deployedContract.callTx.pay_employee(companyIdBytes, employeeIdBytes, utils.parseAmount(amount));
+    // Note: pay_employee circuit signature: (employee_id, salary_amount)
+    // CompanyId comes from contract ledger state (one contract per company)
+    await this.deployedContract.callTx.pay_employee(employeeIdBytes, utils.parseAmount(amount));
   }
 
   async getEmployeePaymentHistory(employeeId: string): Promise<PaymentRecord[]> {
@@ -361,8 +384,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     const history = ledgerState.employee_payment_history.lookup(employeeIdBytes);
-    // Filter out empty records (amount = 0)
-    return history.filter((record: PaymentRecord) => record.amount > 0n);
+    // Filter out empty records (timestamp = 0)
+    return history.filter((record: PaymentRecord) => record.timestamp > 0);
   }
 
   // ========================================
@@ -387,6 +410,172 @@ export class PayrollAPI implements DeployedPayrollAPI {
     });
 
     await this.deployedContract.callTx.mint_tokens(utils.parseAmount(amount));
+  }
+
+  // ========================================
+  // RECURRING PAYMENT OPERATIONS
+  // ========================================
+
+  async createRecurringPayment(
+    companyId: string,
+    employeeId: string,
+    amount: string,
+    frequency: bigint,
+    startDate: Date,
+    endDate: Date | null,
+    dayOfWeek: number = 5 // Default to Friday for weekly
+  ): Promise<void> {
+    this.logger?.info({ createRecurringPayment: { companyId, employeeId, amount, frequency, startDate, endDate } });
+
+    // Get standard calendar configuration based on frequency
+    const calendarConfig = getStandardCalendarConfig(frequency, dayOfWeek);
+
+    // Calculate next payment date using contract's calendar utilities
+    const nextPaymentDate = calculateNextPaymentDate(startDate, frequency, dayOfWeek);
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    const startTimestamp = toUnixTimestamp(startDate);
+    const endTimestamp = endDate ? toUnixTimestamp(endDate) : 0n;
+    const nextPaymentTimestamp = toUnixTimestamp(nextPaymentDate);
+
+    await this.deployedContract.callTx.create_recurring_payment(
+      employeeIdBytes,
+      utils.parseAmount(amount),
+      frequency,
+      startTimestamp,
+      endTimestamp,
+      nextPaymentTimestamp,
+      calendarConfig.paymentDayOfMonth1,
+      calendarConfig.paymentDayOfMonth2,
+      calendarConfig.paymentDayOfWeek
+    );
+  }
+
+  async pauseRecurringPayment(recurringPaymentId: string): Promise<void> {
+    this.logger?.info({ pauseRecurringPayment: { recurringPaymentId } });
+
+    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    await this.deployedContract.callTx.pause_recurring_payment(idBytes);
+  }
+
+  async resumeRecurringPayment(recurringPaymentId: string): Promise<void> {
+    this.logger?.info({ resumeRecurringPayment: { recurringPaymentId } });
+
+    const idBytes = utils.stringToBytes32(recurringPaymentId);
+
+    // Get the recurring payment to determine frequency and dayOfWeek
+    const payment = await this.getRecurringPayment(recurringPaymentId);
+    if (!payment) {
+      throw new Error('Recurring payment not found');
+    }
+
+    // Calculate next payment date based on current time
+    const dayOfWeek = payment.frequency === RecurringPaymentFrequency.WEEKLY ? Number(payment.payment_day_of_week) : 5;
+    const nextPaymentDate = calculateNextPaymentDate(new Date(), payment.frequency, dayOfWeek);
+    const nextPaymentTimestamp = toUnixTimestamp(nextPaymentDate);
+
+    await this.deployedContract.callTx.resume_recurring_payment(idBytes, nextPaymentTimestamp);
+  }
+
+  async editRecurringPayment(recurringPaymentId: string, newAmount: string): Promise<void> {
+    this.logger?.info({ editRecurringPayment: { recurringPaymentId, newAmount } });
+
+    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    await this.deployedContract.callTx.edit_recurring_payment(idBytes, utils.parseAmount(newAmount));
+  }
+
+  async processRecurringPayment(recurringPaymentId: string): Promise<void> {
+    this.logger?.info({ processRecurringPayment: { recurringPaymentId } });
+
+    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    await this.deployedContract.callTx.process_recurring_payment(idBytes);
+  }
+
+  async getRecurringPayment(recurringPaymentId: string): Promise<RecurringPayment | null> {
+    const normalizedId = utils.normalizeId(recurringPaymentId);
+    const idBytes = utils.stringToBytes32(normalizedId);
+
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return null;
+    }
+
+    const ledgerState = ledger(state.data);
+
+    if (!ledgerState.recurring_payments.member(idBytes)) {
+      return null;
+    }
+
+    return ledgerState.recurring_payments.lookup(idBytes);
+  }
+
+  async getRecurringPaymentByEmployee(employeeId: string): Promise<RecurringPayment | null> {
+    const normalizedId = utils.normalizeId(employeeId);
+    const employeeIdBytes = utils.stringToBytes32(normalizedId);
+
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return null;
+    }
+
+    const ledgerState = ledger(state.data);
+
+    // Check if employee has a recurring payment
+    if (!ledgerState.recurring_payment_by_employee.member(employeeIdBytes)) {
+      return null;
+    }
+
+    // Get the recurring payment ID
+    const recurringPaymentId = ledgerState.recurring_payment_by_employee.lookup(employeeIdBytes);
+
+    // Get the actual recurring payment
+    if (!ledgerState.recurring_payments.member(recurringPaymentId)) {
+      return null;
+    }
+
+    return ledgerState.recurring_payments.lookup(recurringPaymentId);
+  }
+
+  // ========================================
+  // BATCH PAYMENT OPERATIONS
+  // ========================================
+
+  async batchPayEmployees(
+    companyId: string,
+    payments: Array<{ employeeId: string; amount: string }>
+  ): Promise<void> {
+    this.logger?.info({ batchPayEmployees: { companyId, paymentCount: payments.length } });
+
+    // Convert to Vector<10, BatchPaymentEntry> format
+    // Fill unused slots with empty entries (amount=0)
+    const batchEntries: Array<{ employee_id: Uint8Array; amount: bigint }> = [];
+
+    for (let i = 0; i < 10; i++) {
+      if (i < payments.length) {
+        const payment = payments[i];
+        batchEntries.push({
+          employee_id: utils.stringToBytes32(payment.employeeId),
+          amount: utils.parseAmount(payment.amount),
+        });
+      } else {
+        // Empty slot
+        batchEntries.push({
+          employee_id: new Uint8Array(32),
+          amount: 0n,
+        });
+      }
+    }
+
+    this.transactions$.next({
+      transaction: {
+        type: 'pay_salary',
+        timestamp: new Date(),
+        companyId,
+      },
+      cancelledTransaction: undefined,
+    });
+
+    await this.deployedContract.callTx.batch_pay_employees(batchEntries);
   }
 }
 
