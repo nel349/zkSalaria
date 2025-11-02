@@ -31,6 +31,13 @@ export enum PermissionType {
   AUDIT = 3
 }
 
+// Recurring payment frequency constants (matches PayrollCommons.compact)
+export const RecurringPaymentFrequency = {
+  WEEKLY: 0n,
+  BIWEEKLY: 1n,
+  MONTHLY: 2n,
+} as const;
+
 // Payment record structure (matches PayrollCommons.compact PaymentRecord)
 // NOTE: All numeric types use bigint to match Compact runtime expectations
 // NOTE: Amounts are ENCRYPTED for privacy - employee decrypts locally for ZKML
@@ -42,6 +49,7 @@ export interface PaymentRecord {
 }
 
 // Recurring payment structure (matches PayrollCommons.compact RecurringPayment)
+// Calendar configuration stored; API calculates actual dates using JavaScript Date libraries
 export interface RecurringPayment {
   recurring_payment_id: Uint8Array;  // Bytes<32> - Unique payment schedule ID
   company_id: Uint8Array;            // Bytes<32> - Which company
@@ -50,7 +58,13 @@ export interface RecurringPayment {
   frequency: bigint;                 // Uint<8> - 0=weekly, 1=bi-weekly, 2=monthly
   start_date: bigint;                // Uint<32> - Unix timestamp when payments begin
   end_date: bigint;                  // Uint<32> - Unix timestamp when payments end (0 = never)
-  next_payment_date: bigint;         // Uint<32> - Next scheduled payment timestamp
+  next_payment_date: bigint;         // Uint<32> - Next scheduled payment (API-calculated)
+
+  // Calendar configuration (API uses these to calculate next_payment_date)
+  payment_day_of_month_1: bigint;    // Uint<8> - For monthly: 1-31, biweekly: 1st day (e.g., 1), weekly: 0 (unused)
+  payment_day_of_month_2: bigint;    // Uint<8> - For biweekly: 2nd day (e.g., 15), others: 0 (unused)
+  payment_day_of_week: bigint;       // Uint<8> - For weekly: 0-6 (0=Sunday, 5=Friday), others: 0 (unused)
+
   status: bigint;                    // Uint<8> - 0=active, 1=paused, 2=cancelled
   created_at: bigint;                // Uint<32> - Creation timestamp
   last_updated: bigint;              // Uint<32> - Last modification timestamp

@@ -215,7 +215,11 @@ export class PayrollMultiPartyTestSetup {
     amount: bigint,
     frequency: bigint,
     startDate: bigint,
-    endDate: bigint
+    endDate: bigint,
+    nextPaymentDate: bigint,
+    paymentDayOfMonth1: bigint = 0n,
+    paymentDayOfMonth2: bigint = 0n,
+    paymentDayOfWeek: bigint = 0n
   ): Ledger {
     console.log(`🔁 ${companyId} creating recurring payment for ${employeeId}: ${amount} (frequency: ${frequency})`);
 
@@ -227,13 +231,19 @@ export class PayrollMultiPartyTestSetup {
 
     this.executeAsParticipant(
       companyId,
-      (ctx, eidBytes, amt, freq, start, end) =>
-        this.contract.impureCircuits.create_recurring_payment(ctx, eidBytes, amt, freq, start, end),
+      (ctx, eidBytes, amt, freq, start, end, nextPmt, day1, day2, dow) =>
+        this.contract.impureCircuits.create_recurring_payment(
+          ctx, eidBytes, amt, freq, start, end, nextPmt, day1, day2, dow
+        ),
       employeeIdBytes,
       amount,
       frequency,
       startDate,
-      endDate
+      endDate,
+      nextPaymentDate,
+      paymentDayOfMonth1,
+      paymentDayOfMonth2,
+      paymentDayOfWeek
     );
 
     return this.getLedgerState();
@@ -264,7 +274,7 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Resume paused recurring payment
-  resumeRecurringPayment(companyId: string, employeeId: string): Ledger {
+  resumeRecurringPayment(companyId: string, employeeId: string, nextPaymentDate: bigint): Ledger {
     console.log(`▶️  ${companyId} resuming recurring payment for ${employeeId}`);
 
     // Get the recurring payment ID from the lookup map
@@ -280,8 +290,9 @@ export class PayrollMultiPartyTestSetup {
 
     this.executeAsParticipant(
       companyId,
-      (ctx, rpId) => this.contract.impureCircuits.resume_recurring_payment(ctx, rpId),
-      recurringPaymentId
+      (ctx, rpId, nextPmt) => this.contract.impureCircuits.resume_recurring_payment(ctx, rpId, nextPmt),
+      recurringPaymentId,
+      nextPaymentDate
     );
 
     return this.getLedgerState();

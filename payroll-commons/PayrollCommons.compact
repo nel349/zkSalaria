@@ -62,6 +62,7 @@ module PayrollCommons {
   }
 
   // Recurring payment record for automated salary payments
+  // Calendar configuration is stored; API calculates actual dates using Date libraries
   export struct RecurringPayment {
     recurring_payment_id: Bytes<32>;       // Unique ID
     company_id: Bytes<32>;                  // Which company
@@ -70,7 +71,13 @@ module PayrollCommons {
     frequency: Uint<8>;                     // 0=weekly, 1=bi-weekly, 2=monthly
     start_date: Uint<32>;                   // When payments start
     end_date: Uint<32>;                     // When payments end (0=never)
-    next_payment_date: Uint<32>;            // Next scheduled payment
+    next_payment_date: Uint<32>;            // Next scheduled payment (API-calculated)
+
+    // Calendar configuration (API uses these to calculate next_payment_date)
+    payment_day_of_month_1: Uint<8>;       // For monthly: 1-31, biweekly: 1st day (e.g., 1), weekly: 0 (unused)
+    payment_day_of_month_2: Uint<8>;       // For biweekly: 2nd day (e.g., 15), others: 0 (unused)
+    payment_day_of_week: Uint<8>;          // For weekly: 0-6 (0=Sunday, 5=Friday), others: 0 (unused)
+
     status: Uint<8>;                        // 0=active, 1=paused, 2=cancelled
     created_at: Uint<32>;
     last_updated: Uint<32>;
@@ -202,8 +209,10 @@ module PayrollCommons {
     ]);
   }
 
-  // Calculate next payment date based on frequency
-  // Frequency: 0=weekly (7 days), 1=bi-weekly (14 days), 2=monthly (30 days)
+  // NOTE: Date calculations are now handled by API layer using JavaScript Date libraries
+  // The contract just stores calendar configuration and validates API-provided dates
+
+  // Legacy function - simple rolling schedule (kept for backward compatibility)
   export pure circuit calculate_next_payment_date(
     current_date: Uint<32>,
     frequency: Uint<8>

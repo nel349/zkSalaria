@@ -15,6 +15,9 @@ export type Contract<T, W extends Witnesses<T> = Witnesses<T>> = ContractType<T,
 // Re-export shared types
 export * from './types';
 
+// Re-export calendar utilities for API layer
+export * from './utils/calendar';
+
 // Create initial private state for payroll
 // NOTE: Payment history now stored on public ledger (not witnesses) following bank.compact pattern
 // Balances are encrypted on public ledger

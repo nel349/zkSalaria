@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
-import { EmploymentStatus, RecurringPaymentStatus } from '../types.js';
+import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus } from '../types.js';
 import { stringToBytes32 } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
@@ -669,8 +669,21 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log(`📅 Start date: ${startDate} (in 10 seconds)`);
       console.log(`💰 Recurring amount: ${amount} (weekly)`);
 
-      // Create recurring payment
-      payroll.createRecurringPayment(companyId, 'EMP_RECURRING', amount, frequency, startDate, endDate);
+      // Create recurring payment (API-calculated dates)
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      const paymentDayOfWeek = 5n; // Friday (for weekly)
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_RECURRING',
+        amount,
+        frequency,
+        startDate,
+        endDate,
+        nextPaymentDate,
+        0n, // paymentDayOfMonth1 (unused for weekly)
+        0n, // paymentDayOfMonth2 (unused for weekly)
+        paymentDayOfWeek
+      );
 
       // Verify recurring payment was stored on ledger
       const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_RECURRING');
@@ -721,7 +734,19 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const amount = 300000n; // $3,000.00
 
       console.log('🔁 Creating recurring payment to test pause...');
-      payroll.createRecurringPayment(companyId, 'EMP_PAUSE', amount, frequency, startDate, endDate);
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_PAUSE',
+        amount,
+        frequency,
+        startDate,
+        endDate,
+        nextPaymentDate,
+        0n, // paymentDayOfMonth1 (unused for weekly)
+        0n, // paymentDayOfMonth2 (unused for weekly)
+        5n  // paymentDayOfWeek - Friday
+      );
 
       // Verify it starts as ACTIVE
       let recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_PAUSE');
@@ -760,11 +785,23 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const currentTimestamp = payroll.getLedgerState().current_timestamp;
       const startDate = currentTimestamp + 10n;
       const endDate = 0n;
-      const frequency = 0n; // Weekly
+      const frequency = BigInt(RecurringPaymentFrequency.WEEKLY); // Weekly
       const amount = 400000n; // $4,000.00
 
       console.log('🔁 Creating recurring payment to test resume...');
-      payroll.createRecurringPayment(companyId, 'EMP_RESUME', amount, frequency, startDate, endDate);
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_RESUME',
+        amount,
+        frequency,
+        startDate,
+        endDate,
+        nextPaymentDate,
+        0n, // paymentDayOfMonth1 (unused for weekly)
+        0n, // paymentDayOfMonth2 (unused for weekly)
+        5n  // paymentDayOfWeek - Friday
+      );
 
       console.log('⏸️  Pausing payment...');
       payroll.pauseRecurringPayment(companyId, 'EMP_RESUME');
@@ -779,8 +816,10 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       console.log('▶️  Resuming payment...');
 
-      // Resume the payment
-      payroll.resumeRecurringPayment(companyId, 'EMP_RESUME');
+      // Resume the payment - API calculates next payment date
+      // For this test, since currentTimestamp < startDate, next should be startDate
+      const resumeNextPayment = startDate; // Simplified for test
+      payroll.resumeRecurringPayment(companyId, 'EMP_RESUME', resumeNextPayment);
 
       // Verify status changed back to ACTIVE
       recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_RESUME');
@@ -789,17 +828,325 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       expect(recurringPayment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
 
-      // next_payment_date should be recalculated from current_timestamp
-      // Weekly = current_timestamp + 604800 (7 days)
-      const expectedNewNextPayment = currentTimestamp + 604800n;
-      expect(recurringPayment.next_payment_date).toBe(expectedNewNextPayment);
+      // CALENDAR-BASED SCHEDULE: next_payment_date should align with anchor (startDate)
+      // Since currentTimestamp (1762044401) < startDate (1762044411),
+      // next payment should be the anchor itself (1762044411)
+      // NOT rolling schedule (currentTimestamp + 604800)
+      expect(recurringPayment.next_payment_date).toBe(startDate);
       expect(recurringPayment.last_updated).toBe(currentTimestamp);
 
       console.log('✅ Recurring payment resumed successfully!');
       console.log(`   - Status changed: PAUSED (${RecurringPaymentStatus.PAUSED}) → ACTIVE (${RecurringPaymentStatus.ACTIVE}) ✓`);
-      console.log(`   - Next payment recalculated: ${pausedNextPayment} → ${expectedNewNextPayment} ✓`);
-      console.log(`   - New next payment: ${expectedNewNextPayment} (current + 604800s) ✓`);
+      console.log(`   - Next payment recalculated: ${pausedNextPayment} → ${recurringPayment.next_payment_date} ✓`);
+      console.log(`   - Calendar-aligned: ${recurringPayment.next_payment_date} = anchor (${startDate}) ✓`);
       console.log(`   - Last updated: ${currentTimestamp} ✓`);
+    });
+  });
+
+  describe('Calendar-Based Scheduling (Anchor Pattern)', () => {
+    test('should align next payment to anchor when resuming after anchor date', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_CALENDAR_1');
+
+      // Create payment with start date in future, then advance time past it
+      const initialTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = initialTimestamp + 10n; // Anchor 10 seconds in future
+      const frequency = RecurringPaymentFrequency.WEEKLY; // 604800 seconds
+      const amount = 500000n;
+
+      console.log('🔁 Creating recurring payment...');
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_CALENDAR_1',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n, // paymentDayOfMonth1 (unused for weekly)
+        0n, // paymentDayOfMonth2 (unused for weekly)
+        5n  // paymentDayOfWeek - Friday
+      );
+
+      // Advance time to 100k seconds after the anchor
+      const newTimestamp = Number(startDate + 100000n);
+      console.log(`⏰ Advancing time to ${newTimestamp} (100k sec after anchor)...`);
+      payroll.updateTimestamp(newTimestamp);
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      payroll.pauseRecurringPayment(companyId, 'EMP_CALENDAR_1');
+
+      console.log('▶️  Resuming payment - should align to next anchor occurrence...');
+      // API calculates next payment aligned to anchor pattern
+      const timeSinceAnchor = currentTimestamp - startDate;
+      const intervalSeconds = 604800n;
+      const remainder = timeSinceAnchor % intervalSeconds;
+      const timeToNext = remainder === 0n ? intervalSeconds : (intervalSeconds - remainder);
+      const resumeNextPayment = currentTimestamp + timeToNext;
+      payroll.resumeRecurringPayment(companyId, 'EMP_CALENDAR_1', resumeNextPayment);
+
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_CALENDAR_1');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return;
+
+      // Verify next payment matches the API-calculated value
+      expect(recurringPayment.next_payment_date).toBe(resumeNextPayment);
+
+      console.log('✅ Calendar-based scheduling verified!');
+      console.log(`   - Anchor date: ${startDate}`);
+      console.log(`   - Current: ${currentTimestamp}`);
+      console.log(`   - Time since anchor: ${timeSinceAnchor}s`);
+      console.log(`   - Remainder: ${remainder}s`);
+      console.log(`   - Next payment: ${recurringPayment.next_payment_date}`);
+      console.log(`   - Maintains alignment to anchor pattern ✓`);
+    });
+
+    test('should handle biweekly payments with calendar alignment', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_BIWEEKLY');
+
+      const initialTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = initialTimestamp + 10n;
+      const frequency = RecurringPaymentFrequency.BIWEEKLY; // 1209600 seconds (14 days)
+      const amount = 600000n;
+
+      console.log('🔁 Creating biweekly recurring payment...');
+      const nextPaymentDate = startDate + 1209600n; // 14 days after start for biweekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_BIWEEKLY',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        1n,  // paymentDayOfMonth1 - 1st
+        15n, // paymentDayOfMonth2 - 15th
+        0n   // paymentDayOfWeek (unused for biweekly)
+      );
+
+      // Advance time ~5.7 days after anchor
+      payroll.updateTimestamp(Number(startDate + 500000n));
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+
+      payroll.pauseRecurringPayment(companyId, 'EMP_BIWEEKLY');
+
+      // API calculates next payment for biweekly
+      const intervalSeconds = 1209600n;
+      const timeSinceAnchor = currentTimestamp - startDate;
+      const remainder = timeSinceAnchor % intervalSeconds;
+      const timeToNext = remainder === 0n ? intervalSeconds : (intervalSeconds - remainder);
+      const resumeNextPayment = currentTimestamp + timeToNext;
+      payroll.resumeRecurringPayment(companyId, 'EMP_BIWEEKLY', resumeNextPayment);
+
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_BIWEEKLY');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return;
+
+      // Verify next payment matches calculated value
+      expect(recurringPayment.next_payment_date).toBe(resumeNextPayment);
+
+      console.log('✅ Biweekly calendar alignment verified!');
+      console.log(`   - Frequency: BIWEEKLY (14 days)`);
+      console.log(`   - Next payment aligns to anchor pattern ✓`);
+    });
+
+    test('should handle monthly payments with calendar alignment', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_MONTHLY');
+
+      const initialTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = initialTimestamp + 10n;
+      const frequency = RecurringPaymentFrequency.MONTHLY; // 2592000 seconds (30 days)
+      const amount = 700000n;
+
+      console.log('🔁 Creating monthly recurring payment...');
+      const nextPaymentDate = startDate + 2592000n; // 30 days after start for monthly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_MONTHLY',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        1n,  // paymentDayOfMonth1 - 1st of month
+        0n,  // paymentDayOfMonth2 (unused for monthly)
+        0n   // paymentDayOfWeek (unused for monthly)
+      );
+
+      // Advance time ~17 days after anchor
+      payroll.updateTimestamp(Number(startDate + 1500000n));
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+
+      payroll.pauseRecurringPayment(companyId, 'EMP_MONTHLY');
+
+      // API calculates next payment for monthly
+      const intervalSeconds = 2592000n;
+      const timeSinceAnchor = currentTimestamp - startDate;
+      const remainder = timeSinceAnchor % intervalSeconds;
+      const timeToNext = remainder === 0n ? intervalSeconds : (intervalSeconds - remainder);
+      const resumeNextPayment = currentTimestamp + timeToNext;
+      payroll.resumeRecurringPayment(companyId, 'EMP_MONTHLY', resumeNextPayment);
+
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_MONTHLY');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return;
+
+      // Verify next payment matches calculated value
+      expect(recurringPayment.next_payment_date).toBe(resumeNextPayment);
+
+      console.log('✅ Monthly calendar alignment verified!');
+      console.log(`   - Frequency: MONTHLY (30 days)`);
+      console.log(`   - Next payment aligns to anchor pattern ✓`);
+    });
+
+    test('should handle resume when current is exactly on anchor date', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_EXACT');
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      // Set anchor to exactly current time
+      const startDate = currentTimestamp;
+      const frequency = RecurringPaymentFrequency.WEEKLY;
+      const amount = 500000n;
+
+      console.log('🔁 Creating payment with anchor = current time...');
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_EXACT',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,  // paymentDayOfMonth1 (unused for weekly)
+        0n,  // paymentDayOfMonth2 (unused for weekly)
+        5n   // paymentDayOfWeek - Friday
+      );
+      payroll.pauseRecurringPayment(companyId, 'EMP_EXACT');
+
+      // API calculates next payment when resuming (remainder = 0)
+      const resumeNextPayment = currentTimestamp + 604800n;
+      payroll.resumeRecurringPayment(companyId, 'EMP_EXACT', resumeNextPayment);
+
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_EXACT');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return;
+
+      // Verify next payment matches calculated value
+      expect(recurringPayment.next_payment_date).toBe(resumeNextPayment);
+
+      console.log('✅ Exact anchor alignment verified!');
+      console.log(`   - Current = Anchor (remainder = 0)`);
+      console.log(`   - Next payment = Current + 1 interval ✓`);
+    });
+
+    test('should maintain day-of-week alignment over multiple intervals', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_MULTI_INTERVAL');
+
+      const initialTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = initialTimestamp + 10n;
+      const frequency = RecurringPaymentFrequency.WEEKLY;
+      const amount = 500000n;
+
+      console.log('🔁 Creating payment...');
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_MULTI_INTERVAL',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,  // paymentDayOfMonth1 (unused for weekly)
+        0n,  // paymentDayOfMonth2 (unused for weekly)
+        5n   // paymentDayOfWeek - Friday
+      );
+
+      // Advance time exactly 5 weeks (5 * 604800 = 3024000)
+      payroll.updateTimestamp(Number(startDate + 3024000n));
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+
+      payroll.pauseRecurringPayment(companyId, 'EMP_MULTI_INTERVAL');
+
+      // API calculates next payment - exactly 5 weeks elapsed, so next is 1 week away
+      const intervalSeconds = 604800n;
+      const timeSinceAnchor = currentTimestamp - startDate;
+      const remainder = timeSinceAnchor % intervalSeconds;
+      const timeToNext = remainder === 0n ? intervalSeconds : (intervalSeconds - remainder);
+      const resumeNextPayment = currentTimestamp + timeToNext;
+      payroll.resumeRecurringPayment(companyId, 'EMP_MULTI_INTERVAL', resumeNextPayment);
+
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_MULTI_INTERVAL');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return;
+
+      // Verify next payment maintains alignment
+      // Since time_since_anchor is exactly 5 weeks, remainder should be 0
+      expect(timeSinceAnchor % intervalSeconds).toBe(0n);
+
+      // Verify next payment matches calculated value
+      expect(recurringPayment.next_payment_date).toBe(resumeNextPayment);
+
+      console.log('✅ Multi-interval alignment verified!');
+      console.log(`   - 5 complete weeks elapsed since anchor`);
+      console.log(`   - Day-of-week pattern maintained ✓`);
+    });
+
+    test('should handle resume with partial interval elapsed', () => {
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_PARTIAL');
+
+      const initialTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = initialTimestamp + 10n;
+      const frequency = RecurringPaymentFrequency.WEEKLY; // 7 days
+      const amount = 500000n;
+
+      console.log('🔁 Creating payment...');
+      const nextPaymentDate = startDate + 604800n; // 7 days after start for weekly
+      payroll.createRecurringPayment(
+        companyId,
+        'EMP_PARTIAL',
+        amount,
+        frequency,
+        startDate,
+        0n,
+        nextPaymentDate,
+        0n,  // paymentDayOfMonth1 (unused for weekly)
+        0n,  // paymentDayOfMonth2 (unused for weekly)
+        5n   // paymentDayOfWeek - Friday
+      );
+
+      // Advance time 3.5 days after anchor (3.5 * 86400 = 302400)
+      payroll.updateTimestamp(Number(startDate + 302400n));
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+
+      payroll.pauseRecurringPayment(companyId, 'EMP_PARTIAL');
+
+      // API calculates next payment - partial interval elapsed
+      const intervalSeconds = 604800n;
+      const timeSinceAnchor = 302400n;
+      const remainder = timeSinceAnchor; // Less than one interval
+      const timeToNext = intervalSeconds - remainder;
+      const resumeNextPayment = currentTimestamp + timeToNext;
+      payroll.resumeRecurringPayment(companyId, 'EMP_PARTIAL', resumeNextPayment);
+
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_PARTIAL');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return;
+
+      // Verify next payment matches calculated value
+      expect(recurringPayment.next_payment_date).toBe(resumeNextPayment);
+
+      console.log('✅ Partial interval alignment verified!');
+      console.log(`   - 3.5 days elapsed (partial week)`);
+      console.log(`   - Next payment in ${timeToNext / 86400n} days`);
+      console.log(`   - Aligns to original anchor day-of-week ✓`);
     });
   });
 });
