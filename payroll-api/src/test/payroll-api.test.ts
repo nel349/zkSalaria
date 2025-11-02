@@ -112,20 +112,16 @@ describe('PayrollAPI', () => {
       logger.info('Connecting employee API instance…');
       const employeeAPI = await PayrollAPI.connect(providers, contractAddress, employeeId, logger);
 
-      // Mint tokens
-      logger.info('Minting tokens…');
-      await companyAPI.mintTokens('1000000.00');
-      let state = await firstValueFrom(companyAPI.state$);
-      expect(state.totalSupply).toBeGreaterThan(0n);
-
       // Verify company exists (registered during deployment)
       const companyInfo = await companyAPI.getCompanyInfo(companyId);
       expect(companyInfo.exists).toBe(true);
       expect(companyInfo.companyName).toBe(companyName);
 
-      // Deposit company funds
+      // Deposit company funds (mints tokens directly to contract reserve)
       logger.info('Depositing company funds…');
       await companyAPI.depositCompanyFunds(companyId, '50000.00');
+      let state = await firstValueFrom(companyAPI.state$);
+      expect(state.totalSupply).toBeGreaterThan(0n);
 
       // Add employee
       logger.info('Adding employee…');
@@ -175,9 +171,6 @@ describe('PayrollAPI', () => {
       const contractAddress = await PayrollAPI.deploy(providers, companyId, 'Test Company', logger);
       const api = await PayrollAPI.connect(providers, contractAddress, companyId, logger);
 
-      // Mint tokens (1 tx)
-      await api.mintTokens('1000000.00');
-
       // Note: Company registered during deployment (totalCompanies always 1)
       let state = await firstValueFrom(api.state$);
       expect(state.totalCompanies).toBe(1n);
@@ -189,8 +182,11 @@ describe('PayrollAPI', () => {
       state = await firstValueFrom(api.state$);
       expect(state.totalEmployees).toBe(2n);
 
-      // Deposit company funds (1 tx)
+      // Deposit company funds (mints tokens directly to contract reserve)
       await api.depositCompanyFunds(companyId, '20000.00');
+
+      state = await firstValueFrom(api.state$);
+      expect(state.totalSupply).toBeGreaterThan(0n);
 
       // Pay employees (2 tx)
       await api.payEmployee(companyId, 'employee-1', '1000.00');
