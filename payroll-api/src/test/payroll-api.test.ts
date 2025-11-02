@@ -70,6 +70,28 @@ describe('PayrollAPI', () => {
       const normalized = utils.normalizeId(longId);
       expect(normalized.length).toBeLessThanOrEqual(32);
     });
+
+    test('should get payment status labels', () => {
+      expect(utils.getPaymentStatusLabel(0n)).toBe('PENDING');
+      expect(utils.getPaymentStatusLabel(1n)).toBe('COMPLETED');
+      expect(utils.getPaymentStatusLabel(2n)).toBe('FAILED');
+      expect(utils.getPaymentStatusLabel(3n)).toBe('CANCELLED');
+      expect(utils.getPaymentStatusLabel(99n)).toBe('UNKNOWN');
+    });
+
+    test('should get recurring payment status labels', () => {
+      expect(utils.getRecurringPaymentStatusLabel(0n)).toBe('ACTIVE');
+      expect(utils.getRecurringPaymentStatusLabel(1n)).toBe('PAUSED');
+      expect(utils.getRecurringPaymentStatusLabel(2n)).toBe('CANCELLED');
+      expect(utils.getRecurringPaymentStatusLabel(99n)).toBe('UNKNOWN');
+    });
+
+    test('should get recurring payment frequency labels', () => {
+      expect(utils.getRecurringPaymentFrequencyLabel(0n)).toBe('WEEKLY');
+      expect(utils.getRecurringPaymentFrequencyLabel(1n)).toBe('BIWEEKLY');
+      expect(utils.getRecurringPaymentFrequencyLabel(2n)).toBe('MONTHLY');
+      expect(utils.getRecurringPaymentFrequencyLabel(99n)).toBe('UNKNOWN');
+    });
   });
 
   describe('Integration', () => {

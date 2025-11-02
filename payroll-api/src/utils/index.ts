@@ -113,3 +113,34 @@ export const bytes32ToHex = (bytes: Uint8Array): string => {
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 };
+
+// Payment status labels
+export const getPaymentStatusLabel = (status: bigint): string => {
+  switch (status) {
+    case 0n: return 'PENDING';
+    case 1n: return 'COMPLETED';
+    case 2n: return 'FAILED';
+    case 3n: return 'CANCELLED';
+    default: return 'UNKNOWN';
+  }
+};
+
+// Recurring payment status labels
+export const getRecurringPaymentStatusLabel = (status: bigint): string => {
+  switch (status) {
+    case 0n: return 'ACTIVE';
+    case 1n: return 'PAUSED';
+    case 2n: return 'CANCELLED';
+    default: return 'UNKNOWN';
+  }
+};
+
+// Recurring payment frequency labels
+export const getRecurringPaymentFrequencyLabel = (frequency: bigint): string => {
+  switch (frequency) {
+    case 0n: return 'WEEKLY';
+    case 1n: return 'BIWEEKLY';
+    case 2n: return 'MONTHLY';
+    default: return 'UNKNOWN';
+  }
+};

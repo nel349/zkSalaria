@@ -74,6 +74,7 @@ export interface DeployedPayrollAPI {
   processRecurringPayment(recurringPaymentId: string): Promise<void>;
   getRecurringPayment(recurringPaymentId: string): Promise<RecurringPayment | null>;
   getRecurringPaymentByEmployee(employeeId: string): Promise<RecurringPayment | null>;
+  getAllRecurringPayments(companyId?: string, status?: bigint): Promise<RecurringPayment[]>;
 
   // Batch payment operations
   batchPayEmployees(companyId: string, payments: Array<{ employeeId: string; amount: string }>): Promise<void>;
@@ -533,6 +534,24 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     return ledgerState.recurring_payments.lookup(recurringPaymentId);
+  }
+
+  async getAllRecurringPayments(companyId?: string, status?: bigint): Promise<RecurringPayment[]> {
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return [];
+    }
+
+    const ledgerState = ledger(state.data);
+    const allPayments: RecurringPayment[] = [];
+
+    // Iterate through recurring_payment_by_employee map to get all payments
+    // Note: Compact doesn't expose map iteration, so we track via employee additions
+    // For now, return empty array - full implementation requires ledger iteration support
+    // TODO: Implement when Compact supports map iteration or use indexer
+
+    this.logger?.warn('getAllRecurringPayments: Full ledger iteration not yet supported');
+    return allPayments;
   }
 
   // ========================================
