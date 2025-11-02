@@ -43,3 +43,4 @@ yarn.lock
 .turbo/
 payroll-api/public/
 competition/
+pay-ui/public/

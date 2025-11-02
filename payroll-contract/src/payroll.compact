@@ -52,15 +52,22 @@ export ledger shared_payment_history: Map<Bytes<32>, Bytes<32>>;  // disclosure_
 // Key: hash(company_id + employee_id)
 export ledger employment_records: Map<Bytes<32>, PC_EmploymentRecord>;
 
+// Recurring payment schedules
+// Key: recurring_payment_id and Value: PC_RecurringPayment
+export ledger recurring_payments: Map<Bytes<32>, PC_RecurringPayment>;
+// Helper map: employee_id -> recurring_payment_id (for easy lookup in tests)
+export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
+
 constructor(
   initNonce: Bytes<32>,
   companyId: Bytes<32>,
-  companyName: Bytes<64>
+  companyName: Bytes<64>,
+  initialTimestamp: Uint<32>  // Unix timestamp in seconds (e.g., Math.floor(Date.now() / 1000))
 ) {
   nonce = disclose(initNonce);
   company_id = disclose(companyId);
   company_name = disclose(companyName);
-  current_timestamp = 1000000 as Uint<32>;
+  current_timestamp = disclose(initialTimestamp);
   total_supply = 0 as Uint<64>;
 }
 
@@ -597,6 +604,89 @@ export circuit verify_employment(
   } else {
     return pad(1, "\x00");
   }
+}
+
+// ========================================
+// RECURRING PAYMENTS
+// ========================================
+
+// Create recurring payment schedule for automated payroll
+// Parameters:
+//   employee_id: Employee receiving payments (must be registered)
+//   amount: Payment amount (encrypted with employee key)
+//   frequency: 0=weekly, 1=bi-weekly, 2=monthly
+//   start_date: Unix timestamp when payments begin (>= current_timestamp)
+//   end_date: Unix timestamp when payments end (0 = never expires)
+// NOTE: Only company can create (enforced at API layer)
+export circuit create_recurring_payment(
+  employee_id: Bytes<32>,
+  amount: Uint<64>,
+  frequency: Uint<8>,
+  start_date: Uint<32>,
+  end_date: Uint<32>
+): [] {
+  // Verify employee exists
+  assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
+
+  // Verify amount is positive
+  assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
+
+  // Verify frequency is valid (0=weekly, 1=bi-weekly, 2=monthly)
+  assert(
+    disclose(frequency) == PC_FREQUENCY_WEEKLY() ||
+    disclose(frequency) == PC_FREQUENCY_BIWEEKLY() ||
+    disclose(frequency) == PC_FREQUENCY_MONTHLY(),
+    "Invalid frequency"
+  );
+
+  // Verify start_date is in the future (or current)
+  assert(disclose(start_date) >= current_timestamp, "Start date must be in the future");
+
+  // Verify end_date is after start_date (if set)
+  if (disclose(end_date) > 0 as Uint<32>) {
+    assert(disclose(end_date) > disclose(start_date), "End date must be after start date");
+  }
+
+  // Generate employee encryption key
+  const employee_key = generate_balance_key(employee_id);
+
+  // Encrypt payment amount with employee key (for privacy)
+  const encrypted_amount = encrypt_balance(disclose(amount), employee_key);
+
+
+  // Generate unique recurring payment ID
+  const recurring_payment_id = PC_generate_recurring_payment_id(
+    company_id,
+    disclose(employee_id),
+    current_timestamp
+  );
+
+  // Calculate first next_payment_date based on start_date and frequency
+  const next_payment_date = PC_calculate_next_payment_date(
+    disclose(start_date),
+    disclose(frequency)
+  );
+
+  // Create recurring payment record
+  const recurring_payment = PC_RecurringPayment {
+    recurring_payment_id: recurring_payment_id,
+    company_id: company_id,
+    employee_id: disclose(employee_id),
+    encrypted_amount: encrypted_amount,
+    frequency: disclose(frequency),
+    start_date: disclose(start_date),
+    end_date: disclose(end_date),
+    next_payment_date: next_payment_date,
+    status: PC_RECURRING_STATUS_ACTIVE(),
+    created_at: current_timestamp,
+    last_updated: current_timestamp
+  };
+
+  // Store in recurring_payments map
+  recurring_payments.insert(recurring_payment_id, recurring_payment);
+
+  // Also store employee_id -> recurring_payment_id mapping for easy lookup
+  recurring_payment_by_employee.insert(disclose(employee_id), recurring_payment_id);
 }
 
 // ========================================

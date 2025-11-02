@@ -36,6 +36,16 @@ module PayrollCommons {
     expires_at: Uint<32>;               // 0=never expires, >0=expiration timestamp
   }
 
+  // Recurring payment frequency constants
+  export pure circuit FREQUENCY_WEEKLY(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit FREQUENCY_BIWEEKLY(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit FREQUENCY_MONTHLY(): Uint<8> { return 2 as Uint<8>; }
+
+  // Recurring payment status constants
+  export pure circuit RECURRING_STATUS_ACTIVE(): Uint<8> { return 0 as Uint<8>; }
+  export pure circuit RECURRING_STATUS_PAUSED(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit RECURRING_STATUS_CANCELLED(): Uint<8> { return 2 as Uint<8>; }
+
   // Employment status constants
   export pure circuit EMPLOYMENT_STATUS_INACTIVE(): Uint<8> { return 0 as Uint<8>; }
   export pure circuit EMPLOYMENT_STATUS_ACTIVE(): Uint<8> { return 1 as Uint<8>; }
@@ -48,6 +58,21 @@ module PayrollCommons {
     employee_id: Bytes<32>;
     status: Uint<8>;          // 0=inactive, 1=active, 2=terminated, 3=on_leave
     hire_date: Uint<32>;
+    last_updated: Uint<32>;
+  }
+
+  // Recurring payment record for automated salary payments
+  export struct RecurringPayment {
+    recurring_payment_id: Bytes<32>;       // Unique ID
+    company_id: Bytes<32>;                  // Which company
+    employee_id: Bytes<32>;                 // Which employee
+    encrypted_amount: Bytes<32>;            // Encrypted payment amount
+    frequency: Uint<8>;                     // 0=weekly, 1=bi-weekly, 2=monthly
+    start_date: Uint<32>;                   // When payments start
+    end_date: Uint<32>;                     // When payments end (0=never)
+    next_payment_date: Uint<32>;            // Next scheduled payment
+    status: Uint<8>;                        // 0=active, 1=paused, 2=cancelled
+    created_at: Uint<32>;
     last_updated: Uint<32>;
   }
 
@@ -161,5 +186,35 @@ module PayrollCommons {
       company_id,
       employee_id
     ]);
+  }
+
+  // Generate unique recurring payment ID
+  export pure circuit generate_recurring_payment_id(
+    company_id: Bytes<32>,
+    employee_id: Bytes<32>,
+    timestamp: Uint<32>
+  ): Bytes<32> {
+    return persistentHash<Vector<4, Bytes<32>>>([
+      pad(32, "zksalaria:recurring:"),
+      company_id,
+      employee_id,
+      persistentHash<Uint<32>>(timestamp)
+    ]);
+  }
+
+  // Calculate next payment date based on frequency
+  // Frequency: 0=weekly (7 days), 1=bi-weekly (14 days), 2=monthly (30 days)
+  export pure circuit calculate_next_payment_date(
+    current_date: Uint<32>,
+    frequency: Uint<8>
+  ): Uint<32> {
+    const days_to_add =
+      (frequency == FREQUENCY_WEEKLY()) ? (7 as Uint<32>) :
+      (frequency == FREQUENCY_BIWEEKLY()) ? (14 as Uint<32>) :
+      (30 as Uint<32>); // FREQUENCY_MONTHLY
+
+    // Assuming timestamps are in seconds: 1 day = 86400 seconds
+    const seconds_to_add = (days_to_add * (86400 as Uint<32>)) as Uint<32>;
+    return (current_date + seconds_to_add) as Uint<32>;
   }
 }

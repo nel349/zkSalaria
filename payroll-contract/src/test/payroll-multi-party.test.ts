@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
 import { EmploymentStatus } from '../types.js';
+import { stringToBytes32 } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
   let payroll: PayrollMultiPartyTestSetup;
@@ -646,6 +647,65 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('💡 Decryption works via balance_mappings map');
 
       console.log('\n✅ Multi-party: Privacy preserved with encrypted balances on shared ledger!');
+    });
+  });
+
+  describe('Recurring Payments', () => {
+    test('should create recurring payment with 10-second start date', () => {
+      // Register company and employee
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_RECURRING');
+
+      console.log('👤 Employee EMP_RECURRING added for recurring payment test');
+
+      // Get current timestamp from ledger
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n; // 10 seconds from now
+      const endDate = 0n; // Never expires
+      const frequency = 0n; // Weekly
+      const amount = 500000n; // $5,000.00
+
+      console.log(`⏰ Current timestamp: ${currentTimestamp}`);
+      console.log(`📅 Start date: ${startDate} (in 10 seconds)`);
+      console.log(`💰 Recurring amount: ${amount} (weekly)`);
+
+      // Create recurring payment
+      payroll.createRecurringPayment(companyId, 'EMP_RECURRING', amount, frequency, startDate, endDate);
+
+      // Verify recurring payment was stored on ledger
+      const recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_RECURRING');
+
+      console.log('\n🔍 Verifying recurring payment fields...');
+
+      // Verify payment exists
+      expect(recurringPayment).not.toBeNull();
+
+      // Verify all fields
+      expect(recurringPayment.company_id).toEqual(stringToBytes32(companyId));
+      expect(recurringPayment.employee_id).toEqual(stringToBytes32('EMP_RECURRING'));
+      expect(recurringPayment.frequency).toBe(frequency);
+      expect(recurringPayment.start_date).toBe(startDate);
+      expect(recurringPayment.end_date).toBe(endDate);
+      expect(recurringPayment.status).toBe(0n); // ACTIVE
+      expect(recurringPayment.created_at).toBe(currentTimestamp);
+      expect(recurringPayment.last_updated).toBe(currentTimestamp);
+
+      // Verify next_payment_date calculated correctly
+      // Weekly = 7 days = 604800 seconds
+      const expectedNextPayment = startDate + 604800n;
+      expect(recurringPayment.next_payment_date).toBe(expectedNextPayment);
+
+      // Verify encrypted amount exists
+      expect(recurringPayment.encrypted_amount).toBeDefined();
+      expect(recurringPayment.encrypted_amount.length).toBe(32);
+
+      console.log('✅ All recurring payment fields verified correctly!');
+      console.log(`   - Status: ACTIVE (0) ✓`);
+      console.log(`   - Frequency: WEEKLY (0) ✓`);
+      console.log(`   - Start date: ${startDate} ✓`);
+      console.log(`   - Next payment: ${expectedNextPayment} (${startDate} + 604800s) ✓`);
+      console.log(`   - Created at: ${currentTimestamp} ✓`);
+      console.log(`   - Encrypted amount: ${recurringPayment.encrypted_amount.toString('hex').substring(0, 16)}... ✓`);
     });
   });
 });

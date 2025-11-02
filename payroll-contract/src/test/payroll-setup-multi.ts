@@ -6,6 +6,7 @@ import {
   sampleContractAddress,
   QueryContext,
 } from '@midnight-ntwrk/compact-runtime';
+import { stringToBytes32, stringToBytes64, hexToBytes32 } from './utils.js';
 
 // Participant represents a company or employee with their own private state
 interface Participant {
@@ -28,6 +29,9 @@ export class PayrollMultiPartyTestSetup {
   private companyBalanceTracker: bigint = 0n;
   private employeeBalanceTrackers: Map<string, bigint> = new Map();
 
+  // Track recurring payment data for testing
+  private recurringPaymentTimestamps: Map<string, bigint> = new Map(); // employeeId -> timestamp when created
+
   constructor(
     companyId: string,
     companyName: string,
@@ -41,16 +45,18 @@ export class PayrollMultiPartyTestSetup {
     const initialPrivateState = createPayrollPrivateState();
 
     // Convert parameters for constructor
-    const nonceBytes = this.hexToBytes32(initNonce);
-    const companyIdBytes = this.stringToBytes32(companyId);
-    const companyNameBytes = this.stringToBytes64(companyName);
+    const nonceBytes = hexToBytes32(initNonce);
+    const companyIdBytes = stringToBytes32(companyId);
+    const companyNameBytes = stringToBytes64(companyName);
+    const initialTimestamp = BigInt(Math.floor(Date.now() / 1000));
 
     // Get initial shared contract state
-    const { currentPrivateState, currentContractState, currentZswapLocalState } = this.contract.initialState(
+    const { currentContractState, currentZswapLocalState } = this.contract.initialState(
       constructorContext(initialPrivateState, initNonce),
       nonceBytes,
       companyIdBytes,
-      companyNameBytes
+      companyNameBytes,
+      initialTimestamp
     );
 
     // Store shared public ledger state
@@ -113,38 +119,11 @@ export class PayrollMultiPartyTestSetup {
     return result.result;
   }
 
-  // Helper to convert string to Bytes<32>
-  private stringToBytes32(str: string): Uint8Array {
-    const bytes = new Uint8Array(32);
-    const encoder = new TextEncoder();
-    const encoded = encoder.encode(str);
-    bytes.set(encoded.slice(0, Math.min(encoded.length, 32)));
-    return bytes;
-  }
-
-  // Helper to convert string to Bytes<64>
-  private stringToBytes64(str: string): Uint8Array {
-    const bytes = new Uint8Array(64);
-    const encoder = new TextEncoder();
-    const encoded = encoder.encode(str);
-    bytes.set(encoded.slice(0, Math.min(encoded.length, 64)));
-    return bytes;
-  }
-
-  // Helper to convert hex string to Bytes<32>
-  private hexToBytes32(hex: string): Uint8Array {
-    const bytes = new Uint8Array(32);
-    for (let i = 0; i < Math.min(hex.length, 64); i += 2) {
-      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-    }
-    return bytes;
-  }
-
   // Test method: Add employee (executed by company participant)
   addEmployee(employeeId: string): Ledger {
     console.log(`👤 ${this.companyName} adding employee ${employeeId}`);
 
-    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdBytes = stringToBytes32(employeeId);
 
     // Initialize employee balance tracker
     this.employeeBalanceTrackers.set(employeeId, 0n);
@@ -178,7 +157,7 @@ export class PayrollMultiPartyTestSetup {
   payEmployee(employeeId: string, amount: bigint): Ledger {
     console.log(`💸 ${this.companyName} paying employee ${employeeId}: ${amount} tokens`);
 
-    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdBytes = stringToBytes32(employeeId);
 
     // Track balance transfer: company -> employee
     this.companyBalanceTracker -= amount;
@@ -199,7 +178,7 @@ export class PayrollMultiPartyTestSetup {
   withdrawEmployeeSalary(employeeId: string, amount: bigint): Ledger {
     console.log(`💵 ${employeeId} withdrawing ${amount} tokens`);
 
-    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdBytes = stringToBytes32(employeeId);
 
     // Track employee balance decrease
     const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
@@ -228,6 +207,37 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
+  // Test method: Create recurring payment
+  createRecurringPayment(
+    companyId: string,
+    employeeId: string,
+    amount: bigint,
+    frequency: bigint,
+    startDate: bigint,
+    endDate: bigint
+  ): Ledger {
+    console.log(`🔁 ${companyId} creating recurring payment for ${employeeId}: ${amount} (frequency: ${frequency})`);
+
+    // Store current timestamp for later ID computation
+    const currentTimestamp = this.getLedgerState().current_timestamp;
+    this.recurringPaymentTimestamps.set(employeeId, currentTimestamp);
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+
+    this.executeAsParticipant(
+      companyId,
+      (ctx, eidBytes, amt, freq, start, end) =>
+        this.contract.impureCircuits.create_recurring_payment(ctx, eidBytes, amt, freq, start, end),
+      employeeIdBytes,
+      amount,
+      frequency,
+      startDate,
+      endDate
+    );
+
+    return this.getLedgerState();
+  }
+
   // Getter methods for state inspection
   getLedgerState(): Ledger {
     return ledger(this.sharedContractState.data);
@@ -242,7 +252,7 @@ export class PayrollMultiPartyTestSetup {
   // NOTE: Following bank.compact pattern - payment history stored on ledger, not witnesses
   getEmployeePaymentHistory(employeeId: string): PaymentRecord[] {
     const ledgerState = this.getLedgerState();
-    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdBytes = stringToBytes32(employeeId);
 
     // The Map from Compact Runtime has methods: member(), lookup(), size, isEmpty
     const historyMap = ledgerState.employee_payment_history as any;
@@ -275,7 +285,7 @@ export class PayrollMultiPartyTestSetup {
   // Uses encrypted_employee_balances + balance_mappings to decrypt
   getActualEmployeeBalance(employeeId: string): bigint | null {
     const ledgerState = this.getLedgerState();
-    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdBytes = stringToBytes32(employeeId);
 
     const encryptedBalances = ledgerState.encrypted_employee_balances as any;
     const balanceMappings = ledgerState.balance_mappings as any;
@@ -335,6 +345,32 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState().total_supply;
   }
 
+  // Helper: Get recurring payment for employee
+  // Uses the helper map to lookup the payment ID, then retrieves the full payment
+  getRecurringPaymentForEmployee(employeeId: string): any {
+    const ledgerState = this.getLedgerState();
+    const lookupMap = ledgerState.recurring_payment_by_employee;
+    const paymentsMap = ledgerState.recurring_payments;
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+
+    // First, get the recurring_payment_id from the lookup map
+    if (!lookupMap.member(employeeIdBytes)) {
+      console.error(`❌ No recurring payment found for employee: ${employeeId}`);
+      return null;
+    }
+
+    const recurringPaymentId = lookupMap.lookup(employeeIdBytes);
+
+    // Then, get the full payment from the main map
+    if (paymentsMap.member(recurringPaymentId)) {
+      return paymentsMap.lookup(recurringPaymentId);
+    }
+
+    console.error(`❌ Payment ID found but payment not in main map`);
+    return null;
+  }
+
   // Helper: Get token reserve balance (actual tokens in reserve)
   getTokenReserveBalance(): bigint {
     const ledgerState = this.getLedgerState();
@@ -389,8 +425,8 @@ export class PayrollMultiPartyTestSetup {
   grantEmploymentDisclosure(employeeId: string, verifierId: string, expiresIn: number): Ledger {
     console.log(`🔐 Employee ${employeeId} granting employment disclosure to ${verifierId} for company ${this.companyId}`);
 
-    const employeeIdBytes = this.stringToBytes32(employeeId);
-    const verifierIdBytes = this.stringToBytes32(verifierId);
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const verifierIdBytes = stringToBytes32(verifierId);
 
     this.executeAsParticipant(
       employeeId,
@@ -408,7 +444,7 @@ export class PayrollMultiPartyTestSetup {
   updateEmploymentStatus(employeeId: string, newStatus: number): Ledger {
     console.log(`📝 Company ${this.companyId} updating employment status for ${employeeId} to ${newStatus}`);
 
-    const employeeIdBytes = this.stringToBytes32(employeeId);
+    const employeeIdBytes = stringToBytes32(employeeId);
 
     this.executeAsParticipant(
       this.companyId,
@@ -425,8 +461,8 @@ export class PayrollMultiPartyTestSetup {
   verifyEmployment(employeeId: string, verifierId: string): Uint8Array {
     console.log(`✅ Verifier ${verifierId} checking employment of ${employeeId} at ${this.companyId}`);
 
-    const employeeIdBytes = this.stringToBytes32(employeeId);
-    const verifierIdBytes = this.stringToBytes32(verifierId);
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const verifierIdBytes = stringToBytes32(verifierId);
 
     const result = this.executeAsParticipant(
       verifierId,
