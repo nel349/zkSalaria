@@ -29,12 +29,12 @@ describe('Recurring Payments API - Phase 1.6.1', () => {
     await testEnvironment.shutdown();
   });
 
-  test('Methods 1-3: create, pause, and resume recurring payment', async () => {
+  test('Methods 1-7: complete recurring payment lifecycle', async () => {
     const companyId = `recurring-full-test-${Date.now()}`;
     const companyName = 'Recurring Test Corp';
     const employeeId = `emp-recurring-${Date.now()}`;
 
-    logger.info('=== COMBINED TEST: Methods 1, 2, 3 ===');
+    logger.info('=== COMBINED TEST: Methods 1-7 ===');
 
     // Setup
     logger.info('Deploying contract...');
@@ -89,6 +89,87 @@ describe('Recurring Payments API - Phase 1.6.1', () => {
     expect(recurringPayment!.status).toBe(RecurringPaymentStatus.ACTIVE);
     logger.info('✅ Method 3 PASSED: resumeRecurringPayment()');
 
-    logger.info('✅✅✅ ALL THREE METHODS PASSED! ✅✅✅');
+    // METHOD 6: Get recurring payment by ID
+    logger.info('METHOD 6: Querying recurring payment by ID...');
+    const paymentById = await api.getRecurringPayment(recurringPaymentId);
+    expect(paymentById).not.toBeNull();
+    expect(paymentById!.status).toBe(RecurringPaymentStatus.ACTIVE);
+    expect(paymentById!.encrypted_amount).toEqual(recurringPayment!.encrypted_amount);
+    logger.info('✅ Method 6 PASSED: getRecurringPayment()');
+
+    // METHOD 7: Get recurring payment by employee (already used throughout, explicit verification)
+    logger.info('METHOD 7: Querying recurring payment by employee...');
+    const paymentByEmployee = await api.getRecurringPaymentByEmployee(employeeId);
+    expect(paymentByEmployee).not.toBeNull();
+    expect(paymentByEmployee!.employee_id).toEqual(utils.stringToBytes32(employeeId));
+    logger.info('✅ Method 7 PASSED: getRecurringPaymentByEmployee()');
+
+    // METHOD 4: Edit recurring payment amount
+    logger.info('METHOD 4: Editing recurring payment amount...');
+    const originalEncryptedAmount = recurringPayment!.encrypted_amount;
+    const newAmount = '3000.00';
+    await api.editRecurringPayment(recurringPaymentId, newAmount);
+
+    recurringPayment = await api.getRecurringPaymentByEmployee(employeeId);
+    // Encrypted amount should have changed
+    expect(recurringPayment!.encrypted_amount).not.toEqual(originalEncryptedAmount);
+    logger.info('✅ Method 4 PASSED: editRecurringPayment()');
+
+    // METHOD 5: Process recurring payment
+    logger.info('METHOD 5: Processing recurring payment...');
+
+    // Update timestamp to future to make payment due
+    const futureTimestamp = Math.floor(Date.now() / 1000) + (8 * 24 * 60 * 60); // 8 days in future
+    await api.updateTimestamp(futureTimestamp);
+
+    // Get payment history before processing
+    const paymentHistoryBefore = await api.getEmployeePaymentHistory(employeeId);
+    const paymentCountBefore = paymentHistoryBefore.filter((p: any) => p.timestamp > 0).length;
+    logger.info(`Payment history count before: ${paymentCountBefore}`);
+
+    // Get current next_payment_date before processing
+    const nextPaymentBefore = Number(recurringPayment!.next_payment_date);
+
+    // Process the recurring payment
+    await api.processRecurringPayment(recurringPaymentId);
+
+    // Verify payment was added to history
+    const paymentHistoryAfter = await api.getEmployeePaymentHistory(employeeId);
+    const paymentCountAfter = paymentHistoryAfter.filter((p: any) => p.timestamp > 0).length;
+    expect(paymentCountAfter).toBe(paymentCountBefore + 1);
+    logger.info(`Payment history count after: ${paymentCountAfter} (increased by 1)`);
+
+    // Verify next payment date was updated (should be 7 days later for weekly)
+    recurringPayment = await api.getRecurringPaymentByEmployee(employeeId);
+
+    // Find the new payment record
+    const newPayment = paymentHistoryAfter.find((p: any) =>
+      p.timestamp > 0 && !paymentHistoryBefore.some((old: any) =>
+        old.timestamp === p.timestamp
+      )
+    );
+    expect(newPayment).toBeDefined();
+    logger.info(`New payment record found with timestamp: ${newPayment!.timestamp}`);
+
+    // Verify the payment has encrypted amount (should match recurring payment's encrypted amount)
+    expect(newPayment!.encrypted_amount).toBeDefined();
+    expect(newPayment!.encrypted_amount).toEqual(recurringPayment!.encrypted_amount);
+    logger.info('Payment encrypted_amount matches recurring payment encrypted_amount');
+
+    // Verify next payment date was properly updated
+    const nextPaymentAfter = Number(recurringPayment!.next_payment_date);
+    expect(nextPaymentAfter).toBeGreaterThan(nextPaymentBefore);
+    const daysDifference = (nextPaymentAfter - nextPaymentBefore) / (24 * 60 * 60);
+    expect(daysDifference).toBeGreaterThanOrEqual(6); // At least 6 days (accounting for rounding)
+    expect(daysDifference).toBeLessThanOrEqual(8); // At most 8 days
+    logger.info(`Next payment date updated: ${nextPaymentBefore} -> ${nextPaymentAfter} (${daysDifference.toFixed(1)} days)`);
+
+    // Verify employee info updated
+    const employeeInfoAfter = await api.getEmployeeInfo(employeeId);
+    expect(employeeInfoAfter.paymentHistoryCount).toBe(paymentCountAfter);
+
+    logger.info('✅ Method 5 PASSED: processRecurringPayment()');
+
+    logger.info('✅✅✅ ALL SEVEN METHODS PASSED! ✅✅✅');
   }, 5 * 60_000);
 });
