@@ -673,6 +673,9 @@ export circuit create_recurring_payment(
   // Encrypt payment amount with employee key (for privacy)
   const encrypted_amount = encrypt_balance(disclose(amount), employee_key);
 
+  // Add encrypted amount to balance_mappings for later decryption in process_recurring_payment
+  balance_mappings.insert(encrypted_amount, disclose(amount));
+
   // Generate unique recurring payment ID
   const recurring_payment_id = PC_generate_recurring_payment_id(
     company_id,
@@ -776,6 +779,154 @@ export circuit resume_recurring_payment(
   };
 
   // Update in map
+  recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
+}
+
+// Edit recurring payment amount
+export circuit edit_recurring_payment(
+  recurring_payment_id: Bytes<32>,
+  new_amount: Uint<64>
+): [] {
+  // Load existing recurring payment
+  assert(recurring_payments.member(disclose(recurring_payment_id)), "Recurring payment not found");
+  const payment = recurring_payments.lookup(disclose(recurring_payment_id));
+
+  // Verify status is ACTIVE or PAUSED (cannot edit CANCELLED)
+  assert(
+    disclose(payment.status) == PC_RECURRING_STATUS_ACTIVE() ||
+    disclose(payment.status) == PC_RECURRING_STATUS_PAUSED(),
+    "Cannot edit cancelled recurring payment"
+  );
+
+  // Verify new amount is valid
+  assert(disclose(new_amount) > (0 as Uint<64>), "Amount must be greater than 0");
+
+  // Encrypt new amount with employee key
+  const employee_key = generate_balance_key(payment.employee_id);
+  const new_encrypted_amount = encrypt_balance(disclose(new_amount), employee_key);
+
+  // Add new encrypted amount to balance_mappings for later decryption
+  balance_mappings.insert(new_encrypted_amount, disclose(new_amount));
+
+  // Update payment record
+  const updated_payment = PC_RecurringPayment {
+    recurring_payment_id: payment.recurring_payment_id,
+    company_id: payment.company_id,
+    employee_id: payment.employee_id,
+    encrypted_amount: new_encrypted_amount,  // Updated amount
+    frequency: payment.frequency,
+    start_date: payment.start_date,
+    end_date: payment.end_date,
+    next_payment_date: payment.next_payment_date,
+    payment_day_of_month_1: payment.payment_day_of_month_1,
+    payment_day_of_month_2: payment.payment_day_of_month_2,
+    payment_day_of_week: payment.payment_day_of_week,
+    status: payment.status,
+    created_at: payment.created_at,
+    last_updated: current_timestamp  // Updated timestamp
+  };
+
+  recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
+}
+
+// Process recurring payment (manual trigger)
+export circuit process_recurring_payment(
+  recurring_payment_id: Bytes<32>
+): [] {
+  // Load recurring payment
+  assert(recurring_payments.member(disclose(recurring_payment_id)), "Recurring payment not found");
+  const payment = recurring_payments.lookup(disclose(recurring_payment_id));
+
+  // Verify status is ACTIVE
+  assert(
+    disclose(payment.status) == PC_RECURRING_STATUS_ACTIVE(),
+    "Recurring payment is not active"
+  );
+
+  // Verify payment is due (current_timestamp >= next_payment_date)
+  assert(
+    current_timestamp >= disclose(payment.next_payment_date),
+    "Payment not due yet"
+  );
+
+  // Decrypt payment amount (lookup in balance_mappings)
+  const payment_amount = balance_mappings.lookup(payment.encrypted_amount);
+
+  // Execute payment (inline pay_employee logic)
+  // 1. Verify company has sufficient balance in token reserve
+  assert(total_supply >= payment_amount, "Insufficient company balance");
+
+  // 2. Generate encryption key for employee
+  const employee_key = generate_balance_key(payment.employee_id);
+
+  // 3. Decrypt employee balance (or create if new)
+  const employee_encrypted = encrypted_employee_balances.member(payment.employee_id) ?
+    encrypted_employee_balances.lookup(payment.employee_id) : encrypt_balance(0 as Uint<64>, employee_key);
+  const employee_balance = balance_mappings.member(employee_encrypted) ?
+    balance_mappings.lookup(employee_encrypted) : 0 as Uint<64>;
+
+  // 4. Add payment to employee balance
+  const new_employee_balance = (employee_balance + payment_amount) as Uint<64>;
+
+  // 5. Re-encrypt employee balance
+  const new_employee_hash = encrypt_balance(new_employee_balance, employee_key);
+
+  // 6. Update encrypted employee balance on ledger
+  encrypted_employee_balances.insert(payment.employee_id, new_employee_hash);
+
+  // 7. Update balance mapping for decryption
+  balance_mappings.insert(new_employee_hash, new_employee_balance);
+
+  // 8. Encrypt payment amount with employee's key (for payment history)
+  const encrypted_payment_amount = encrypt_balance(payment_amount, employee_key);
+  balance_mappings.insert(encrypted_payment_amount, payment_amount);
+
+  // 9. Record payment in history
+  const payment_record = PC_create_payment_record(
+    current_timestamp,
+    encrypted_payment_amount,  // Use encrypted amount for privacy
+    payment.company_id,
+    PC_PAYMENT_TYPE_SALARY()
+  );
+
+  const current_history = employee_payment_history.lookup(payment.employee_id);
+  const updated_history = PC_append_to_history(current_history, payment_record);
+  employee_payment_history.insert(payment.employee_id, updated_history);
+
+  // 10. Increment payment counter
+  total_payments.increment(1);
+
+  // 11. Calculate next payment date
+  const next_date = PC_calculate_next_payment_date(
+    disclose(payment.next_payment_date),
+    payment.frequency
+  );
+
+  // 12. Check if recurring payment should be cancelled (past end_date)
+  const should_cancel = (
+    disclose(payment.end_date) > (0 as Uint<32>) &&
+    next_date > disclose(payment.end_date)
+  );
+  const new_status = should_cancel ? PC_RECURRING_STATUS_CANCELLED() : payment.status;
+
+  // 13. Update recurring payment record
+  const updated_payment = PC_RecurringPayment {
+    recurring_payment_id: payment.recurring_payment_id,
+    company_id: payment.company_id,
+    employee_id: payment.employee_id,
+    encrypted_amount: payment.encrypted_amount,
+    frequency: payment.frequency,
+    start_date: payment.start_date,
+    end_date: payment.end_date,
+    next_payment_date: next_date,  // Updated to next occurrence
+    payment_day_of_month_1: payment.payment_day_of_month_1,
+    payment_day_of_month_2: payment.payment_day_of_month_2,
+    payment_day_of_week: payment.payment_day_of_week,
+    status: new_status,  // May be cancelled if past end_date
+    created_at: payment.created_at,
+    last_updated: current_timestamp  // Updated timestamp
+  };
+
   recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
 }
 

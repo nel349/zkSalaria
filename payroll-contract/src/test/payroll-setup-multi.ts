@@ -298,6 +298,69 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
+  // Edit recurring payment amount
+  editRecurringPayment(companyId: string, employeeId: string, newAmount: bigint): Ledger {
+    console.log(`✏️  ${companyId} editing recurring payment for ${employeeId} - new amount: ${newAmount}`);
+
+    // Get the recurring payment ID from the lookup map
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const ledgerState = this.getLedgerState();
+    const lookupMap = ledgerState.recurring_payment_by_employee;
+
+    if (!lookupMap.member(employeeIdBytes)) {
+      throw new Error(`No recurring payment found for employee: ${employeeId}`);
+    }
+
+    const recurringPaymentId = lookupMap.lookup(employeeIdBytes);
+
+    this.executeAsParticipant(
+      companyId,
+      (ctx, rpId, amt) => this.contract.impureCircuits.edit_recurring_payment(ctx, rpId, amt),
+      recurringPaymentId,
+      newAmount
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Process recurring payment (manual trigger)
+  processRecurringPayment(companyId: string, employeeId: string): Ledger {
+    console.log(`🔄 ${companyId} processing recurring payment for ${employeeId}`);
+
+    // Get the recurring payment ID from the lookup map
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const ledgerState = this.getLedgerState();
+    const lookupMap = ledgerState.recurring_payment_by_employee;
+
+    if (!lookupMap.member(employeeIdBytes)) {
+      throw new Error(`No recurring payment found for employee: ${employeeId}`);
+    }
+
+    const recurringPaymentId = lookupMap.lookup(employeeIdBytes);
+
+    // Get current payment amount for balance tracking
+    const recurringPaymentMap = ledgerState.recurring_payments;
+    if (recurringPaymentMap.member(recurringPaymentId)) {
+      const payment = recurringPaymentMap.lookup(recurringPaymentId);
+      const amount = this.decryptPaymentAmount(payment.encrypted_amount);
+
+      // Update balance trackers (simulate the payment execution)
+      if (amount !== null) {
+        this.companyBalanceTracker -= amount;
+        const currentEmployeeBalance = this.employeeBalanceTrackers.get(employeeId) || 0n;
+        this.employeeBalanceTrackers.set(employeeId, currentEmployeeBalance + amount);
+      }
+    }
+
+    this.executeAsParticipant(
+      companyId,
+      (ctx, rpId) => this.contract.impureCircuits.process_recurring_payment(ctx, rpId),
+      recurringPaymentId
+    );
+
+    return this.getLedgerState();
+  }
+
   // Getter methods for state inspection
   getLedgerState(): Ledger {
     return ledger(this.sharedContractState.data);
