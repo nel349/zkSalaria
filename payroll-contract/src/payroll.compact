@@ -59,10 +59,6 @@ export ledger recurring_payments: Map<Bytes<32>, PC_RecurringPayment>;
 // Helper map: employee_id -> recurring_payment_id (for easy lookup in tests)
 export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
 
-// Pending payments (for cancellation tracking)
-// Key: payment_id and Value: PC_PaymentRecord
-export ledger pending_payments: Map<Bytes<32>, PC_PaymentRecord>;
-
 constructor(
   initNonce: Bytes<32>,
   companyId: Bytes<32>,
@@ -1034,35 +1030,6 @@ export circuit process_recurring_payment(
   };
 
   recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
-}
-
-// Cancel a pending payment
-// NOTE: Only PENDING payments can be cancelled. COMPLETED payments cannot be cancelled.
-export circuit cancel_pending_payment(payment_id: Bytes<32>): [] {
-  // 1. Verify payment exists in pending_payments map
-  assert(pending_payments.member(disclose(payment_id)), "Payment not found in pending payments");
-
-  // 2. Get the payment record
-  const payment = pending_payments.lookup(disclose(payment_id));
-
-  // 3. Verify payment status is PENDING (cannot cancel completed/failed payments)
-  assert(payment.status == PC_PAYMENT_STATUS_PENDING(), "Can only cancel pending payments");
-
-  // 4. Update status to CANCELLED
-  const cancelled_payment = PC_PaymentRecord {
-    payment_id: payment.payment_id,
-    timestamp: payment.timestamp,
-    encrypted_amount: payment.encrypted_amount,
-    company_id: payment.company_id,
-    payment_type: payment.payment_type,
-    status: PC_PAYMENT_STATUS_CANCELLED()  // Mark as cancelled
-  };
-
-  // 5. Update pending_payments map
-  pending_payments.insert(disclose(payment_id), cancelled_payment);
-
-  // NOTE: If payment had funds deducted, caller should handle refund in a separate transaction
-  // This circuit only marks the payment as cancelled
 }
 
 // ========================================
