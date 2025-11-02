@@ -454,14 +454,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async pauseRecurringPayment(recurringPaymentId: string): Promise<void> {
     this.logger?.info({ pauseRecurringPayment: { recurringPaymentId } });
 
-    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    const idBytes = utils.hexToBytes32(recurringPaymentId);
     await this.deployedContract.callTx.pause_recurring_payment(idBytes);
   }
 
   async resumeRecurringPayment(recurringPaymentId: string): Promise<void> {
     this.logger?.info({ resumeRecurringPayment: { recurringPaymentId } });
 
-    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    const idBytes = utils.hexToBytes32(recurringPaymentId);
 
     // Get the recurring payment to determine frequency and dayOfWeek
     const payment = await this.getRecurringPayment(recurringPaymentId);
@@ -480,20 +480,19 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async editRecurringPayment(recurringPaymentId: string, newAmount: string): Promise<void> {
     this.logger?.info({ editRecurringPayment: { recurringPaymentId, newAmount } });
 
-    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    const idBytes = utils.hexToBytes32(recurringPaymentId);
     await this.deployedContract.callTx.edit_recurring_payment(idBytes, utils.parseAmount(newAmount));
   }
 
   async processRecurringPayment(recurringPaymentId: string): Promise<void> {
     this.logger?.info({ processRecurringPayment: { recurringPaymentId } });
 
-    const idBytes = utils.stringToBytes32(recurringPaymentId);
+    const idBytes = utils.hexToBytes32(recurringPaymentId);
     await this.deployedContract.callTx.process_recurring_payment(idBytes);
   }
 
   async getRecurringPayment(recurringPaymentId: string): Promise<RecurringPayment | null> {
-    const normalizedId = utils.normalizeId(recurringPaymentId);
-    const idBytes = utils.stringToBytes32(normalizedId);
+    const idBytes = utils.hexToBytes32(recurringPaymentId);
 
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {

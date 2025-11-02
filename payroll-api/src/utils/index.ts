@@ -94,3 +94,22 @@ export const bytes64ToString = (bytes: Uint8Array): string => {
   }
   return decoder.decode(bytes.slice(0, end));
 };
+
+// Convert hex string to Bytes<32> (for recurring payment IDs, etc.)
+export const hexToBytes32 = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(32);
+  // Remove '0x' prefix if present
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+
+  for (let i = 0; i < Math.min(32, cleanHex.length / 2); i++) {
+    bytes[i] = parseInt(cleanHex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+};
+
+// Convert Bytes<32> to hex string
+export const bytes32ToHex = (bytes: Uint8Array): string => {
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+};
