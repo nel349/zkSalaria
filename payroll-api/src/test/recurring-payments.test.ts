@@ -7,10 +7,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { currentDir } from './config.js';
 
-describe('Recurring Payments API - Phase 1.6.1', () => {
+describe('Advanced Payments API - Phase 1.6', () => {
   let testEnvironment: TestEnvironment;
   let providers: any;
-  const logFile = path.resolve(currentDir, '..', 'logs', 'tests', `recurring-${new Date().toISOString()}.log`);
+  const logFile = path.resolve(currentDir, '..', 'logs', 'tests', `advanced-${new Date().toISOString()}.log`);
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   const logger = pino(
     { level: process.env.LOG_LEVEL ?? 'info' },
@@ -29,7 +29,7 @@ describe('Recurring Payments API - Phase 1.6.1', () => {
     await testEnvironment.shutdown();
   });
 
-  test('Methods 1-7: complete recurring payment lifecycle', async () => {
+  test('Phase 1.6.1: Recurring payments - Methods 1-7', async () => {
     const companyId = `recurring-full-test-${Date.now()}`;
     const companyName = 'Recurring Test Corp';
     const employeeId = `emp-recurring-${Date.now()}`;
@@ -172,4 +172,104 @@ describe('Recurring Payments API - Phase 1.6.1', () => {
 
     logger.info('✅✅✅ ALL SEVEN METHODS PASSED! ✅✅✅');
   }, 5 * 60_000);
+
+  test('Phase 1.6.2: Batch payments - batchPayEmployees', async () => {
+    const companyId = `batch-test-${Date.now()}`;
+    const companyName = 'Batch Payment Corp';
+
+    logger.info('=== BATCH PAYMENT TEST ===');
+
+    // Setup
+    logger.info('Deploying contract...');
+    const contractAddress = await PayrollAPI.deploy(providers, companyId, companyName, logger);
+    const api = await PayrollAPI.connect(providers, contractAddress, companyId, logger);
+
+    logger.info('Depositing company funds...');
+    await api.depositCompanyFunds(companyId, '100000.00');
+
+    // Create 5 employees
+    logger.info('Adding 5 employees...');
+    const employeeIds: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const employeeId = `emp-batch-${Date.now()}-${i}`;
+      employeeIds.push(employeeId);
+      await api.addEmployee(companyId, employeeId);
+    }
+    logger.info(`Created employees: ${employeeIds.length}`);
+
+    // SCENARIO 1: Batch pay 1 employee (tests padding)
+    logger.info('SCENARIO 1: Batch paying 1 employee (tests padding)...');
+    await api.batchPayEmployees(companyId, [
+      { employeeId: employeeIds[0], amount: '1000.00' }
+    ]);
+
+    let history0 = await api.getEmployeePaymentHistory(employeeIds[0]);
+    let count0 = history0.filter((p: any) => p.timestamp > 0).length;
+    expect(count0).toBe(1);
+    logger.info('✅ SCENARIO 1 PASSED: Single employee paid via batch');
+
+    // SCENARIO 2: Batch pay 3 employees (tests partial batch)
+    logger.info('SCENARIO 2: Batch paying 3 employees (tests partial batch)...');
+    const payments3 = [
+      { employeeId: employeeIds[1], amount: '2000.00' },
+      { employeeId: employeeIds[2], amount: '2500.00' },
+      { employeeId: employeeIds[3], amount: '3000.00' },
+    ];
+
+    await api.batchPayEmployees(companyId, payments3);
+
+    // Verify each employee received payment
+    for (let i = 1; i <= 3; i++) {
+      const history = await api.getEmployeePaymentHistory(employeeIds[i]);
+      const count = history.filter((p: any) => p.timestamp > 0).length;
+      expect(count).toBe(1);
+    }
+    logger.info('✅ SCENARIO 2 PASSED: 3 employees paid via batch');
+
+    // SCENARIO 3: Batch pay all 5 employees
+    logger.info('SCENARIO 3: Batch paying all 5 employees...');
+    const payments5 = employeeIds.map((id, idx) => ({
+      employeeId: id,
+      amount: `${1500 + (idx * 500)}.00` // Varying amounts
+    }));
+
+    await api.batchPayEmployees(companyId, payments5);
+
+    // Verify all employees received their payments
+    for (let i = 0; i < 5; i++) {
+      const history = await api.getEmployeePaymentHistory(employeeIds[i]);
+      const count = history.filter((p: any) => p.timestamp > 0).length;
+      if (i === 0 || (i >= 1 && i <= 3)) {
+        expect(count).toBe(2); // These already had 1 payment from earlier scenarios
+      } else {
+        expect(count).toBe(1); // Employee 4 gets first payment
+      }
+      logger.info(`Employee ${i}: ${count} payment(s)`);
+    }
+    logger.info('✅ SCENARIO 3 PASSED: All 5 employees paid via batch');
+
+    // SCENARIO 4: Verify payment amounts are recorded correctly
+    logger.info('SCENARIO 4: Verifying payment amounts...');
+
+    // Check employee 0's latest payment (from scenario 3)
+    const history0Latest = await api.getEmployeePaymentHistory(employeeIds[0]);
+    const latestPayment = history0Latest
+      .filter((p: any) => p.timestamp > 0)
+      .sort((a: any, b: any) => Number(b.timestamp) - Number(a.timestamp))[0];
+
+    expect(latestPayment).toBeDefined();
+    expect(latestPayment.encrypted_amount).toBeDefined();
+    logger.info('✅ SCENARIO 4 PASSED: Payment amounts recorded');
+
+    // SCENARIO 5: Verify employee info counts
+    logger.info('SCENARIO 5: Verifying employee info payment counts...');
+    for (let i = 0; i < 5; i++) {
+      const employeeInfo = await api.getEmployeeInfo(employeeIds[i]);
+      const expectedCount = (i === 0 || (i >= 1 && i <= 3)) ? 2 : 1;
+      expect(employeeInfo.paymentHistoryCount).toBe(expectedCount);
+    }
+    logger.info('✅ SCENARIO 5 PASSED: Employee info counts correct');
+
+    logger.info('✅✅✅ ALL BATCH PAYMENT SCENARIOS PASSED! ✅✅✅');
+  }, 10 * 60_000); // 10 minute timeout for multiple batch operations
 });
