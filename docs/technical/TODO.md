@@ -711,6 +711,227 @@ export ledger audit_reports: Map<Bytes<32>, AuditReport>;             // company
 
 **No contract changes needed** - this is API layer work
 
+---
+
+## Phase 1.6: API Layer Integration for Phase 1.5 Features
+
+**Status:** 🔄 IN PROGRESS
+**Goal:** Integrate Phase 1.5 contract features (recurring payments, batch payments, status tracking) into PayrollAPI
+
+**Context:** Phase 1.5 added 7 new circuits (6 recurring + 1 batch) to the contract, but these are not yet exposed in the API layer. The current PayrollAPI only supports the original 11 circuits.
+
+### Current API State (payroll-api/src/payroll-api.ts)
+
+**Existing Methods (from Phase 1):**
+- [x] `registerCompany(companyId, companyName)` → register_company circuit
+- [x] `depositCompanyFunds(companyId, amount)` → deposit_company_funds circuit
+- [x] `addEmployee(companyId, employeeId)` → add_employee circuit
+- [x] `payEmployee(companyId, employeeId, amount)` → pay_employee circuit
+- [x] `withdrawEmployeeSalary(employeeId, amount)` → withdraw_employee_salary circuit
+- [x] `updateTimestamp(newTimestamp)` → update_timestamp circuit
+- [x] `getCompanyInfo(companyId)` → reads ledger state
+- [x] `getEmployeeInfo(employeeId)` → reads ledger state
+- [x] `getEmployeePaymentHistory(employeeId)` → reads employee_payment_history ledger
+
+**Missing Methods (Phase 1.5 features):**
+
+### 1.6.1 Recurring Payments API Methods
+
+- [ ] Add `createRecurringPayment()` method:
+  ```typescript
+  async createRecurringPayment(
+    companyId: string,
+    employeeId: string,
+    amount: string,
+    frequency: 'WEEKLY' | 'BIWEEKLY' | 'SEMIMONTHLY' | 'MONTHLY',
+    startDate: Date,
+    endDate?: Date,
+    calendarConfig?: RecurringCalendarConfig
+  ): Promise<{ recurringPaymentId: string }>
+  ```
+  - Convert frequency to Uint<8> (1/2/3/4)
+  - Calculate calendar config (payment days, day of week)
+  - Call `create_recurring_payment` circuit
+  - Return generated recurring_payment_id
+
+- [ ] Add `processRecurringPayment()` method:
+  ```typescript
+  async processRecurringPayment(
+    recurringPaymentId: string
+  ): Promise<{ nextPaymentDate: Date, status: string }>
+  ```
+  - Call `process_recurring_payment` circuit
+  - Read updated recurring payment from ledger
+  - Return next payment date and status
+
+- [ ] Add `pauseRecurringPayment()` method:
+  ```typescript
+  async pauseRecurringPayment(recurringPaymentId: string): Promise<void>
+  ```
+  - Call `pause_recurring_payment` circuit
+
+- [ ] Add `resumeRecurringPayment()` method:
+  ```typescript
+  async resumeRecurringPayment(recurringPaymentId: string): Promise<void>
+  ```
+  - Call `resume_recurring_payment` circuit
+
+- [ ] Add `editRecurringPayment()` method:
+  ```typescript
+  async editRecurringPayment(
+    recurringPaymentId: string,
+    newAmount: string
+  ): Promise<void>
+  ```
+  - Call `edit_recurring_payment` circuit
+
+- [ ] Add `cancelRecurringPayment()` method:
+  ```typescript
+  async cancelRecurringPayment(recurringPaymentId: string): Promise<void>
+  ```
+  - Call `cancel_recurring_payment` circuit
+
+- [ ] Add `getRecurringPayment()` query method:
+  ```typescript
+  async getRecurringPayment(
+    recurringPaymentId: string
+  ): Promise<RecurringPayment>
+  ```
+  - Read from `recurring_payments` ledger map
+  - Decrypt amount if caller is company or employee
+  - Convert status/frequency to human-readable strings
+
+- [ ] Add `getAllRecurringPayments()` query method:
+  ```typescript
+  async getAllRecurringPayments(
+    companyId?: string,
+    employeeId?: string,
+    status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED' | 'COMPLETED'
+  ): Promise<RecurringPayment[]>
+  ```
+  - Read all recurring_payments from ledger
+  - Filter by company/employee/status
+  - Return array of recurring payments
+
+### 1.6.2 Batch Payments API Method
+
+- [ ] Add `batchPayEmployees()` method:
+  ```typescript
+  async batchPayEmployees(
+    companyId: string,
+    payments: Array<{ employeeId: string, amount: string }>
+  ): Promise<{ successCount: number, failedPayments?: string[] }>
+  ```
+  - Validate: payments.length <= 10 (batch size limit)
+  - Convert to Vector<10, PC_BatchPaymentEntry> (pad with empty slots)
+  - Call `batch_pay_employees` circuit
+  - Return success/failure stats
+
+- [ ] Add progress observable for UI:
+  ```typescript
+  batchPayEmployees$(
+    companyId: string,
+    payments: Array<{ employeeId: string, amount: string }>
+  ): Observable<{ current: number, total: number, status: string }>
+  ```
+  - Emit progress events for UI progress bar
+  - Handle partial failures (continue on error, report which failed)
+
+### 1.6.3 Payment Status Integration
+
+- [ ] Update `getEmployeePaymentHistory()` to include status:
+  ```typescript
+  async getEmployeePaymentHistory(
+    employeeId: string
+  ): Promise<Array<PaymentRecord & { statusLabel: string }>>
+  ```
+  - Map status Uint<8> to human-readable labels:
+    - 0 → "PENDING"
+    - 1 → "COMPLETED"
+    - 2 → "FAILED"
+    - 3 → "CANCELLED"
+
+- [ ] Add status filter to payment history:
+  ```typescript
+  async getEmployeePaymentHistory(
+    employeeId: string,
+    filter?: { status?: string, startDate?: Date, endDate?: Date }
+  ): Promise<PaymentRecord[]>
+  ```
+
+### 1.6.4 TypeScript Types Updates
+
+- [ ] Add `RecurringPayment` type to `common-types.ts`:
+  ```typescript
+  export interface RecurringPayment {
+    recurringPaymentId: string;
+    companyId: string;
+    employeeId: string;
+    encryptedAmount: string; // or decrypted amount if caller has permission
+    frequency: 'WEEKLY' | 'BIWEEKLY' | 'SEMIMONTHLY' | 'MONTHLY';
+    startDate: Date;
+    endDate?: Date;
+    nextPaymentDate: Date;
+    paymentDayOfMonth1?: number;
+    paymentDayOfMonth2?: number;
+    paymentDayOfWeek?: number;
+    status: 'ACTIVE' | 'PAUSED' | 'CANCELLED' | 'COMPLETED';
+    createdAt: Date;
+    lastUpdated: Date;
+  }
+  ```
+
+- [ ] Add `BatchPaymentEntry` type:
+  ```typescript
+  export interface BatchPaymentEntry {
+    employeeId: string;
+    amount: string;
+  }
+  ```
+
+- [ ] Update `DeployedPayrollAPI` interface with new methods
+
+### 1.6.5 Integration Tests
+
+- [ ] Test: Create recurring payment via API
+- [ ] Test: Process recurring payment via API
+- [ ] Test: Pause/resume/edit/cancel recurring payment via API
+- [ ] Test: Query recurring payments with filters
+- [ ] Test: Batch pay 5 employees via API
+- [ ] Test: Batch payment progress observable emits correctly
+- [ ] Test: Payment history includes correct status labels
+- [ ] Test: End-to-end: create recurring → process 3 times → cancel
+
+### 1.6.6 Documentation
+
+- [ ] Update README.md with new API methods
+- [ ] Add JSDoc comments for all new methods
+- [ ] Document batch size limits (10 employees per batch)
+- [ ] Document recurring payment calendar config
+- [ ] Add usage examples for each new method
+
+### Implementation Timeline
+
+**Estimated Time:** 2-3 days
+
+- [ ] Day 1: Recurring payments API methods (1.6.1) + types (1.6.4)
+- [ ] Day 2: Batch payments API (1.6.2) + payment status (1.6.3)
+- [ ] Day 3: Integration tests (1.6.5) + documentation (1.6.6)
+
+**Dependencies:**
+- ✅ All 18 circuits compiling successfully
+- ✅ All 105 contract tests passing
+- ✅ Existing PayrollAPI infrastructure
+
+**Success Criteria:**
+- [ ] All new API methods implemented and tested
+- [ ] Integration tests pass for recurring payments workflow
+- [ ] Integration tests pass for batch payments workflow
+- [ ] Payment status correctly displayed in queries
+- [ ] Documentation complete with usage examples
+
+---
+
 ### Implementation Timeline
 
 **Week 1 (Days 3-7):**
@@ -1477,7 +1698,7 @@ Blockchain (structured data) → LLM Service (off-chain) → Human-readable outp
 
 ---
 
-## Future Enhancements (Priority Order for Production Payroll)
+## Priority Order for Production Payroll Features
 
 **⚡ ZKML Usage Summary:**
 
@@ -1493,7 +1714,8 @@ Blockchain (structured data) → LLM Service (off-chain) → Human-readable outp
 
 ---
 
-### Priority 1: Recurring Payments (FUNDAMENTAL)
+### Priority 1: Recurring Payments (FUNDAMENTAL) ✅ COMPLETED
+
 **Why Critical:** Every company pays employees on a recurring schedule (bi-weekly, monthly, semi-monthly). Without this, companies must manually initiate every payment - not scalable for real-world use.
 
 **⚡ ZKML Applicability:** ❌ **NO ZKML NEEDED**
@@ -1502,40 +1724,43 @@ Blockchain (structured data) → LLM Service (off-chain) → Human-readable outp
 - No zero-knowledge proofs needed
 - Standard ledger operations: check schedule → execute payment → update next_payment_date
 
-**Implementation:**
-- [ ] Add `PaymentSchedule` struct in PayrollCommons.compact:
-  ```compact
-  struct PaymentSchedule {
-    employee_id: Bytes<32>,
-    amount: Uint<64>,
-    frequency: Uint<8>, // 1=weekly, 2=bi-weekly, 4=monthly
-    next_payment_date: Uint<64>,
-    is_active: Bool
-  }
-  ```
-- [ ] Add ledger state: `export ledger payment_schedules: Map<Bytes<32>, PaymentSchedule>`
-- [ ] Create circuit: `setup_recurring_payment(employee_id, amount, frequency, start_date)`
-  - Store schedule on public ledger
-  - Validate company has sufficient balance
-  - Set next payment date based on frequency
-- [ ] Create circuit: `execute_recurring_payment(employee_id)`
-  - Check if current_timestamp >= next_payment_date
-  - Execute encrypted balance transfer (reuse pay_employee logic)
-  - Update next_payment_date (add frequency interval)
-  - Append to payment history
-- [ ] Create circuit: `pause_recurring_payment(employee_id)` - Set is_active to false
-- [ ] Create circuit: `resume_recurring_payment(employee_id)` - Set is_active to true
-- [ ] Create circuit: `cancel_recurring_payment(employee_id)` - Remove from ledger
+**Implementation Completed:**
+- [x] Added `RecurringPayment` struct in PayrollCommons.compact:
+  - All fields: recurring_payment_id, company_id, employee_id, encrypted_amount
+  - Frequency tracking: frequency (1=WEEKLY, 2=BIWEEKLY, 3=SEMIMONTHLY, 4=MONTHLY)
+  - Date management: start_date, end_date, next_payment_date
+  - Calendar config: payment_day_of_month_1, payment_day_of_month_2, payment_day_of_week
+  - Status tracking: status (1=ACTIVE, 2=PAUSED, 3=CANCELLED, 4=COMPLETED), created_at, last_updated
+- [x] Added ledger state: `export ledger recurring_payments: Map<Bytes<32>, RecurringPayment>`
+- [x] Created 6 circuits for complete lifecycle management:
+  - `create_recurring_payment(employee_id, amount, frequency, ...)` - Initialize schedule with calendar config
+  - `process_recurring_payment(recurring_payment_id)` - Execute payment and calculate next date
+  - `pause_recurring_payment(recurring_payment_id)` - Set status to PAUSED
+  - `resume_recurring_payment(recurring_payment_id)` - Set status back to ACTIVE
+  - `edit_recurring_payment(recurring_payment_id, new_amount)` - Update amount for existing schedule
+  - `cancel_recurring_payment(recurring_payment_id)` - Set status to CANCELLED
+- [x] Implemented calendar-aware scheduling system:
+  - Weekly: payment_day_of_week (0=Sunday...6=Saturday)
+  - Biweekly: 2-week intervals from start_date
+  - Semi-monthly: payment_day_of_month_1 and payment_day_of_month_2 (e.g., 1st and 15th)
+  - Monthly: payment_day_of_month_1 (e.g., last day of month = 31)
+- [x] Comprehensive test coverage: 48 tests passing
+  - Weekly/biweekly/monthly frequency tests
+  - Calendar edge cases (month boundaries, leap years)
+  - Lifecycle tests (pause/resume/edit/cancel)
 
 **User Impact:**
 - ✅ Companies set up payments once, run automatically forever
 - ✅ Employees get predictable payment schedule
 - ✅ Reduces manual work by 99% (no more clicking "Pay" every 2 weeks)
+- ✅ Full lifecycle management (pause for leave, edit for raises, cancel on termination)
 
-**Technical Notes:**
-- Execution could be triggered by company, employee, or automated service
-- Consider adding `last_payment_date` to track payment history
-- Handle edge cases: insufficient balance (pause schedule), employee termination (cancel schedule)
+**Technical Implementation:**
+- Execution triggered by company via `process_recurring_payment()`
+- Encrypted amounts for privacy (same pattern as one-time payments)
+- Automatic next_payment_date calculation based on frequency and calendar rules
+- Status transitions: ACTIVE → PAUSED → ACTIVE or ACTIVE → CANCELLED (terminal state)
+- End date support: schedule automatically completes when next_payment_date > end_date
 
 ---
 
