@@ -7,6 +7,7 @@ import {
   QueryContext,
 } from '@midnight-ntwrk/compact-runtime';
 import { stringToBytes32, stringToBytes64, hexToBytes32 } from './utils.js';
+import type { RecurringPayment } from '../types.js';
 
 // Participant represents a company or employee with their own private state
 interface Participant {
@@ -238,6 +239,54 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
+  // Pause recurring payment
+  pauseRecurringPayment(companyId: string, employeeId: string): Ledger {
+    console.log(`⏸️  ${companyId} pausing recurring payment for ${employeeId}`);
+
+    // Get the recurring payment ID from the lookup map
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const ledgerState = this.getLedgerState();
+    const lookupMap = ledgerState.recurring_payment_by_employee;
+
+    if (!lookupMap.member(employeeIdBytes)) {
+      throw new Error(`No recurring payment found for employee: ${employeeId}`);
+    }
+
+    const recurringPaymentId = lookupMap.lookup(employeeIdBytes);
+
+    this.executeAsParticipant(
+      companyId,
+      (ctx, rpId) => this.contract.impureCircuits.pause_recurring_payment(ctx, rpId),
+      recurringPaymentId
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Resume paused recurring payment
+  resumeRecurringPayment(companyId: string, employeeId: string): Ledger {
+    console.log(`▶️  ${companyId} resuming recurring payment for ${employeeId}`);
+
+    // Get the recurring payment ID from the lookup map
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const ledgerState = this.getLedgerState();
+    const lookupMap = ledgerState.recurring_payment_by_employee;
+
+    if (!lookupMap.member(employeeIdBytes)) {
+      throw new Error(`No recurring payment found for employee: ${employeeId}`);
+    }
+
+    const recurringPaymentId = lookupMap.lookup(employeeIdBytes);
+
+    this.executeAsParticipant(
+      companyId,
+      (ctx, rpId) => this.contract.impureCircuits.resume_recurring_payment(ctx, rpId),
+      recurringPaymentId
+    );
+
+    return this.getLedgerState();
+  }
+
   // Getter methods for state inspection
   getLedgerState(): Ledger {
     return ledger(this.sharedContractState.data);
@@ -347,7 +396,7 @@ export class PayrollMultiPartyTestSetup {
 
   // Helper: Get recurring payment for employee
   // Uses the helper map to lookup the payment ID, then retrieves the full payment
-  getRecurringPaymentForEmployee(employeeId: string): any {
+  getRecurringPaymentForEmployee(employeeId: string): RecurringPayment | null {
     const ledgerState = this.getLedgerState();
     const lookupMap = ledgerState.recurring_payment_by_employee;
     const paymentsMap = ledgerState.recurring_payments;

@@ -689,6 +689,72 @@ export circuit create_recurring_payment(
   recurring_payment_by_employee.insert(disclose(employee_id), recurring_payment_id);
 }
 
+// Pause a recurring payment (company can pause to temporarily stop payments)
+export circuit pause_recurring_payment(recurring_payment_id: Bytes<32>): [] {
+  // Verify recurring payment exists
+  assert(recurring_payments.member(disclose(recurring_payment_id)), "Recurring payment not found");
+
+  // Get the payment
+  const payment = recurring_payments.lookup(disclose(recurring_payment_id));
+
+  // Verify payment is currently ACTIVE
+  assert(payment.status == PC_RECURRING_STATUS_ACTIVE(), "Payment must be ACTIVE to pause");
+
+  // Update payment with PAUSED status
+  const updated_payment = PC_RecurringPayment {
+    recurring_payment_id: payment.recurring_payment_id,
+    company_id: payment.company_id,
+    employee_id: payment.employee_id,
+    encrypted_amount: payment.encrypted_amount,
+    frequency: payment.frequency,
+    start_date: payment.start_date,
+    end_date: payment.end_date,
+    next_payment_date: payment.next_payment_date,
+    status: PC_RECURRING_STATUS_PAUSED(),
+    created_at: payment.created_at,
+    last_updated: current_timestamp
+  };
+
+  // Update in map
+  recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
+}
+
+// Resume a paused recurring payment
+export circuit resume_recurring_payment(recurring_payment_id: Bytes<32>): [] {
+  // Verify recurring payment exists
+  assert(recurring_payments.member(disclose(recurring_payment_id)), "Recurring payment not found");
+
+  // Get the payment
+  const payment = recurring_payments.lookup(disclose(recurring_payment_id));
+
+  // Verify payment is currently PAUSED
+  assert(payment.status == PC_RECURRING_STATUS_PAUSED(), "Payment must be PAUSED to resume");
+
+  // Recalculate next_payment_date from current_timestamp
+  const new_next_payment_date = PC_calculate_next_payment_date(
+    current_timestamp,
+    payment.frequency
+  );
+
+  // Update payment with ACTIVE status and new next_payment_date
+  const updated_payment = PC_RecurringPayment {
+    recurring_payment_id: payment.recurring_payment_id,
+    company_id: payment.company_id,
+    employee_id: payment.employee_id,
+    encrypted_amount: payment.encrypted_amount,
+    frequency: payment.frequency,
+    start_date: payment.start_date,
+    end_date: payment.end_date,
+    next_payment_date: new_next_payment_date,
+    status: PC_RECURRING_STATUS_ACTIVE(),
+    created_at: payment.created_at,
+    last_updated: current_timestamp
+  };
+
+  // Update in map
+  recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
+}
+
 // ========================================
 // UTILITY FUNCTIONS
 // ========================================

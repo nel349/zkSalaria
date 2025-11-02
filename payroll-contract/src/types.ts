@@ -16,6 +16,13 @@ export enum EmploymentStatus {
   ON_LEAVE = 3
 }
 
+// Recurring payment status (matches PayrollCommons.compact)
+export enum RecurringPaymentStatus {
+  ACTIVE = 0,
+  PAUSED = 1,
+  CANCELLED = 2
+}
+
 // Permission types for selective disclosure (matches PayrollCommons.compact)
 export enum PermissionType {
   INCOME_RANGE = 0,
@@ -32,6 +39,21 @@ export interface PaymentRecord {
   encrypted_amount: Uint8Array;  // Bytes<32> in Compact (encrypted with employee key)
   company_id: Uint8Array; // Bytes<32> in Compact
   payment_type: bigint;   // Uint<8> in Compact (0=salary, 1=advance, 2=bonus)
+}
+
+// Recurring payment structure (matches PayrollCommons.compact RecurringPayment)
+export interface RecurringPayment {
+  recurring_payment_id: Uint8Array;  // Bytes<32> - Unique payment schedule ID
+  company_id: Uint8Array;            // Bytes<32> - Which company
+  employee_id: Uint8Array;           // Bytes<32> - Which employee
+  encrypted_amount: Uint8Array;      // Bytes<32> - Encrypted payment amount (with employee key)
+  frequency: bigint;                 // Uint<8> - 0=weekly, 1=bi-weekly, 2=monthly
+  start_date: bigint;                // Uint<32> - Unix timestamp when payments begin
+  end_date: bigint;                  // Uint<32> - Unix timestamp when payments end (0 = never)
+  next_payment_date: bigint;         // Uint<32> - Next scheduled payment timestamp
+  status: bigint;                    // Uint<8> - 0=active, 1=paused, 2=cancelled
+  created_at: bigint;                // Uint<32> - Creation timestamp
+  last_updated: bigint;              // Uint<32> - Last modification timestamp
 }
 
 // Private state structure for payroll system

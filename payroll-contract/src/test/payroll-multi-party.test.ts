@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
-import { EmploymentStatus } from '../types.js';
+import { EmploymentStatus, RecurringPaymentStatus } from '../types.js';
 import { stringToBytes32 } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
@@ -679,6 +679,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       // Verify payment exists
       expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return; // Type guard for TypeScript
 
       // Verify all fields
       expect(recurringPayment.company_id).toEqual(stringToBytes32(companyId));
@@ -686,7 +687,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(recurringPayment.frequency).toBe(frequency);
       expect(recurringPayment.start_date).toBe(startDate);
       expect(recurringPayment.end_date).toBe(endDate);
-      expect(recurringPayment.status).toBe(0n); // ACTIVE
+      expect(recurringPayment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
       expect(recurringPayment.created_at).toBe(currentTimestamp);
       expect(recurringPayment.last_updated).toBe(currentTimestamp);
 
@@ -700,12 +701,105 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(recurringPayment.encrypted_amount.length).toBe(32);
 
       console.log('✅ All recurring payment fields verified correctly!');
-      console.log(`   - Status: ACTIVE (0) ✓`);
+      console.log(`   - Status: ACTIVE (${RecurringPaymentStatus.ACTIVE}) ✓`);
       console.log(`   - Frequency: WEEKLY (0) ✓`);
       console.log(`   - Start date: ${startDate} ✓`);
       console.log(`   - Next payment: ${expectedNextPayment} (${startDate} + 604800s) ✓`);
       console.log(`   - Created at: ${currentTimestamp} ✓`);
-      console.log(`   - Encrypted amount: ${recurringPayment.encrypted_amount.toString('hex').substring(0, 16)}... ✓`);
+      console.log(`   - Encrypted amount: ${Buffer.from(recurringPayment.encrypted_amount).toString('hex').substring(0, 16)}... ✓`);
+    });
+
+    test('should pause an active recurring payment', () => {
+      // Setup: Create recurring payment
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_PAUSE');
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const endDate = 0n;
+      const frequency = 0n; // Weekly
+      const amount = 300000n; // $3,000.00
+
+      console.log('🔁 Creating recurring payment to test pause...');
+      payroll.createRecurringPayment(companyId, 'EMP_PAUSE', amount, frequency, startDate, endDate);
+
+      // Verify it starts as ACTIVE
+      let recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_PAUSE');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return; // Type guard
+
+      expect(recurringPayment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
+      const originalNextPayment = recurringPayment.next_payment_date;
+      const originalLastUpdated = recurringPayment.last_updated;
+
+      console.log('⏸️  Pausing recurring payment...');
+
+      // Pause the payment
+      payroll.pauseRecurringPayment(companyId, 'EMP_PAUSE');
+
+      // Verify status changed to PAUSED
+      recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_PAUSE');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return; // Type guard
+
+      expect(recurringPayment.status).toBe(BigInt(RecurringPaymentStatus.PAUSED));
+      expect(recurringPayment.next_payment_date).toBe(originalNextPayment); // Should not change on pause
+      expect(recurringPayment.last_updated).toBe(currentTimestamp); // Should update timestamp
+
+      console.log('✅ Recurring payment paused successfully!');
+      console.log(`   - Status changed: ACTIVE (${RecurringPaymentStatus.ACTIVE}) → PAUSED (${RecurringPaymentStatus.PAUSED}) ✓`);
+      console.log(`   - Next payment date unchanged: ${originalNextPayment} ✓`);
+      console.log(`   - Last updated: ${originalLastUpdated} → ${currentTimestamp} ✓`);
+    });
+
+    test('should resume a paused recurring payment and recalculate next payment date', () => {
+      // Setup: Create and pause recurring payment
+      payroll.registerParticipant(companyId);
+      payroll.addEmployee('EMP_RESUME');
+
+      const currentTimestamp = payroll.getLedgerState().current_timestamp;
+      const startDate = currentTimestamp + 10n;
+      const endDate = 0n;
+      const frequency = 0n; // Weekly
+      const amount = 400000n; // $4,000.00
+
+      console.log('🔁 Creating recurring payment to test resume...');
+      payroll.createRecurringPayment(companyId, 'EMP_RESUME', amount, frequency, startDate, endDate);
+
+      console.log('⏸️  Pausing payment...');
+      payroll.pauseRecurringPayment(companyId, 'EMP_RESUME');
+
+      // Verify it's paused
+      let recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_RESUME');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return; // Type guard
+
+      expect(recurringPayment.status).toBe(BigInt(RecurringPaymentStatus.PAUSED));
+      const pausedNextPayment = recurringPayment.next_payment_date;
+
+      console.log('▶️  Resuming payment...');
+
+      // Resume the payment
+      payroll.resumeRecurringPayment(companyId, 'EMP_RESUME');
+
+      // Verify status changed back to ACTIVE
+      recurringPayment = payroll.getRecurringPaymentForEmployee('EMP_RESUME');
+      expect(recurringPayment).not.toBeNull();
+      if (!recurringPayment) return; // Type guard
+
+      expect(recurringPayment.status).toBe(BigInt(RecurringPaymentStatus.ACTIVE));
+
+      // next_payment_date should be recalculated from current_timestamp
+      // Weekly = current_timestamp + 604800 (7 days)
+      const expectedNewNextPayment = currentTimestamp + 604800n;
+      expect(recurringPayment.next_payment_date).toBe(expectedNewNextPayment);
+      expect(recurringPayment.last_updated).toBe(currentTimestamp);
+
+      console.log('✅ Recurring payment resumed successfully!');
+      console.log(`   - Status changed: PAUSED (${RecurringPaymentStatus.PAUSED}) → ACTIVE (${RecurringPaymentStatus.ACTIVE}) ✓`);
+      console.log(`   - Next payment recalculated: ${pausedNextPayment} → ${expectedNewNextPayment} ✓`);
+      console.log(`   - New next payment: ${expectedNewNextPayment} (current + 604800s) ✓`);
+      console.log(`   - Last updated: ${currentTimestamp} ✓`);
     });
   });
 });
