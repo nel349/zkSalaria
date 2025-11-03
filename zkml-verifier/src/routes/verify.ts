@@ -34,11 +34,11 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     try {
-      fastify.log.info('Received proof verification request', {
+      fastify.log.info('Received proof verification request', undefined, {
         employee_id: publicInputs.employee_id,
         threshold: publicInputs.threshold,
         num_txids: publicInputs.txids.length
-      });
+      })
 
       // Step 1: Verify EZKL proof
       fastify.log.info('Verifying EZKL proof...');
@@ -59,7 +59,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       fastify.log.info('Creating attestation...');
       const attestation = await signer.createAttestation(publicInputs);
 
-      fastify.log.info('✓ Attestation created', {
+      fastify.log.info('✓ Attestation created', undefined, {
         attestation_hash: attestation.attestation_hash.substring(0, 16) + '...',
         timestamp: attestation.timestamp
       });
@@ -70,7 +70,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       } as VerifyProofResponse;
 
     } catch (error) {
-      fastify.log.error('Proof verification error:', error);
+      fastify.log.error('Proof verification error:', undefined, error);
       return reply.code(500).send({
         success: false,
         error: 'Internal Server Error',

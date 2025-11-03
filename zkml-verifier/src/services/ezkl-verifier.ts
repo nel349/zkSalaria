@@ -42,7 +42,7 @@ export class EZKLVerifier {
 
       // Call EZKL verify command
       const command = `${this.ezklPath} verify ` +
-        `-P ${tempProofPath} ` +
+        `--proof-path ${tempProofPath} ` +
         `--settings-path ${this.settingsPath} ` +
         `--vk-path ${this.vkPath}`;
 
