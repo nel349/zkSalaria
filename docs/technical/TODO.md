@@ -6,6 +6,80 @@
 
 ---
 
+## ✅ Phase -1: ZKML Infrastructure (COMPLETED - Nov 3, 2025)
+
+**Status:** Basic ZKML infrastructure is complete and tested end-to-end
+
+### What We Built
+
+**1. Proof Generation (TypeScript)**
+- ✅ Created `zkml/examples/01-simple-threshold/generate-proof.ts`
+- ✅ TypeScript wrapper for EZKL CLI (gen-settings → calibrate → compile → setup → prove)
+- ✅ Successfully generates proofs with EZKL v23.0.3 in ~1 second
+- ✅ Files: `network.onnx`, `input.json`, `proof.json`, `vk.key`, `pk.key`
+
+**2. Verifier Service (TypeScript/Fastify - Port 3002)**
+- ✅ Created `zkml-verifier/` service with REST API
+- ✅ EZKL proof verification via CLI
+- ✅ Midnight-style attestation creation (hash commitments, NOT ECDSA signatures)
+- ✅ Endpoints:
+  - `GET /health` - Health check
+  - `GET /api/zkml/status` - Verifier status & public key
+  - `POST /api/zkml/verify-proof` - Verify proof & create attestation
+- ✅ Files: `src/index.ts`, `src/services/ezkl-verifier.ts`, `src/services/attestation-signer.ts`
+
+**3. Security Model**
+- ✅ ZK-SNARK proofs (private data never leaves employee)
+- ✅ Midnight-style hash commitments: `attestation_hash = hash(hash(data) + secret)`
+- ✅ Single-use secret pattern (prevents replay attacks)
+- ✅ Domain separation: `"zksalaria:verifier:pk:"`
+
+**4. Testing**
+- ✅ End-to-end test passing (`zkml-verifier/test-verify.ts`)
+- ✅ Proof generation: 1.07s
+- ✅ Verification: ~100ms
+- ✅ Full workflow: Generate proof → Verify → Get attestation ✅
+
+### Next Steps for ZKML Integration
+
+**Priority 1: Payroll Proof Generator**
+- [ ] Create `zkml/payroll/` directory
+- [ ] Design payroll ML model (proves: avg(payments) > threshold)
+- [ ] Create `payroll-model.onnx` (simple averaging model)
+- [ ] Create `generate-payroll-proof.ts` (based on Example 1)
+- [ ] Test with realistic payment data
+
+**Priority 2: Smart Contract Integration**
+- [ ] Add verifier public key to contract state
+- [ ] Implement `verify_attestation` circuit in `payroll.compact`:
+  ```compact
+  const recomputed = persistentHash([
+    persistentHash(data),
+    provided_secret
+  ]);
+  assert(recomputed == stored_attestation_hash);
+  assert(!used_attestations[attestation_hash]);
+  ```
+- [ ] Add `used_attestations` ledger map (prevent replay attacks)
+- [ ] Update `prove_eligibility` to require attestation
+
+**Priority 3: API Integration**
+- [ ] Add ZKML endpoints to `payroll-api/src/index.ts`
+- [ ] Implement proof submission flow:
+  1. Employee generates proof locally
+  2. Employee POSTs proof to API
+  3. API forwards to verifier service
+  4. API receives attestation
+  5. API submits attestation to contract
+
+**Security Considerations**
+- Verifier is single point of trust (for MVP)
+- Secret key must be secured (currently in `.env`)
+- Attestations are single-use only
+- Future: Multi-verifier consensus
+
+---
+
 ## Phase 0: Contract Privacy & Architecture Fixes
 
 **CRITICAL:** Current payroll.compact has privacy vulnerabilities that must be fixed before production.
