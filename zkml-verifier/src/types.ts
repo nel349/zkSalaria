@@ -1,0 +1,46 @@
+/**
+ * ZKML Verifier Types
+ */
+
+export interface EZKLProof {
+  proof: string | object;
+  instances: string[][];
+}
+
+export interface ProofPublicInputs {
+  employee_id: string;
+  threshold: number;
+  txids: string[];
+  merkle_root: string;
+}
+
+export interface VerifyProofRequest {
+  proof: EZKLProof;
+  publicInputs: ProofPublicInputs;
+}
+
+export interface Attestation {
+  employee_id: string;
+  threshold: string;
+  txids: string[];
+  merkle_root: string;
+  timestamp: number;
+  attestation_hash: string;
+  verifier_secret: string;
+  verifier_pubkey: string;
+}
+
+export interface VerifyProofResponse {
+  success: boolean;
+  attestation?: Attestation;
+  error?: string;
+  message?: string;
+}
+
+export interface HealthResponse {
+  status: 'ok' | 'error';
+  service: string;
+  timestamp: number;
+  verifier_pubkey: string;
+  ezkl_available: boolean;
+}
