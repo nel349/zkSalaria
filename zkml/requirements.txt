@@ -1,0 +1,23 @@
+# ZKML Dependencies for zkSalaria
+# Install with: pip install -r requirements.txt
+
+# PyTorch (for creating ONNX models)
+torch>=2.0.0
+torchvision>=0.15.0
+
+# ONNX (ML model format)
+onnx>=1.14.0
+onnx runtime>=1.15.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+xgboost>=1.7.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Data handling
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: For generating synthetic payroll data
+faker>=18.0.0

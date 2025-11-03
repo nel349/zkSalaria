@@ -913,18 +913,226 @@ export ledger audit_reports: Map<Bytes<32>, AuditReport>;             // company
 
 ## Phase 2: ZKML Integration
 
-**🚨 IMPORTANT:** This phase adds ZK proof circuits (ZKML + ZK-SNARK) and LLM layer. Phase 0-1 only has authorization circuits (grant/revoke).
+**🚨 IMPORTANT:** This phase adds ZK proof circuits (ZKML + ZK-SNARK) for privacy-preserving payroll features. Phase 0-1 only has authorization circuits (grant/revoke).
 
-**Architecture - Right Tool for Each Job:**
+**🎯 PRIMARY ZKML USE CASES (Core Payroll Features):**
+
+| Priority | Feature | Technology | ZKML Type | Status |
+|----------|---------|-----------|-----------|--------|
+| **P2** | **Salary History Proofs** | ZKML (EZKL + XGBoost) | ✅ FULL | **PRIMARY - Core Value Prop** |
+| **P3** | **Tax W-2 Privacy** | ZKML (EZKL) + ZK-SNARK | ⚡ HYBRID | Secondary |
+
+**🔬 ADDITIONAL ZKML USE CASES (Demo/Advanced Features):**
 
 | Use Case | Technology | Why | ZK Proof? |
 |----------|-----------|-----|-----------|
 | **Credit Scoring** | ZKML (EZKL + XGBoost) | ML model learning from patterns | ✅ YES |
 | **Fraud Detection** | ZKML (EZKL + Isolation Forest) | Anomaly detection, pattern recognition | ✅ YES |
-| **Pay Equity** | ZK-SNARK (arithmetic circuits) | Simple statistical calculations | ✅ YES |
-| **Tax Compliance** | ZK-SNARK (rule validation circuits) | Conditional logic, threshold checks | ✅ YES |
+| **Pay Equity Audit** | ZK-SNARK (arithmetic circuits) | Simple statistical calculations | ✅ YES |
+| **Benefits Compliance** | ZK-SNARK (rule validation circuits) | Conditional logic, threshold checks | ✅ YES |
 | **Report Generation** | LLM (GPT-4, Claude) | Natural language, human-readable reports | ❌ NO (off-chain only) |
 | **Natural Language UI** | LLM (GPT-4, Claude) | Query interface, explanations | ❌ NO (off-chain only) |
+
+---
+
+### 2.1 PRIMARY: Salary History Proofs (Priority 2) ✨
+
+**Why This is THE Core ZKML Feature:**
+- This is zkSalaria's unique value proposition
+- Employees prove income to lenders/landlords WITHOUT revealing exact salary amounts
+- Leverages existing payment history and disclosure authorization (already implemented)
+- Direct payroll use case (not generic audit/fraud detection)
+
+**⚡ ZKML Applicability:** ✅ **FULL ZKML IMPLEMENTATION REQUIRED**
+
+**Architecture (OFF-CHAIN → ON-CHAIN):**
+
+**OFF-CHAIN (Employee's device):**
+1. Download payment history from blockchain (txids)
+2. Decrypt amounts with private key
+3. Calculate aggregate (average, threshold check, range check)
+4. Run ML model if needed (credit scoring, income prediction)
+5. Generate ZK proof using EZKL: "My average income is > $X" or "My score > 680"
+
+**ON-CHAIN (Smart contract):**
+1. Verify txids exist on blockchain ✓
+2. Verify Merkle root matches txids ✓
+3. Verify ZK proof is valid ✓
+4. Store approval (YES/NO) without revealing amounts
+
+**Pattern:** Exactly follows ZKML_TECHNICAL_DEEP_DIVE.md architecture
+
+**Implementation:**
+
+#### Smart Contracts (3-Circuit Pattern)
+
+**1. Authorization Circuit (NOT ZKML - Already Implemented):**
+- [x] `grant_income_disclosure(employee_id, lender_id, min_threshold, expires_in)`
+  - Simple ledger write storing authorization
+  - Employee grants permission to verifier
+
+**2. Submit Circuit (ZKML - Employee submits proof):**
+- [ ] **`submit_income_proof(proof, employee_wallet, txids, merkle_root, proof_type, threshold, model_hash)`**
+  - ✅ **THIS IS A ZKML CIRCUIT** - Employee submits ZK proof generated OFF-CHAIN
+  - **Proof types:**
+    - `INCOME_ABOVE_THRESHOLD` (1) - "I earn more than $X/month" (for credit cards)
+    - `INCOME_RANGE` (2) - "I earn between $X and $Y" (for rentals)
+    - `AVERAGE_INCOME` (3) - "My average monthly income is $X" (for loans)
+    - `CREDIT_SCORE` (4) - "My credit score > 680" (ML-based)
+  - Verifies: txids exist + Merkle root + ZK proof valid
+  - **Stores encrypted proof** in `income_proofs` map (like encrypted balances)
+  - Employee can update proof anytime by re-submitting
+  - Pattern matches `submit_credit_proof()` from generic framework
+
+**3. Verify Circuit (ZKML VERIFICATION - Verifier checks):**
+- [ ] **`verify_income_proof(employee_id, verifier_id)`**
+  - ✅ **THIS IS A ZKML VERIFICATION CIRCUIT** - Lender/landlord verifies employee's income
+  - Checks authorization from `grant_income_disclosure()`
+  - Checks proof exists and not expired
+  - Returns YES/NO based on threshold
+  - **Does NOT re-verify ZK proof** (already verified in submit_income_proof)
+  - **Does NOT reveal exact amounts** (privacy preserved)
+
+#### Ledger State
+
+```compact
+// Income proofs (encrypted like balances)
+export ledger income_proofs: Map<Bytes<32>, IncomeProof>;        // employee_id -> income_proof
+export ledger income_proof_timestamps: Map<Bytes<32>, Uint<64>>; // employee_id -> last_updated
+
+struct IncomeProof {
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,              // 1=threshold, 2=range, 3=average, 4=credit_score
+  encrypted_proof_data: Bytes<32>,  // Encrypted proof result
+  proof_hash: Bytes<32>,            // ZK proof hash (for verification)
+  created_at: Uint<64>,
+  expires_at: Uint<64>,
+  verified: Bool                    // Set to true after ZK proof verified
+}
+```
+
+#### ML Models (EZKL - OFF-CHAIN)
+
+- [ ] **Income Prediction Model:**
+  - Build XGBoost model to predict future income based on payment history
+  - Training data: synthetic payroll data with seasonal trends
+  - Export to ONNX format
+  - Generate ZK circuit using EZKL
+  - Proof: "Based on my payment history, my predicted 12-month income is $X"
+
+- [ ] **Credit Scoring Model:**
+  - Build XGBoost credit scoring model
+  - Features: payment frequency, amount variance, tenure, consistency
+  - Export to ONNX format
+  - Generate ZK circuit using EZKL
+  - Proof: "My payroll-based credit score is > 680"
+
+#### API Layer Integration
+
+- [ ] Add `submitIncomeProof()` method to PayrollAPI:
+  ```typescript
+  async submitIncomeProof(
+    employeeId: string,
+    proofType: 'THRESHOLD' | 'RANGE' | 'AVERAGE' | 'CREDIT_SCORE',
+    threshold: string,
+    zkProof: Uint8Array,
+    txids: string[],
+    merkleRoot: string
+  ): Promise<{ proofHash: string }>
+  ```
+
+- [ ] Add `verifyIncomeProof()` method to PayrollAPI:
+  ```typescript
+  async verifyIncomeProof(
+    employeeId: string,
+    verifierId: string
+  ): Promise<{ verified: boolean, meetsThreshold: boolean }>
+  ```
+
+- [ ] Add off-chain proof generation helper:
+  ```typescript
+  async generateIncomeProof(
+    employeeId: string,
+    paymentHistory: PaymentRecord[],
+    proofType: 'THRESHOLD' | 'RANGE' | 'AVERAGE' | 'CREDIT_SCORE',
+    params: ProofParams
+  ): Promise<{ zkProof: Uint8Array, merkleRoot: string }>
+  ```
+
+#### User Impact (WOW FACTOR 🚀)
+
+- ✅ Employees control who sees their income data
+- ✅ Lenders get proof of income without salary snooping
+- ✅ Landlords verify tenant income privately
+- ✅ Banks approve loans with ZK income verification
+
+**Use Cases:**
+- 🚀 "Apply for loan without revealing your exact salary"
+- 🚀 "Rent apartment with privacy-preserving income proof"
+- 🚀 "Get credit card approval without exposing paycheck amounts"
+
+**Integration with Existing Features:**
+- ✅ Leverages `grant_income_disclosure()` circuit (already implemented)
+- ✅ Uses payment history on public ledger (already stored)
+- ✅ Works with existing disclosure authorization system
+
+---
+
+### 2.2 SECONDARY: Tax W-2 Privacy (Priority 3)
+
+**Why Important:** Privacy-preserving tax compliance - employees can prove tax payments without revealing income details.
+
+**⚡ ZKML Applicability:** ⚡ **HYBRID - Tax calculation (NO ZKML), W-2 proof generation (YES ZKML)**
+
+**Two Parts:**
+
+**Part 1: Basic Tax Withholding (NO ZKML):**
+- Standard arithmetic in circuit: `tax = (amount * rate) / 100`
+- No ML needed, straightforward encrypted balance operations
+- See Priority 3 (Tax Withholding) for full implementation
+
+**Part 2: W-2 Privacy Proof (YES ZKML - OPTIONAL ENHANCEMENT):**
+
+**OFF-CHAIN (Employee's device):**
+1. Download annual payment history from blockchain
+2. Decrypt gross income, tax withheld
+3. Calculate annual totals (W-2 data)
+4. Generate ZK proof: "I paid $X in federal taxes this year" (without revealing salary)
+5. Generate ZK proof: "My W-2 shows compliance" (proves tax calculations correct)
+
+**ON-CHAIN (Smart contract):**
+1. Verify annual totals match payment history
+2. Verify ZK proof of W-2 data
+3. Store W-2 proof hash
+4. Tax authorities can verify compliance without seeing exact income
+
+**Implementation:**
+
+- [ ] Circuit: `submit_w2_proof(employee_id, year, proof, annual_totals_hash, model_hash)`
+  - Verifies ZK proof of annual tax calculations
+  - Stores W-2 proof hash on ledger
+  - Enables privacy-preserving tax filing
+
+- [ ] Circuit: `verify_tax_compliance(employee_id, tax_year, authority_id)`
+  - Checks W-2 proof exists and valid
+  - Returns YES/NO for compliance
+  - Tax authority verifies without seeing exact amounts
+
+**ML Model (EZKL):**
+- [ ] Build tax calculation verification model
+- [ ] Proves: "All withholdings calculated correctly according to IRS rules"
+- [ ] Export to ONNX → EZKL ZK circuit
+
+**Use Cases:**
+- 🚀 "File taxes with IRS using ZK proof of W-2 data"
+- 🚀 "Prove tax compliance without revealing exact income"
+- 🚀 "Privacy-preserving tax audit"
+
+---
+
+### 2.3 ADDITIONAL: Generic ZKML Framework (Demo Features)
+
+**Note:** These are additional ZKML demonstrations, not core payroll features.
 
 ### ML Models (OFF-CHAIN - ZKML)
 - [ ] Set up Python zkml workspace with EZKL dependencies
@@ -1142,6 +1350,99 @@ struct AuditMetric {
   metrics: [
     {metric_type: 20 (total_fraud_amount), value: 75000000}
   ]
+
+---
+
+### Phase 2 Implementation Roadmap
+
+**🎯 FOCUS: Prioritize core payroll ZKML features first**
+
+**Week 1-2: PRIMARY Features (Core Value Proposition)**
+
+**Day 1-3: Salary History Proofs (Priority 2) - MOST IMPORTANT**
+- [ ] Set up EZKL workspace (Python, ONNX, proof generation)
+- [ ] Build XGBoost income prediction model with synthetic data
+- [ ] Build XGBoost credit scoring model (payroll-based)
+- [ ] Export models to ONNX format
+- [ ] Generate ZK circuits using EZKL
+- [ ] Add `IncomeProof` struct to PayrollCommons.compact
+- [ ] Add ledger state: `income_proofs`, `income_proof_timestamps`
+- [ ] Implement circuit: `submit_income_proof()` (ZKML circuit)
+- [ ] Implement circuit: `verify_income_proof()` (ZKML verification)
+- [ ] Add API methods: `submitIncomeProof()`, `verifyIncomeProof()`, `generateIncomeProof()`
+- [ ] Write tests: proof generation, submission, verification, all 4 proof types
+- [ ] Test end-to-end: employee generates proof → submits → verifier checks
+
+**Day 4-5: Tax W-2 Privacy (Priority 3 Part 2) - OPTIONAL ENHANCEMENT**
+- [ ] Build tax calculation verification model (EZKL)
+- [ ] Implement circuit: `submit_w2_proof()` (ZKML circuit)
+- [ ] Implement circuit: `verify_tax_compliance()` (verification)
+- [ ] Add API methods for W-2 proof submission/verification
+- [ ] Write tests: W-2 proof generation, tax compliance verification
+- [ ] Test end-to-end: employee generates W-2 proof → IRS verifies
+
+**Week 3-4: ADDITIONAL Features (Demo/Advanced)**
+
+**Day 6-8: Generic Credit Scoring & Employment Proofs**
+- [ ] Implement circuits: `submit_credit_proof()`, `verify_credit_proof()`
+- [ ] Implement circuits: `submit_employment_proof()`, `verify_employment_proof()`
+- [ ] Add ledger state for credit scores and employment proofs
+- [ ] Write tests for credit and employment verification flows
+
+**Day 9-10: Audit Framework (Fraud Detection, Pay Equity)**
+- [ ] Build Isolation Forest anomaly detection model (fraud)
+- [ ] Build ZK-SNARK arithmetic circuits (pay equity)
+- [ ] Implement circuit: `submit_audit_result()` (generic audit)
+- [ ] Add `AuditReport`, `AuditFinding`, `AuditMetric` structs
+- [ ] Write tests for different audit types (fraud, equity, tax, benefits)
+
+**Day 11-12: LLM Layer Integration (OFF-CHAIN)**
+- [ ] Set up LLM service (GPT-4 or Claude API)
+- [ ] Implement report generation from `AuditReport` structs
+- [ ] Implement natural language query interface
+- [ ] Implement anomaly explanation feature
+- [ ] Test LLM output quality and accuracy
+
+**Success Criteria:**
+
+**PRIMARY (Must Have):**
+- [x] Authorization circuits working (already implemented in Phase 0)
+- [ ] Income proof generation works end-to-end (off-chain EZKL → on-chain verification)
+- [ ] Employees can prove income to lenders without revealing amounts
+- [ ] All 4 proof types working (threshold, range, average, credit_score)
+- [ ] API layer supports income proof submission and verification
+- [ ] Tests passing for income proof workflows
+
+**SECONDARY (Nice to Have):**
+- [ ] W-2 privacy proofs working (tax compliance without revealing income)
+- [ ] Generic credit/employment proofs working
+- [ ] Audit framework supporting multiple audit types
+- [ ] LLM layer generating human-readable reports
+
+**Compilation Target:** 18 circuits (Phase 1) + 8-12 ZKML circuits = 26-30 circuits total
+
+**Test Coverage Goal:** 105 tests (Phase 1) + 30-40 ZKML tests = 135-145 tests total
+
+**Key Architecture Patterns:**
+1. ✅ **3-Circuit Pattern**: Authorization → Submit (ZKML) → Verify (ZKML verification)
+2. ✅ **Encrypted Proofs**: Store proof results encrypted like balances
+3. ✅ **OFF-CHAIN ML**: All ML inference happens locally using EZKL
+4. ✅ **ON-CHAIN VERIFICATION**: Contract only verifies ZK proofs, doesn't run models
+5. ✅ **Privacy Preserved**: Verifiers get YES/NO, never exact amounts
+
+**Dependencies:**
+- ✅ Phase 0-1 completed (authorization circuits, payment history, disclosure system)
+- ✅ Payment history on public ledger (needed for proof generation)
+- ✅ Disclosure authorization system (grant/revoke already working)
+- [ ] EZKL setup and working proof generation
+- [ ] ONNX model export working
+- [ ] Python workspace for ML training
+
+**Integration Points:**
+- `payroll-api/` - Add ZKML proof submission/verification methods
+- `payroll-contract/` - Add ZKML circuits and ledger state
+- New: `zkml/` - Python workspace for model training and EZKL proof generation
+- New: `llm-service/` - Node.js service for LLM report generation (optional)
 
 ---
 

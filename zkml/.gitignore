@@ -1,0 +1,40 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# EZKL generated files
+*.onnx
+*.onnx.data
+*.compiled
+model.compiled
+*.key
+*.pf
+*.srs
+kzg*.srs
+
+# EZKL generated JSON files (but allow package.json, etc.)
+proof.json
+witness.json
+settings.json
+calibration.json
+input.json
+
+# Compiled circuits
+compiled_circuit/
+
+# Model artifacts
+models/*.onnx
+proofs/*.json
+
+# Data files
+data/
+*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
