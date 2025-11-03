@@ -40,43 +40,128 @@
 - ✅ Verification: ~100ms
 - ✅ Full workflow: Generate proof → Verify → Get attestation ✅
 
-### Next Steps for ZKML Integration
+### Payroll Proof Generator (COMPLETED ✅)
 
-**Priority 1: Payroll Proof Generator**
-- [ ] Create `zkml/payroll/` directory
-- [ ] Design payroll ML model (proves: avg(payments) > threshold)
-- [ ] Create `payroll-model.onnx` (simple averaging model)
-- [ ] Create `generate-payroll-proof.ts` (based on Example 1)
-- [ ] Test with realistic payment data
+**Status:** Payroll proof generation working end-to-end
 
-**Priority 2: Smart Contract Integration**
-- [ ] Add verifier public key to contract state
-- [ ] Implement `verify_attestation` circuit in `payroll.compact`:
-  ```compact
-  const recomputed = persistentHash([
-    persistentHash(data),
-    provided_secret
-  ]);
-  assert(recomputed == stored_attestation_hash);
-  assert(!used_attestations[attestation_hash]);
+- ✅ Created `zkml/payroll/` directory structure
+- ✅ Copied and adapted `payroll-model.onnx` from Example 1
+- ✅ Created `payroll-input.json` with sample payment data (3 payments + threshold)
+- ✅ Created `generate-payroll-proof.ts` (7-step EZKL workflow)
+- ✅ Tested proof generation: **1.04 seconds** ✅
+- ✅ Tested verification with zkml-verifier service ✅
+- ✅ Attestation created successfully ✅
+
+**Files:**
+- `zkml/payroll/payroll-model.onnx` - ONNX model for salary threshold verification
+- `zkml/payroll/payroll-input.json` - Sample payment data
+- `zkml/payroll/generate-payroll-proof.ts` - Proof generator script
+- `zkml/payroll/test-payroll-verification.ts` - End-to-end verification test
+- Generated: `proof.json`, `vk.key`, `pk.key`, `settings.json`, `witness.json`
+
+**Privacy Verified:**
+- ✅ Individual payment amounts ($5,000, $6,000, $5,500) NEVER leave employee's machine
+- ✅ Only ZK proof of `average > threshold` is shared
+- ✅ Cryptographically verified without revealing private data
+
+### 🔒 ZKML Security Review (Nov 3, 2025)
+
+**Full Report:** See `docs/technical/SECURITY_REVIEW_ZKML.md`
+
+**Assessment:**
+- **Privacy Grade:** B+ (Strong ZK privacy, but verifier learns employee_id)
+- **Security Grade:** C (Good cryptography, but critical issues below)
+- **MVP Readiness:** ⚠️ NOT READY until critical fixes applied
+
+#### 🚨 CRITICAL ISSUES (Must Fix for Phase 2)
+
+**1. VERIFIER SECRET EXPOSURE** ⚠️⚠️⚠️
+```typescript
+// zkml-verifier/src/services/attestation-signer.ts:79
+verifier_secret: this.getSecretKey(),  // ❌ SECRET LEAKED IN API RESPONSE
+```
+- **Impact:** Anyone can forge attestations with the exposed secret
+- **Fix:** Remove `verifier_secret` from attestation response (1-line change)
+- **Why:** Contract should receive secret from employee privately, NOT from public API
+- **Status:** BLOCKING - Must fix before Phase 2
+
+**2. NO CONTRACT VERIFICATION**
+- **Issue:** Attestations created but never verified on-chain
+- **Impact:** Defeats entire purpose of attestation system
+- **Fix:** Implement `verify_attestation` circuit in Phase 2 (see below)
+
+**3. NO PROOF OWNERSHIP BINDING**
+- **Issue:** Attacker can generate proof claiming to be any employee_id
+- **Impact:** Identity spoofing possible
+- **Fix:** Require employee signature on proof
+  ```typescript
+  {
+    proof: EZKLProof,
+    employee_signature: string,  // Sign(employee_privkey, proof_hash)
+    employee_pubkey: string
+  }
   ```
-- [ ] Add `used_attestations` ledger map (prevent replay attacks)
-- [ ] Update `prove_eligibility` to require attestation
 
-**Priority 3: API Integration**
-- [ ] Add ZKML endpoints to `payroll-api/src/index.ts`
-- [ ] Implement proof submission flow:
-  1. Employee generates proof locally
-  2. Employee POSTs proof to API
-  3. API forwards to verifier service
-  4. API receives attestation
-  5. API submits attestation to contract
+#### 📋 Acceptable MVP Compromises
 
-**Security Considerations**
-- Verifier is single point of trust (for MVP)
-- Secret key must be secured (currently in `.env`)
-- Attestations are single-use only
-- Future: Multi-verifier consensus
+These are intentionally simplified for MVP/testing and will be addressed in future phases:
+- ✅ Hardcoded test secret `aaaa...` in `.env` (local dev only)
+- ✅ Sample payment data (Phase 1 - will be pluggable in Phase 2)
+- ✅ Simple 3-payment model (proves concept, will upgrade)
+- ✅ Single verifier (centralization acceptable for MVP)
+- ✅ HTTP on localhost (production will use HTTPS)
+- ✅ Verifier learns employee_id (semi-trusted model accepted)
+- ✅ No rate limiting (will add in production)
+- ✅ No input validation (will add zod schemas in production)
+- ✅ No timestamp expiry (will add time bounds in Phase 2)
+- ✅ Hardcoded EZKL path (will use env var when deploying)
+
+### Next Steps for Phase 2: ZKML Integration with Smart Contract
+
+**CRITICAL: Fix Security Issues First**
+- [ ] **Remove `verifier_secret` from attestation response** (zkml-verifier/src/services/attestation-signer.ts:79)
+- [ ] **Implement `verify_attestation` circuit** in payroll.compact
+- [ ] **Add ledger state**: `trusted_verifiers` Set and `used_attestations` Set
+- [ ] **Add proof ownership verification** (require employee signature on proof)
+
+**Contract Attestation Verification Circuit:**
+```compact
+circuit verify_attestation(
+  employee_id: Bytes<32>,
+  threshold: Uint<64>,
+  txids: Vector<4, Bytes<32>>,
+  merkle_root: Bytes<32>,
+  timestamp: Uint<64>,
+  attestation_hash: Bytes<32>,
+  verifier_secret: Bytes<32>  // From employee (received privately from verifier)
+) {
+  // 1. Verify attestation commitment
+  let data_hash = persistentHash([employee_id, threshold, txids, merkle_root, timestamp]);
+  let computed_hash = persistentHash([data_hash, verifier_secret]);
+  assert(computed_hash == attestation_hash);
+
+  // 2. Check verifier is trusted
+  let verifier_pubkey = persistentHash([pad(32, "zksalaria:verifier:pk:"), verifier_secret]);
+  assert(trusted_verifiers.contains(verifier_pubkey));
+
+  // 3. Prevent replay attacks
+  assert(!used_attestations.contains(attestation_hash));
+  used_attestations.insert(attestation_hash);
+
+  // 4. Check timestamp freshness (1 hour window)
+  let current_time = block_timestamp();
+  assert(timestamp > current_time - 3600);
+  assert(timestamp <= current_time);
+}
+```
+
+**Integration Flow:**
+1. Employee generates ZK proof locally (payment amounts stay private)
+2. Employee submits proof to zkml-verifier service
+3. Verifier verifies proof, creates attestation (without returning secret publicly)
+4. Employee receives attestation_hash + verifier_secret privately
+5. Employee calls `prove_eligibility` circuit with attestation data
+6. Contract verifies attestation, grants eligibility
 
 ---
 
