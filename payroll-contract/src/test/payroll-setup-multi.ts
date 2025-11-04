@@ -243,19 +243,6 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
-  // Test method: Update timestamp
-  updateTimestamp(newTimestamp: number): Ledger {
-    console.log(`⏰ Updating timestamp to ${newTimestamp}`);
-
-    this.executeAsParticipant(
-      'SYSTEM',
-      (ctx, ts) => this.contract.impureCircuits.update_timestamp(ctx, ts),
-      BigInt(newTimestamp)
-    );
-
-    return this.getLedgerState();
-  }
-
   // Test method: Create recurring payment
   createRecurringPayment(
     companyId: string,
@@ -503,11 +490,6 @@ export class PayrollMultiPartyTestSetup {
     // Payment history is on public ledger - accessible to all for credit scoring
     // This is intentional - ZKML credit scoring needs this data
     return true;
-  }
-
-  // Helper: Get current timestamp
-  getCurrentTimestamp(): number {
-    return Number(this.getLedgerState().current_timestamp);
   }
 
   // Helper: Get total companies (always 1 for single-company-per-contract architecture)
@@ -777,16 +759,120 @@ export class PayrollMultiPartyTestSetup {
     return usedAttestationsMap.member(attestationHashBytes);
   }
 
+  // Helper: Get current timestamp from contract
+  getCurrentTimestamp(): number {
+    const ledgerState = this.getLedgerState();
+    return Number(ledgerState.current_timestamp);
+  }
+
   // Helper: Update timestamp (for testing expiry)
-  updateTimestamp(newTimestamp: bigint): Ledger {
+  updateTimestamp(newTimestamp: number): Ledger {
     console.log(`⏰ Updating timestamp to: ${newTimestamp}`);
 
     this.executeAsParticipant(
       this.companyId,
       (ctx, ts) => this.contract.impureCircuits.update_timestamp(ctx, ts),
-      newTimestamp
+      BigInt(newTimestamp)
     );
 
     return this.getLedgerState();
+  }
+
+  // ========================================
+  // ZKML Income Proof Methods (Section 2.1)
+  // ========================================
+
+  submitIncomeProof(
+    employeeId: string,
+    proofType: number,
+    thresholdMin: bigint,
+    thresholdMax: bigint,
+    txids: string[], // Array of 12 hex strings
+    merkleRoot: string,
+    attestationHash: string,
+    verifierPubkey: string,
+    timestamp: bigint,
+    expiresIn: number // Seconds
+  ): Ledger {
+    console.log(`📝 Submitting income proof for employee ${employeeId} (type: ${proofType})`);
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const proofTypeU8 = BigInt(proofType); // Convert to bigint for Uint<8>
+    const txidsVector = txids.map(tx => hexToBytes32(tx));
+    const merkleRootBytes = hexToBytes32(merkleRoot);
+    const attestationHashBytes = hexToBytes32(attestationHash);
+    const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
+    const expiresInU32 = BigInt(expiresIn); // Convert to bigint for Uint<32>
+
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, empId, pType, thMin, thMax, txs, mr, attHash, vpBytes, ts, exp) =>
+        this.contract.impureCircuits.submit_income_proof(
+          ctx,
+          empId,
+          pType,
+          thMin,
+          thMax,
+          txs,
+          mr,
+          attHash,
+          vpBytes,
+          ts,
+          exp
+        ),
+      employeeIdBytes,
+      proofTypeU8,
+      thresholdMin,
+      thresholdMax,
+      txidsVector,
+      merkleRootBytes,
+      attestationHashBytes,
+      verifierPubkeyBytes,
+      timestamp,
+      expiresInU32
+    );
+
+    return this.getLedgerState();
+  }
+
+  getIncomeProof(employeeId: string): any | null {
+    const ledgerState = this.getLedgerState();
+    const employeeIdBytes = stringToBytes32(employeeId);
+
+    const incomeProofsMap = ledgerState.income_proofs as any;
+
+    if (incomeProofsMap.member(employeeIdBytes)) {
+      return incomeProofsMap.lookup(employeeIdBytes);
+    }
+
+    return null;
+  }
+
+  verifyIncomeProof(
+    employeeId: string,
+    requiredProofType: number,
+    requiredThreshold: bigint
+  ): boolean {
+    console.log(`🔍 Verifying income proof for employee ${employeeId} (type: ${requiredProofType}, threshold: ${requiredThreshold})`);
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const requiredProofTypeU8 = BigInt(requiredProofType); // Convert to bigint for Uint<8>
+
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, empId, reqType, reqThreshold) =>
+        this.contract.impureCircuits.verify_income_proof(
+          ctx,
+          empId,
+          reqType,
+          reqThreshold
+        ),
+      employeeIdBytes,
+      requiredProofTypeU8,
+      requiredThreshold
+    );
+
+    console.log('✅ Income proof verification succeeded');
+    return true;
   }
 }
