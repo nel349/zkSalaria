@@ -1,0 +1,29 @@
+{
+  "name": "@zksalaria/zkml-payroll",
+  "version": "0.1.0",
+  "description": "ZKML income proof generation and verification for zkSalaria",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "npx tsx test/e2e.test.ts",
+    "setup": "npx tsx scripts/setup-models.ts",
+    "validate": "npx tsx scripts/validate-models.ts"
+  },
+  "keywords": [
+    "zkml",
+    "ezkl",
+    "zero-knowledge",
+    "income-verification",
+    "privacy"
+  ],
+  "author": "zkSalaria",
+  "license": "MIT",
+  "dependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0"
+  }
+}
