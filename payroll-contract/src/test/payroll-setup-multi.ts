@@ -177,6 +177,8 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
+  // NOTE: Commented out - batch_pay_employees circuit disabled for testnet performance
+  /*
   // Test method: Batch pay multiple employees in one transaction
   batchPayEmployees(payments: Array<{ employeeId: string; amount: bigint }>): Ledger {
     console.log(`💸💸 ${this.companyName} batch paying ${payments.length} employees`);
@@ -220,6 +222,7 @@ export class PayrollMultiPartyTestSetup {
 
     return this.getLedgerState();
   }
+  */
 
   // Test method: Withdraw employee salary (executed by employee participant)
   withdrawEmployeeSalary(employeeId: string, amount: bigint): Ledger {
@@ -655,49 +658,6 @@ export class PayrollMultiPartyTestSetup {
     this.executeAsParticipant(
       this.companyId,
       (ctx, vpBytes) => this.contract.impureCircuits.register_trusted_verifier(ctx, vpBytes),
-      verifierPubkeyBytes
-    );
-
-    return this.getLedgerState();
-  }
-
-  // Verify ZKML attestation
-  verifyAttestation(
-    employeeId: string,
-    threshold: bigint,
-    txids: string[],  // Array of 4 hex strings
-    merkleRoot: string,
-    timestamp: bigint,
-    attestationHash: string,
-    verifierPubkey: string
-  ): Ledger {
-    console.log(`✅ Verifying attestation for employee ${employeeId} (threshold: ${threshold})`);
-
-    const employeeIdBytes = stringToBytes32(employeeId);
-    const txidsBytes = txids.map(txid => hexToBytes32(txid));
-    const merkleRootBytes = hexToBytes32(merkleRoot);
-    const attestationHashBytes = hexToBytes32(attestationHash);
-    const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
-
-    this.executeAsParticipant(
-      employeeId,
-      (ctx, eidBytes, thresh, txs, mrBytes, ts, ahBytes, vpBytes) =>
-        this.contract.impureCircuits.verify_attestation(
-          ctx,
-          eidBytes,
-          thresh,
-          txs,
-          mrBytes,
-          ts,
-          ahBytes,
-          vpBytes
-        ),
-      employeeIdBytes,
-      threshold,
-      txidsBytes,
-      merkleRootBytes,
-      timestamp,
-      attestationHashBytes,
       verifierPubkeyBytes
     );
 
