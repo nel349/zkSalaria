@@ -598,6 +598,9 @@ export class PayrollMultiPartyTestSetup {
     const employeeIdBytes = stringToBytes32(employeeId);
     const verifierIdBytes = stringToBytes32(verifierId);
 
+    // Register verifier as participant (grantee needs private state to potentially read shared data)
+    this.registerParticipant(verifierId);
+
     this.executeAsParticipant(
       employeeId,
       (ctx, eidBytes, vidBytes, expiresInBigInt) =>
@@ -643,6 +646,70 @@ export class PayrollMultiPartyTestSetup {
     );
 
     return result;
+  }
+
+  // Test method: Grant income disclosure (executed by employee participant)
+  grantIncomeDisclosure(employeeId: string, lenderId: string, minThreshold: bigint, expiresIn: number): Ledger {
+    console.log(`🔐 Employee ${employeeId} granting income disclosure to ${lenderId} (threshold: ${minThreshold})`);
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const lenderIdBytes = stringToBytes32(lenderId);
+
+    // Register lender as participant (grantee needs private state to potentially read shared data)
+    this.registerParticipant(lenderId);
+
+    this.executeAsParticipant(
+      employeeId,
+      (ctx, eidBytes, lidBytes, threshold, expiresInBigInt) =>
+        this.contract.impureCircuits.grant_income_disclosure(ctx, eidBytes, lidBytes, threshold, expiresInBigInt),
+      employeeIdBytes,
+      lenderIdBytes,
+      minThreshold,
+      BigInt(expiresIn)
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Test method: Grant audit disclosure (executed by company participant)
+  grantAuditDisclosure(auditorId: string, expiresIn: number): Ledger {
+    console.log(`🔐 Company ${this.companyId} granting audit disclosure to ${auditorId}`);
+
+    const companyIdBytes = stringToBytes32(this.companyId);
+    const auditorIdBytes = stringToBytes32(auditorId);
+
+    // Register auditor as participant (grantee needs private state to potentially read shared data)
+    this.registerParticipant(auditorId);
+
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, cidBytes, aidBytes, expiresInBigInt) =>
+        this.contract.impureCircuits.grant_audit_disclosure(ctx, cidBytes, aidBytes, expiresInBigInt),
+      companyIdBytes,
+      auditorIdBytes,
+      BigInt(expiresIn)
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Test method: Revoke disclosure (executed by grantor participant)
+  revokeDisclosure(grantorId: string, granteeId: string, permissionType: bigint): Ledger {
+    console.log(`🔓 ${grantorId} revoking disclosure for ${granteeId} (type: ${permissionType})`);
+
+    const grantorIdBytes = stringToBytes32(grantorId);
+    const granteeIdBytes = stringToBytes32(granteeId);
+
+    this.executeAsParticipant(
+      grantorId,
+      (ctx, grantor, grantee, perm) =>
+        this.contract.impureCircuits.revoke_disclosure(ctx, grantor, grantee, perm),
+      grantorIdBytes,
+      granteeIdBytes,
+      permissionType
+    );
+
+    return this.getLedgerState();
   }
 
   // ========================================

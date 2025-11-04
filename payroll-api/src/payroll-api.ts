@@ -672,9 +672,11 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async grantAuditDisclosure(auditorId: string, expiresIn: number): Promise<void> {
     this.logger?.info({ grantAuditDisclosure: { auditorId, expiresIn } });
 
+    const companyIdBytes = utils.stringToBytes32(this.accountId);
     const auditorIdBytes = utils.stringToBytes32(auditorId);
 
     await this.circuits.grant_audit_disclosure(
+      companyIdBytes,
       auditorIdBytes,
       BigInt(expiresIn)
     );
@@ -737,7 +739,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
     const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
 
     const result = await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
-    return result;
+    // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata
+    return result.private.result;
   }
 
   async submitIncomeProof(
@@ -787,7 +790,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
       timestamp,
       BigInt(expiresIn)
     );
-    return result;
+    // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata
+    return result.private.result;
   }
 
   async verifyIncomeProof(
@@ -805,7 +809,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
       utils.parseAmount(requiredThreshold)
     );
 
-    return result;
+    // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata
+    return result.private.result;
   }
 
   async getIncomeProof(employeeId: string): Promise<any | null> {

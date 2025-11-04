@@ -9,6 +9,31 @@ export type AccountId = string;
 
 export type PayrollContract = Contract<PayrollPrivateState>;
 
+// Circuit result types for Boolean-returning circuits
+export interface CircuitResults<T, R> {
+  private: {
+    input: any;
+    output: any;
+    result: R;
+    newCoins: any[];
+    nextPrivateState: T;
+    nextZswapLocalState: any;
+    privateTranscriptOutputs: any[];
+    unprovenTx: any;
+  };
+  public: {
+    blockHash: string;
+    blockHeight: number;
+    nextContractState: any;
+    partitionedTranscript: any[];
+    publicTranscript: any[];
+    status: string;
+    tx: any;
+    txHash: string;
+    txId: string;
+  };
+}
+
 // Explicit circuit call types (workaround for empty witnesses type inference issue)
 export interface PayrollCircuitCalls {
   mint_tokens(amount: bigint): Promise<void>;
@@ -18,7 +43,7 @@ export interface PayrollCircuitCalls {
   pay_employee(employeeId: Uint8Array, salaryAmount: bigint): Promise<void>;
   grant_income_disclosure(employeeId: Uint8Array, lenderId: Uint8Array, minThreshold: bigint, expiresIn: bigint): Promise<void>;
   grant_employment_disclosure(employeeId: Uint8Array, verifierId: Uint8Array, expiresIn: bigint): Promise<void>;
-  grant_audit_disclosure(auditorId: Uint8Array, expiresIn: bigint): Promise<void>;
+  grant_audit_disclosure(companyId: Uint8Array, auditorId: Uint8Array, expiresIn: bigint): Promise<void>;
   revoke_disclosure(grantorId: Uint8Array, granteeId: Uint8Array, permissionType: bigint): Promise<void>;
   update_employment_status(employeeId: Uint8Array, newStatus: bigint): Promise<void>;
   verify_employment(employeeId: Uint8Array, verifierId: Uint8Array): Promise<Uint8Array>;
@@ -37,7 +62,7 @@ export interface PayrollCircuitCalls {
   resume_recurring_payment(recurringPaymentId: Uint8Array, nextPaymentDate: bigint): Promise<void>;
   edit_recurring_payment(recurringPaymentId: Uint8Array, newAmount: bigint): Promise<void>;
   process_recurring_payment(recurringPaymentId: Uint8Array): Promise<void>;
-  register_trusted_verifier(verifierPubkey: Uint8Array): Promise<boolean>;
+  register_trusted_verifier(verifierPubkey: Uint8Array): Promise<CircuitResults<PayrollPrivateState, boolean>>;
   submit_income_proof(
     employeeId: Uint8Array,
     proofType: bigint,
@@ -49,8 +74,8 @@ export interface PayrollCircuitCalls {
     verifierPubkey: Uint8Array,
     timestamp: bigint,
     expiresIn: bigint
-  ): Promise<boolean>;
-  verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<boolean>;
+  ): Promise<CircuitResults<PayrollPrivateState, boolean>>;
+  verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<CircuitResults<PayrollPrivateState, boolean>>;
   update_timestamp(newTimestamp: bigint): Promise<void>;
 }
 

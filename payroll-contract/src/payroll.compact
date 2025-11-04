@@ -542,24 +542,26 @@ export circuit grant_employment_disclosure(
 // Grant audit disclosure to auditor (compliance checks, pay equity analysis)
 // Stores authorization for auditor to access THIS company's payroll data using ZKML
 // NOTE: Actual analysis happens OFF-CHAIN with ZKML proofs (python/ezkl)
-// NOTE: Only this contract's company can grant audit disclosure (enforced at API layer)
+// NOTE: Caller must provide company_id and it must match this contract's company_id
 export circuit grant_audit_disclosure(
+  company_id_param: Bytes<32>,  // Must match this contract's company_id
   auditor_id: Bytes<32>,
   expires_in: Uint<32>
 ): [] {
-  // No company verification needed - this contract IS the company
+  // Verify the provided company_id matches this contract's company_id
+  assert(company_id_param == company_id, "Invalid company ID");
 
   // Generate unique disclosure ID
   const permission_type = PC_PERMISSION_TYPE_AUDIT();
   const disclosure_id = PC_generate_disclosure_id(
-    company_id,  // This contract's company ID
+    disclose(company_id_param),  // Now a parameter, so disclose() works
     disclose(auditor_id),
     permission_type
   );
 
   // Generate shared encryption key
   const shared_key = PC_generate_shared_disclosure_key(
-    company_id,  // This contract's company ID
+    disclose(company_id_param),  // Now a parameter, so disclose() works
     disclose(auditor_id),
     permission_type
   );
@@ -571,7 +573,7 @@ export circuit grant_audit_disclosure(
 
   // Create authorization
   const authorization = PC_DisclosureAuthorization {
-    grantor_id: company_id,  // This contract's company ID
+    grantor_id: disclose(company_id_param),  // Now a parameter, so disclose() works
     grantee_id: disclose(auditor_id),
     shared_encryption_key: shared_key,
     threshold: 0 as Uint<64>,  // Not used for audit disclosures

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { PayrollAPI, type PayrollProviders, utils } from '../index.js';
+import { PayrollAPI, type PayrollProviders, utils, PermissionType } from '../index.js';
 import pino from 'pino';
 import { firstValueFrom } from 'rxjs';
 import WebSocket from 'ws';
@@ -61,21 +61,21 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       logger.info('Testing income disclosure (grant + revoke)…');
       await companyAPI.grantIncomeDisclosure(employeeId, lenderId, '4000.00', 86400);
       logger.info('✅ Income disclosure granted');
-      await companyAPI.revokeDisclosure(employeeId, lenderId, 0n); // PERMISSION_TYPE_INCOME
+      await companyAPI.revokeDisclosure(employeeId, lenderId, PermissionType.INCOME_RANGE);
       logger.info('✅ Income disclosure revoked');
 
       // Test 2: Employment Disclosure
       logger.info('Testing employment disclosure (grant + revoke)…');
       await companyAPI.grantEmploymentDisclosure(employeeId, verifierId, 172800);
       logger.info('✅ Employment disclosure granted');
-      await companyAPI.revokeDisclosure(employeeId, verifierId, 1n); // PERMISSION_TYPE_EMPLOYMENT
+      await companyAPI.revokeDisclosure(employeeId, verifierId, PermissionType.EMPLOYMENT);
       logger.info('✅ Employment disclosure revoked');
 
       // Test 3: Audit Disclosure
       logger.info('Testing audit disclosure (grant + revoke)…');
       await companyAPI.grantAuditDisclosure(auditorId, 604800);
       logger.info('✅ Audit disclosure granted');
-      await companyAPI.revokeDisclosure(companyId, auditorId, 2n); // PERMISSION_TYPE_AUDIT
+      await companyAPI.revokeDisclosure(companyId, auditorId, PermissionType.AUDIT);
       logger.info('✅ Audit disclosure revoked');
 
       logger.info('✅ All disclosure types tested successfully');
@@ -104,6 +104,10 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       // Test employment status transitions: PENDING -> ACTIVE -> ON_LEAVE -> ACTIVE -> TERMINATED
       logger.info('Transitioning: PENDING (0) -> ACTIVE (1)…');
       await companyAPI.updateEmploymentStatus(employeeId, 1n);
+
+      // Wait for transaction to be mined
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       let isEmployed = await companyAPI.verifyEmployment(employeeId, verifierId);
       expect(isEmployed).toBe(true);
       logger.info('✅ Status verified as ACTIVE');

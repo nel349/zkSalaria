@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
-import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus, PaymentStatus } from '../types.js';
+import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus, PaymentStatus, PermissionType } from '../types.js';
 import { stringToBytes32 } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
@@ -474,6 +474,142 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       expect(participants).toContain(companyId);
       expect(participants).toContain(employeeId);
       expect(participants).toContain(landlordId);
+    });
+  });
+
+  describe('Income Disclosure Management', () => {
+    test('should grant and revoke income disclosure', () => {
+      const employeeId = 'EMP_INCOME_001';
+      const lenderId = 'LENDER_001';
+      const minThreshold = 4000n;
+
+      // Setup: Add employee and create payment history
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(10000n);
+      payroll.payEmployee(employeeId, 5000n);
+
+      // Grant income disclosure from employee to lender
+      payroll.grantIncomeDisclosure(employeeId, lenderId, minThreshold, 86400);
+
+      // Verify participants registered
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants).toContain(employeeId);
+      expect(participants).toContain(lenderId);
+
+      console.log('✅ Income disclosure granted successfully');
+
+      // Revoke income disclosure
+      payroll.revokeDisclosure(employeeId, lenderId, PermissionType.INCOME_RANGE);
+
+      console.log('✅ Income disclosure revoked successfully');
+    });
+
+    test('should grant income disclosure with different thresholds', () => {
+      const employeeId = 'EMP_INCOME_002';
+      const lender1 = 'LENDER_002A';
+      const lender2 = 'LENDER_002B';
+
+      // Setup
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(20000n);
+      payroll.payEmployee(employeeId, 8000n);
+
+      // Grant different thresholds to different lenders
+      payroll.grantIncomeDisclosure(employeeId, lender1, 5000n, 0); // No expiry
+      payroll.grantIncomeDisclosure(employeeId, lender2, 10000n, 3600); // 1 hour expiry
+
+      // Both should succeed
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants).toContain(lender1);
+      expect(participants).toContain(lender2);
+
+      console.log('✅ Multiple income disclosures with different thresholds granted');
+
+      // Revoke both
+      payroll.revokeDisclosure(employeeId, lender1, PermissionType.INCOME_RANGE);
+      payroll.revokeDisclosure(employeeId, lender2, PermissionType.INCOME_RANGE);
+
+      console.log('✅ Both income disclosures revoked');
+    });
+  });
+
+  describe('Audit Disclosure Management', () => {
+    test('should grant and revoke audit disclosure', () => {
+      const auditorId = 'AUDITOR_001';
+
+      // Grant audit disclosure from company to auditor
+      payroll.grantAuditDisclosure(auditorId, 604800); // 7 days
+
+      // Verify auditor registered as participant
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants).toContain(companyId);
+      expect(participants).toContain(auditorId);
+
+      console.log('✅ Audit disclosure granted successfully');
+
+      // Revoke audit disclosure
+      payroll.revokeDisclosure(companyId, auditorId, PermissionType.AUDIT);
+
+      console.log('✅ Audit disclosure revoked successfully');
+    });
+
+    test('should grant audit disclosure to multiple auditors', () => {
+      const auditor1 = 'AUDITOR_002A';
+      const auditor2 = 'AUDITOR_002B';
+      const auditor3 = 'AUDITOR_002C';
+
+      // Grant to three different auditors
+      payroll.grantAuditDisclosure(auditor1, 0); // No expiry
+      payroll.grantAuditDisclosure(auditor2, 86400); // 1 day
+      payroll.grantAuditDisclosure(auditor3, 172800); // 2 days
+
+      // All should succeed
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants).toContain(auditor1);
+      expect(participants).toContain(auditor2);
+      expect(participants).toContain(auditor3);
+
+      console.log('✅ Multiple audit disclosures granted');
+
+      // Revoke all three
+      payroll.revokeDisclosure(companyId, auditor1, PermissionType.AUDIT);
+      payroll.revokeDisclosure(companyId, auditor2, PermissionType.AUDIT);
+      payroll.revokeDisclosure(companyId, auditor3, PermissionType.AUDIT);
+
+      console.log('✅ All audit disclosures revoked');
+    });
+
+    test('should handle audit disclosure independently from employment disclosure', () => {
+      const employeeId = 'EMP_AUDIT_003';
+      const auditorId = 'AUDITOR_003';
+      const verifierId = 'VERIFIER_003';
+
+      // Setup employee
+      payroll.addEmployee(employeeId);
+
+      // Grant employment disclosure
+      payroll.grantEmploymentDisclosure(employeeId, verifierId, 86400);
+
+      // Grant audit disclosure
+      payroll.grantAuditDisclosure(auditorId, 86400);
+
+      // Both should coexist
+      const participants = payroll.getRegisteredParticipants();
+      expect(participants).toContain(employeeId);
+      expect(participants).toContain(verifierId);
+      expect(participants).toContain(auditorId);
+
+      console.log('✅ Both disclosure types coexist independently');
+
+      // Revoke employment disclosure (should not affect audit)
+      payroll.revokeDisclosure(employeeId, verifierId, PermissionType.EMPLOYMENT);
+
+      console.log('✅ Employment disclosure revoked');
+
+      // Audit disclosure should still be valid, revoke it
+      payroll.revokeDisclosure(companyId, auditorId, PermissionType.AUDIT);
+
+      console.log('✅ Audit disclosure revoked - both types handled independently');
     });
   });
 
