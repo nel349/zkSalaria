@@ -14,9 +14,9 @@
 | **Phase 0:** Privacy & Architecture | ✅ COMPLETED | 11 core | 64 multi-party | Encrypted ledger pattern |
 | **Phase 1:** Core Payroll | ✅ COMPLETED | 11 core | 118 passing | All basic features working |
 | **Phase 1.5:** UX Enhancements | ⚡ MOSTLY DONE | +7 circuits | +54 tests | Recurring ✅, Batch ⚡, Status ✅ |
-| **Phase 1.6:** API Integration | ✅ COMPLETED | N/A | 31 API tests | PayrollAPI ready |
+| **Phase 1.6:** API Integration | ⚡ PARTIAL (55%) | N/A | 31 API tests | 11/20 circuits covered |
 | **Phase 2.0:** DEPRECATED | ❌ REMOVED | -2 circuits | N/A | Testnet performance optimization |
-| **Phase 2.1:** Salary History Proofs | ✅ COMPLETED | +2 ZKML | 23 ZKML tests | 4 proof types working |
+| **Phase 2.1:** Salary History Proofs | ⚡ CIRCUITS ONLY | +2 ZKML | 23 contract tests | NO API integration |
 | **Phase 2.5:** Future Enhancements | ⏸️ NOT STARTED | TBD | TBD | Post-MVP features |
 | **Phase 3:** UI Development | ⏸️ NOT STARTED | N/A | TBD | React frontend |
 | **Phase 4:** LLM Integration | ⏸️ NOT STARTED | N/A | TBD | Natural language interface |
@@ -312,9 +312,9 @@ PRIVACY GUARANTEES:
 
 ---
 
-## ✅ Phase 1.6: API Layer Integration (COMPLETED)
+## ⚡ Phase 1.6: API Layer Integration (PARTIAL - 55% COVERAGE)
 
-**Status:** ✅ COMPLETED - All Phase 1.5 features integrated into API
+**Status:** ⚡ PARTIAL - Core payroll & recurring payments have API, but missing disclosure/verification/ZKML methods
 
 ### API Methods Added
 
@@ -340,6 +340,53 @@ PRIVACY GUARANTEES:
 - ✅ Matches PayrollCommons.compact structs exactly
 
 **Tests:** 31 total API integration tests (includes Phase 1.5 features)
+
+### API Integration Status - Complete Circuit Coverage
+
+**✅ Circuits WITH API Methods (11 circuits):**
+1. `deposit_company_funds()` → `depositCompanyFunds()`
+2. `add_employee()` → `addEmployee()`
+3. `withdraw_employee_salary()` → `withdrawEmployeeSalary()`
+4. `pay_employee()` → `payEmployee()`
+5. `create_recurring_payment()` → `createRecurringPayment()`
+6. `pause_recurring_payment()` → `pauseRecurringPayment()`
+7. `resume_recurring_payment()` → `resumeRecurringPayment()`
+8. `edit_recurring_payment()` → `editRecurringPayment()`
+9. `process_recurring_payment()` → `processRecurringPayment()`
+10. `update_timestamp()` → `updateTimestamp()`
+11. `mint_tokens()` → `mintTokens()`
+
+**✅ Circuits WITH Query Methods (5 queries):**
+1. Company info → `getCompanyInfo()`
+2. Employee info → `getEmployeeInfo()`
+3. Payment history → `getEmployeePaymentHistory()`
+4. Recurring payment → `getRecurringPayment()`
+5. Recurring by employee → `getRecurringPaymentByEmployee()`
+
+**⚠️ Batch Payments (Circuit Commented Out):**
+- `batch_pay_employees()` → `batchPayEmployees()` ✅ API exists but circuit commented out
+
+**❌ Circuits WITHOUT API Methods (9 circuits):**
+1. `grant_income_disclosure()` - Income range disclosure to lenders
+2. `grant_employment_disclosure()` - Employment status disclosure to landlords
+3. `grant_audit_disclosure()` - Full audit access to regulators
+4. `revoke_disclosure()` - Revoke any disclosure permission
+5. `update_employment_status()` - Company updates employee status
+6. `verify_employment()` - Verifier checks employment authorization
+7. `register_trusted_verifier()` - Register ZKML verifier (Phase 2.1)
+8. `submit_income_proof()` - Submit ZKML proof (Phase 2.1)
+9. `verify_income_proof()` - Verify ZKML proof (Phase 2.1)
+
+**API Coverage:** 11/20 active circuits = 55% coverage (excluding batch_pay_employees)
+
+**E2E API Tests Coverage:**
+- ✅ Core lifecycle: deploy, mint, deposit, add employee, pay, withdraw
+- ✅ Recurring payments: create, pause, resume, edit, process
+- ✅ Timestamp updates
+- ✅ Multiple employees
+- ❌ Disclosure management (grant/revoke)
+- ❌ Employment verification
+- ❌ ZKML income proofs (Phase 2.1)
 
 ---
 
@@ -392,9 +439,9 @@ PRIVACY GUARANTEES:
 
 ---
 
-## ✅ Phase 2.1: Salary History Proofs (COMPLETED)
+## ⚡ Phase 2.1: Salary History Proofs (CIRCUITS ONLY - NO API)
 
-**Status:** ✅ COMPLETED - ZKML income proof system working end-to-end
+**Status:** ⚡ CIRCUITS COMPLETED - ZKML circuits & tests working, but NO API integration
 
 ### What We Built
 
@@ -480,24 +527,32 @@ PRIVACY GUARANTEES:
 
 ### API Integration
 
-**Methods:**
-- ✅ `submitIncomeProof()` - Store ZKML proof on-chain
-- ✅ `verifyIncomeProof()` - Validate proof meets requirements
-- ✅ `getIncomeProof()` - Query stored proof
-- ✅ `registerTrustedVerifier()` - Whitelist ZKML verifier
+**Status:** ❌ NOT IMPLEMENTED - Contract circuits exist but NO API methods implemented
+
+**Missing API Methods:**
+- ❌ `registerTrustedVerifier()` - Whitelist ZKML verifier (circuit exists)
+- ❌ `submitIncomeProof()` - Store ZKML proof on-chain (circuit exists)
+- ❌ `verifyIncomeProof()` - Validate proof meets requirements (circuit exists)
+- ❌ `getIncomeProof()` - Query stored proof (query method needed)
+
+**Note:** Phase 2.1 circuits are implemented and tested via contract tests, but PayrollAPI class lacks corresponding methods
 
 ### Testing
 
-**Tests:** 23 ZKML integration tests
-- 12 contract circuit tests (submit/verify logic)
+**Contract-Level Tests:** 23 ZKML integration tests (NO API TESTS)
+- 12 contract circuit tests (submit/verify logic via test helper methods)
 - 11 end-to-end tests with real EZKL proof generation
   - All 4 proof types tested
   - Real ONNX models (~0.5s proof generation)
   - Full workflow: Generate → Verify → Submit → Contract validation
 
 **Test Files:**
-- `payroll-zkml-comprehensive.test.ts` - All ZKML integration tests
+- `payroll-zkml-comprehensive.test.ts` - All ZKML integration tests (contract-level)
 - `payroll-setup-multi.ts` - Test helpers for ZKML circuits
+
+**API Tests:** ❌ NONE - API methods not implemented
+
+**Note:** Tests use PayrollMultiPartyTestSetup helper methods (submitIncomeProof, verifyIncomeProof) which directly call circuits, NOT API methods
 
 ### Privacy Guarantees
 
@@ -550,20 +605,23 @@ PRIVACY GUARANTEES:
 - Expense reimbursement workflows
 - Timesheet integration
 
-**3. Tax Withholding Integration**
+**3. Tax Withholding Integration** 🔐 ZKML
 - Automatic tax calculation based on employee tax bracket
-- W-2 form generation with ZK proofs
-- Tax payment tracking
+- W-2 form generation with ZK proofs (privacy-preserving tax reporting)
+- Tax payment tracking with zero-knowledge compliance proofs
+- Prove tax bracket without revealing exact income
 
-**4. Benefits Deductions**
-- Health insurance premiums
-- 401(k) contributions
+**4. Benefits Deductions** 🔐 ZKML
+- Health insurance premiums with privacy-preserving calculations
+- 401(k) contributions with ZK proofs of contribution limits
 - Other benefit deductions from payroll
+- Prove benefits eligibility without revealing full compensation package
 
-**5. Advanced Reporting**
-- Payroll analytics dashboard
-- Cost center allocation
+**5. Advanced Reporting** 🔐 ZKML
+- Payroll analytics dashboard with privacy-preserving aggregate statistics
+- Cost center allocation with ZK proofs of budget compliance
 - Budget forecasting
+- Prove payroll trends without revealing individual salaries
 
 **Note:** These are placeholder ideas - not committed features for MVP.
 
@@ -677,9 +735,10 @@ PRIVACY GUARANTEES:
 - ✅ ZKML income proof system (4 proof types)
 
 **API Layer:**
-- ✅ Complete TypeScript API (@zksalaria/payroll-api)
-- ✅ 31 integration tests passing
-- ✅ All core operations supported
+- ⚡ Partial TypeScript API (@zksalaria/payroll-api)
+- ✅ 31 integration tests passing (core operations only)
+- ⚡ 11/20 circuits have API methods (55% coverage)
+- ❌ Missing: Disclosure management, employment verification, ZKML proofs
 
 **ZKML Integration:**
 - ✅ 4 ONNX models for income proofs
@@ -699,21 +758,37 @@ PRIVACY GUARANTEES:
 - ⚡ 10 batch tests skipped
 - ⚡ Will re-enable for mainnet with better infrastructure
 
-**Not Implemented (Post-MVP):**
-- ⏸️ Payment memos
-- ⏸️ Company metadata updates
-- ⏸️ Query optimization
-- ⏸️ Tax withholding
-- ⏸️ Benefits deductions
+**Not Implemented - API Integration Gaps:**
+- ❌ Disclosure management API (grant_income/employment/audit_disclosure, revoke_disclosure)
+- ❌ Employment verification API (update_employment_status, verify_employment)
+- ❌ ZKML income proof API (register_trusted_verifier, submit_income_proof, verify_income_proof)
+
+**Not Implemented - Post-MVP Features:**
+- ⏸️ Payment memos (Phase 1.5.4)
+- ⏸️ Company metadata updates (Phase 1.5.5)
+- ⏸️ Query optimization (Phase 1.5.6)
+- ⏸️ Tax withholding (Phase 2.5)
+- ⏸️ Benefits deductions (Phase 2.5)
 - ⏸️ UI/UX (Phase 3)
 - ⏸️ LLM integration (Phase 4)
 
 ### 🎯 Next Steps
 
+**Critical - API Integration Completion:**
+1. **Phase 1.6 Completion:** Add missing API methods for disclosure/verification circuits
+   - Implement 9 missing API methods (grant_income/employment/audit_disclosure, revoke_disclosure, etc.)
+   - Add E2E API tests for disclosure management
+   - Add E2E API tests for employment verification
+2. **Phase 2.1 API Integration:** Add ZKML income proof API methods
+   - Implement registerTrustedVerifier(), submitIncomeProof(), verifyIncomeProof()
+   - Add getIncomeProof() query method
+   - Add E2E API tests with real EZKL proof workflow
+
 **Immediate (Week 1):**
-1. UI development (Phase 3)
-2. Demo preparation
-3. Documentation cleanup
+1. Complete API integration (see above - blocking for UI)
+2. UI development (Phase 3)
+3. Demo preparation
+4. Documentation cleanup
 
 **Short-term (Week 2-3):**
 1. Testnet deployment
@@ -779,4 +854,4 @@ PRIVACY GUARANTEES:
 ---
 
 **Last Updated:** November 2025
-**Status:** MVP Complete - Ready for Phase 3 (UI Development)
+**Status:** API Integration Incomplete - 55% circuit coverage, missing disclosure/verification/ZKML API methods
