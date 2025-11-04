@@ -74,7 +74,7 @@ async function testPayrollVerification() {
       console.log(`   Timestamp: ${result.attestation.timestamp}`);
       console.log(`   Attestation Hash: ${result.attestation.attestation_hash.substring(0, 16)}...`);
       console.log(`   Verifier PubKey: ${result.attestation.verifier_pubkey.substring(0, 16)}...`);
-      console.log(`   Verifier Secret: ${result.attestation.verifier_secret.substring(0, 16)}...`);
+      // verifier_secret no longer exposed for security
 
       console.log('\n🎉 Payroll proof verification PASSED!');
       console.log('='.repeat(60));

@@ -31,7 +31,10 @@ export class AttestationSigner {
   }
 
   /**
-   * Get the verifier's secret key (needed for contract verification)
+   * Get the verifier's secret key
+   *
+   * SECURITY: For internal use ONLY. NEVER expose this to clients or API responses.
+   * The secret key is used to create attestation commitments and must remain private.
    */
   getSecretKey(): string {
     return this.secretKey.toString('hex');
@@ -76,7 +79,7 @@ export class AttestationSigner {
       merkle_root: publicInputs.merkle_root,
       timestamp: timestamp,
       attestation_hash: attestation_hash,
-      verifier_secret: this.getSecretKey(),
+      // verifier_secret is NEVER exposed - it stays on the server for security
       verifier_pubkey: this.publicKey
     };
   }

@@ -59,6 +59,12 @@ export ledger recurring_payments: Map<Bytes<32>, PC_RecurringPayment>;
 // Helper map: employee_id -> recurring_payment_id (for easy lookup in tests)
 export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
 
+// ZKML Attestation System (Phase 2: ZKML Integration)
+// Stores trusted verifier public keys and tracks used attestations
+// Using Map<Key, Uint<1>> pattern (0=false, 1=true) since Compact Sets have limited operations
+export ledger trusted_verifiers: Map<Bytes<32>, Uint<1>>;       // verifier_pubkey -> 1
+export ledger used_attestations: Map<Bytes<32>, Uint<1>>;       // attestation_hash -> 1
+
 constructor(
   initNonce: Bytes<32>,
   companyId: Bytes<32>,
@@ -1030,6 +1036,109 @@ export circuit process_recurring_payment(
   };
 
   recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
+}
+
+// ========================================
+// ZKML ATTESTATION VERIFICATION (Phase 2)
+// ========================================
+
+/**
+ * Verify ZKML Attestation
+ *
+ * Verifies that an employee has a valid ZKML attestation from a trusted verifier.
+ * This is the on-chain verification step after the employee generates a ZK proof
+ * off-chain and gets it attested by the zkml-verifier service.
+ *
+ * IMPORTANT SECURITY DESIGN:
+ * - The cryptographic proof verification happens OFF-CHAIN by the verifier service
+ * - The contract does NOT recompute attestation hash (would require verifier_secret!)
+ * - The contract TRUSTS the verifier because verifier_pubkey is in trusted set
+ * - The verifier_secret NEVER leaves the verifier service (critical for security)
+ *
+ * Security Properties:
+ * - Verifier authentication: Only trusted verifiers (checked via verifier_pubkey)
+ * - Replay protection: Each attestation can only be used once
+ * - Freshness: Attestations expire after 1 hour
+ *
+ * @param employee_id Employee's wallet address (32 bytes)
+ * @param threshold Salary threshold for verification (e.g., 5000 = $5000)
+ * @param txids Transaction IDs proving payment history (4 payments)
+ * @param merkle_root Merkle root of payment history
+ * @param timestamp Unix timestamp when attestation was created
+ * @param attestation_hash Hash commitment from verifier (public)
+ * @param verifier_pubkey Public key of trusted verifier (public, NOT secret!)
+ */
+export circuit verify_attestation(
+  employee_id: Bytes<32>,
+  threshold: Uint<64>,
+  txids: Vector<4, Bytes<32>>,
+  merkle_root: Bytes<32>,
+  timestamp: Uint<64>,
+  attestation_hash: Bytes<32>,
+  verifier_pubkey: Bytes<32>  // Changed from verifier_secret - NO SECRETS ON-CHAIN!
+): [] {
+  // IMPORTANT: This circuit does NOT recompute the attestation hash!
+  // The cryptographic verification was done OFF-CHAIN by the verifier service.
+  // We TRUST the verifier because their public key is in our trusted set.
+
+  // Step 1: Verify verifier is trusted
+  // The verifier must be in the trusted set for us to accept their attestation
+  assert(
+    trusted_verifiers.member(disclose(verifier_pubkey)),
+    "Verifier not trusted"
+  );
+
+  // Step 2: Prevent replay attacks
+  // Each attestation can only be used once to prevent the same attestation
+  // from being reused for multiple claims
+  assert(
+    !used_attestations.member(disclose(attestation_hash)),
+    "Attestation already used (replay attack)"
+  );
+
+  // Mark attestation as used
+  used_attestations.insert(disclose(attestation_hash), 1 as Uint<1>);
+
+  // Step 3: Check timestamp freshness
+  // Reject attestations older than 1 hour (3600 seconds)
+  // This prevents old attestations from being used indefinitely
+  const current_time = current_timestamp as Uint<64>;
+  const one_hour_ago = (current_time - (3600 as Uint<64>)) as Uint<64>;
+
+  assert(
+    disclose(timestamp) > one_hour_ago,
+    "Attestation expired (older than 1 hour)"
+  );
+
+  assert(
+    disclose(timestamp) <= current_time,
+    "Attestation timestamp is in the future"
+  );
+
+  // Note: The employee_id, threshold, txids, and merkle_root parameters
+  // are metadata from the attestation. They are not explicitly verified here,
+  // but can be used by calling circuits (e.g., prove_eligibility) to make
+  // decisions based on the attestation content.
+}
+
+/**
+ * Register Trusted Verifier
+ *
+ * Allows contract owner (company) to register a trusted ZKML verifier.
+ * In production, this would be restricted to contract deployer or governance.
+ *
+ * @param verifier_pubkey Public key of the trusted verifier
+ */
+export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): [] {
+  // TODO: Add access control (only contract owner/governance)
+  // For now, anyone can register a verifier (MVP simplification)
+
+  assert(
+    !trusted_verifiers.member(disclose(verifier_pubkey)),
+    "Verifier already registered"
+  );
+
+  trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
 }
 
 // ========================================

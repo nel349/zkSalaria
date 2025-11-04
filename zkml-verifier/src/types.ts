@@ -26,7 +26,7 @@ export interface Attestation {
   merkle_root: string;
   timestamp: number;
   attestation_hash: string;
-  verifier_secret: string;
+  // verifier_secret is NEVER exposed - removed for security
   verifier_pubkey: string;
 }
 
