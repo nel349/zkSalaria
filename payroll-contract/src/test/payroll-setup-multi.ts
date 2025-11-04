@@ -659,4 +659,134 @@ export class PayrollMultiPartyTestSetup {
 
     return result;
   }
+
+  // ========================================
+  // ZKML INTEGRATION TESTING METHODS
+  // ========================================
+
+  // Register a trusted ZKML verifier
+  registerTrustedVerifier(verifierPubkey: string): Ledger {
+    console.log(`🔐 Registering trusted verifier: ${verifierPubkey.substring(0, 16)}...`);
+
+    const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
+
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, vpBytes) => this.contract.impureCircuits.register_trusted_verifier(ctx, vpBytes),
+      verifierPubkeyBytes
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Verify ZKML attestation
+  verifyAttestation(
+    employeeId: string,
+    threshold: bigint,
+    txids: string[],  // Array of 4 hex strings
+    merkleRoot: string,
+    timestamp: bigint,
+    attestationHash: string,
+    verifierPubkey: string
+  ): Ledger {
+    console.log(`✅ Verifying attestation for employee ${employeeId} (threshold: ${threshold})`);
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+    const txidsBytes = txids.map(txid => hexToBytes32(txid));
+    const merkleRootBytes = hexToBytes32(merkleRoot);
+    const attestationHashBytes = hexToBytes32(attestationHash);
+    const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
+
+    this.executeAsParticipant(
+      employeeId,
+      (ctx, eidBytes, thresh, txs, mrBytes, ts, ahBytes, vpBytes) =>
+        this.contract.impureCircuits.verify_attestation(
+          ctx,
+          eidBytes,
+          thresh,
+          txs,
+          mrBytes,
+          ts,
+          ahBytes,
+          vpBytes
+        ),
+      employeeIdBytes,
+      threshold,
+      txidsBytes,
+      merkleRootBytes,
+      timestamp,
+      attestationHashBytes,
+      verifierPubkeyBytes
+    );
+
+    return this.getLedgerState();
+  }
+
+  // Prove eligibility based on verified attestation
+  proveEligibility(employeeId: string, minThreshold: bigint): boolean {
+    console.log(`🎯 Employee ${employeeId} proving eligibility (min threshold: ${minThreshold})`);
+
+    const employeeIdBytes = stringToBytes32(employeeId);
+
+    try {
+      this.executeAsParticipant(
+        employeeId,
+        (ctx, eidBytes, minThresh) =>
+          this.contract.impureCircuits.prove_eligibility(ctx, eidBytes, minThresh),
+        employeeIdBytes,
+        minThreshold
+      );
+
+      console.log(`✅ Employee ${employeeId} is ELIGIBLE`);
+      return true;
+    } catch (error) {
+      console.log(`❌ Employee ${employeeId} is NOT ELIGIBLE:`, (error as Error).message);
+      return false;
+    }
+  }
+
+  // Helper: Get verified attestation for an employee
+  getVerifiedAttestation(employeeId: string): any | null {
+    const ledgerState = this.getLedgerState();
+    const employeeIdBytes = stringToBytes32(employeeId);
+
+    const attestationsMap = ledgerState.verified_attestations as any;
+
+    if (attestationsMap.member(employeeIdBytes)) {
+      return attestationsMap.lookup(employeeIdBytes);
+    }
+
+    return null;
+  }
+
+  // Helper: Check if verifier is trusted
+  isTrustedVerifier(verifierPubkey: string): boolean {
+    const ledgerState = this.getLedgerState();
+    const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
+
+    const trustedVerifiersMap = ledgerState.trusted_verifiers as any;
+    return trustedVerifiersMap.member(verifierPubkeyBytes);
+  }
+
+  // Helper: Check if attestation hash has been used
+  isAttestationUsed(attestationHash: string): boolean {
+    const ledgerState = this.getLedgerState();
+    const attestationHashBytes = hexToBytes32(attestationHash);
+
+    const usedAttestationsMap = ledgerState.used_attestations as any;
+    return usedAttestationsMap.member(attestationHashBytes);
+  }
+
+  // Helper: Update timestamp (for testing expiry)
+  updateTimestamp(newTimestamp: bigint): Ledger {
+    console.log(`⏰ Updating timestamp to: ${newTimestamp}`);
+
+    this.executeAsParticipant(
+      this.companyId,
+      (ctx, ts) => this.contract.impureCircuits.update_timestamp(ctx, ts),
+      newTimestamp
+    );
+
+    return this.getLedgerState();
+  }
 }

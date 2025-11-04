@@ -64,6 +64,7 @@ export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
 // Using Map<Key, Uint<1>> pattern (0=false, 1=true) since Compact Sets have limited operations
 export ledger trusted_verifiers: Map<Bytes<32>, Uint<1>>;       // verifier_pubkey -> 1
 export ledger used_attestations: Map<Bytes<32>, Uint<1>>;       // attestation_hash -> 1
+export ledger verified_attestations: Map<Bytes<32>, PC_VerifiedAttestation>;  // employee_id -> attestation details
 
 constructor(
   initNonce: Bytes<32>,
@@ -1115,6 +1116,20 @@ export circuit verify_attestation(
     "Attestation timestamp is in the future"
   );
 
+  // Step 4: Store verified attestation for eligibility checks
+  // This allows prove_eligibility to check if employee has valid attestation
+  const verified_attestation = PC_VerifiedAttestation {
+    employee_id: disclose(employee_id),
+    threshold: disclose(threshold),
+    merkle_root: disclose(merkle_root),
+    attestation_hash: disclose(attestation_hash),
+    verifier_pubkey: disclose(verifier_pubkey),
+    verified_at: current_timestamp
+  };
+
+  // Store attestation (overwrites any previous attestation for this employee)
+  verified_attestations.insert(disclose(employee_id), verified_attestation);
+
   // Note: The employee_id, threshold, txids, and merkle_root parameters
   // are metadata from the attestation. They are not explicitly verified here,
   // but can be used by calling circuits (e.g., prove_eligibility) to make
@@ -1139,6 +1154,54 @@ export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): [] {
   );
 
   trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
+}
+
+/**
+ * Prove Eligibility
+ *
+ * Allows employees to prove eligibility for benefits/loans based on verified ZKML attestation.
+ * Employees must first call verify_attestation() to get their ZKML proof verified and stored.
+ *
+ * Use cases:
+ * - Prove eligibility for loan based on income threshold
+ * - Prove eligibility for bonus based on salary history
+ * - Prove eligibility for company benefits
+ *
+ * @param employee_id Employee requesting eligibility proof
+ * @param min_threshold Minimum threshold required for eligibility (e.g., $5000)
+ * @returns Success if employee has valid attestation meeting threshold (assertion-based)
+ */
+export circuit prove_eligibility(
+  employee_id: Bytes<32>,
+  min_threshold: Uint<64>
+): [] {
+  // Step 1: Check if employee has a verified attestation
+  assert(
+    verified_attestations.member(disclose(employee_id)),
+    "Employee has no verified attestation - call verify_attestation first"
+  );
+
+  // Step 2: Retrieve the verified attestation
+  const attestation = verified_attestations.lookup(disclose(employee_id));
+
+  // Step 3: Verify threshold meets minimum requirement
+  assert(
+    disclose(attestation.threshold) >= disclose(min_threshold),
+    "Employee threshold does not meet minimum eligibility requirement"
+  );
+
+  // Step 4: Check attestation is still fresh (within 24 hours)
+  // This prevents using old attestations for eligibility after salary changes
+  const current_time = current_timestamp;
+  const twenty_four_hours_ago = current_time - (86400 as Uint<32>); // 24 hours in seconds
+
+  assert(
+    disclose(attestation.verified_at) > twenty_four_hours_ago,
+    "Attestation expired - must re-verify (older than 24 hours)"
+  );
+
+  // Success: If all assertions pass, employee is eligible
+  // Circuit execution success indicates eligibility
 }
 
 // ========================================
