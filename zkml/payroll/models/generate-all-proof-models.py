@@ -85,48 +85,37 @@ class AverageIncomeModel(nn.Module):
 
 class CreditScoreModel(nn.Module):
     """
-    Proof Type 4: CREDIT_SCORE
+    Proof Type 4: CREDIT_SCORE (SIMPLIFIED for EZKL compatibility)
     Input: [payment1, ..., payment12, threshold]
     Output: 1 if ML-computed credit score >= threshold, else 0
 
-    Credit score formula (simplified):
-    - Payment consistency: 40% (low std dev is good)
-    - Average payment: 30% (higher is better)
-    - Payment regularity: 30% (all 12 payments present is good)
+    Simplified credit score formula (EZKL-compatible):
+    - Base score: 300
+    - Payment score: (sum of all payments) / 12 * 0.05
+    - Max realistic score: 300 + (10000 * 0.05) = 300 + 500 = 800
 
-    Score range: 300-850 (like FICO)
+    This simplified model avoids complex operations like std() that cause
+    EZKL calibration failures.
     """
     def __init__(self):
         super().__init__()
-        # Small neural network for credit scoring
-        self.fc1 = nn.Linear(12, 8)
-        self.fc2 = nn.Linear(8, 4)
-        self.fc3 = nn.Linear(4, 1)
-        self.relu = nn.ReLU()
+        self.fc = nn.Linear(13, 1)  # Simple linear layer
 
     def forward(self, x):
         payments = x[:12]
         threshold = x[12]
 
-        # Calculate credit score using ML model
-        # Feature engineering
-        avg_payment = torch.mean(payments)
-        std_payment = torch.std(payments)
+        # Simplified credit score calculation
+        # Score = 300 (base) + (average payment * scaling factor)
+        total_payments = torch.sum(payments)
+        avg_payment = total_payments / 12.0
 
-        # Consistency score (lower std dev is better)
-        # Normalize std dev relative to average
-        consistency_factor = 1.0 - torch.min(std_payment / (avg_payment + 1e-6), torch.tensor(1.0))
-        consistency_score = consistency_factor * 340  # Max 340 points
+        # Scale average payment to score component (0-500 range)
+        # $10,000/month = 500 points, so multiply by 0.05
+        payment_score = avg_payment * 0.05
 
-        # Average payment score (scaled)
-        # Assuming $10k/month = max score
-        avg_score = torch.min(avg_payment / 10000.0, torch.tensor(1.0)) * 255  # Max 255 points
-
-        # Regularity score (all payments > 0)
-        regularity = (payments > 0).float().mean() * 255  # Max 255 points
-
-        # Total credit score: 300 (base) + components
-        credit_score = 300 + consistency_score + avg_score + regularity
+        # Total credit score: 300-800 range
+        credit_score = 300.0 + payment_score
 
         # Check if credit score >= threshold
         result = (credit_score >= threshold).float()
@@ -159,8 +148,9 @@ def create_sample_data(proof_type: str):
         return torch.tensor(data, dtype=torch.float32)
 
     elif proof_type == "CREDIT_SCORE":
-        # Threshold: 650 (employee exceeds it)
-        data = payments + [650]
+        # Threshold: 600 (employee should exceed it with avg $6625/month)
+        # Expected score: 300 + (6625 * 0.05) = 300 + 331 = 631
+        data = payments + [600]
         return torch.tensor(data, dtype=torch.float32)
 
 
