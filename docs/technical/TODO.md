@@ -14,9 +14,9 @@
 | **Phase 0:** Privacy & Architecture | ✅ COMPLETED | 11 core | 64 multi-party | Encrypted ledger pattern |
 | **Phase 1:** Core Payroll | ✅ COMPLETED | 11 core | 118 passing | All basic features working |
 | **Phase 1.5:** UX Enhancements | ⚡ MOSTLY DONE | +7 circuits | +54 tests | Recurring ✅, Batch ⚡, Status ✅ |
-| **Phase 1.6:** API Integration | ⚡ PARTIAL (55%) | N/A | 31 API tests | 11/20 circuits covered |
+| **Phase 1.6:** API Integration | ✅ COMPLETED | N/A | 41 API tests | 20/20 circuits = 100% |
 | **Phase 2.0:** DEPRECATED | ❌ REMOVED | -2 circuits | N/A | Testnet performance optimization |
-| **Phase 2.1:** Salary History Proofs | ⚡ CIRCUITS ONLY | +2 ZKML | 23 contract tests | NO API integration |
+| **Phase 2.1:** Salary History Proofs | ✅ COMPLETED | +2 ZKML | 33 tests total | API + contracts done |
 | **Phase 2.5:** Future Enhancements | ⏸️ NOT STARTED | TBD | TBD | Post-MVP features |
 | **Phase 3:** UI Development | ⏸️ NOT STARTED | N/A | TBD | React frontend |
 | **Phase 4:** LLM Integration | ⏸️ NOT STARTED | N/A | TBD | Natural language interface |
@@ -312,9 +312,9 @@ PRIVACY GUARANTEES:
 
 ---
 
-## ⚡ Phase 1.6: API Layer Integration (PARTIAL - 55% COVERAGE)
+## ✅ Phase 1.6: API Layer Integration (COMPLETED - 100% COVERAGE)
 
-**Status:** ⚡ PARTIAL - Core payroll & recurring payments have API, but missing disclosure/verification/ZKML methods
+**Status:** ✅ COMPLETED - All circuits have API methods implemented
 
 ### API Methods Added
 
@@ -339,54 +339,62 @@ PRIVACY GUARANTEES:
 - ✅ All new types exported from `@zksalaria/payroll-api`
 - ✅ Matches PayrollCommons.compact structs exactly
 
-**Tests:** 31 total API integration tests (includes Phase 1.5 features)
+**Tests:** 41 total API tests (31 integration + 10 smoke tests)
 
-### API Integration Status - Complete Circuit Coverage
+### API Integration Status - 100% Circuit Coverage ✅
 
-**✅ Circuits WITH API Methods (11 circuits):**
+**✅ Core Payroll (5 circuits):**
 1. `deposit_company_funds()` → `depositCompanyFunds()`
 2. `add_employee()` → `addEmployee()`
 3. `withdraw_employee_salary()` → `withdrawEmployeeSalary()`
 4. `pay_employee()` → `payEmployee()`
-5. `create_recurring_payment()` → `createRecurringPayment()`
-6. `pause_recurring_payment()` → `pauseRecurringPayment()`
-7. `resume_recurring_payment()` → `resumeRecurringPayment()`
-8. `edit_recurring_payment()` → `editRecurringPayment()`
-9. `process_recurring_payment()` → `processRecurringPayment()`
-10. `update_timestamp()` → `updateTimestamp()`
-11. `mint_tokens()` → `mintTokens()`
+5. `mint_tokens()` → `mintTokens()`
 
-**✅ Circuits WITH Query Methods (5 queries):**
-1. Company info → `getCompanyInfo()`
-2. Employee info → `getEmployeeInfo()`
-3. Payment history → `getEmployeePaymentHistory()`
-4. Recurring payment → `getRecurringPayment()`
-5. Recurring by employee → `getRecurringPaymentByEmployee()`
+**✅ Recurring Payments (5 circuits):**
+6. `create_recurring_payment()` → `createRecurringPayment()`
+7. `pause_recurring_payment()` → `pauseRecurringPayment()`
+8. `resume_recurring_payment()` → `resumeRecurringPayment()`
+9. `edit_recurring_payment()` → `editRecurringPayment()`
+10. `process_recurring_payment()` → `processRecurringPayment()`
+
+**✅ Disclosure Management (4 circuits):**
+11. `grant_income_disclosure()` → `grantIncomeDisclosure()`
+12. `grant_employment_disclosure()` → `grantEmploymentDisclosure()`
+13. `grant_audit_disclosure()` → `grantAuditDisclosure()`
+14. `revoke_disclosure()` → `revokeDisclosure()`
+
+**✅ Employment Verification (2 circuits):**
+15. `update_employment_status()` → `updateEmploymentStatus()`
+16. `verify_employment()` → `verifyEmployment()`
+
+**✅ ZKML Income Proofs - Phase 2.1 (3 circuits):**
+17. `register_trusted_verifier()` → `registerTrustedVerifier()`
+18. `submit_income_proof()` → `submitIncomeProof()`
+19. `verify_income_proof()` → `verifyIncomeProof()`
+
+**✅ System Operations (1 circuit):**
+20. `update_timestamp()` → `updateTimestamp()`
+
+**✅ Query Methods (6 queries):**
+1. `getCompanyInfo()` - Query company data
+2. `getEmployeeInfo()` - Query employee data
+3. `getEmployeePaymentHistory()` - Query payment history
+4. `getRecurringPayment()` - Query recurring payment by ID
+5. `getRecurringPaymentByEmployee()` - Query recurring payment by employee
+6. `getIncomeProof()` - Query ZKML income proof (Phase 2.1)
 
 **⚠️ Batch Payments (Circuit Commented Out):**
-- `batch_pay_employees()` → `batchPayEmployees()` ✅ API exists but circuit commented out
+- `batch_pay_employees()` → `batchPayEmployees()` ✅ API exists but circuit commented out for testnet
 
-**❌ Circuits WITHOUT API Methods (9 circuits):**
-1. `grant_income_disclosure()` - Income range disclosure to lenders
-2. `grant_employment_disclosure()` - Employment status disclosure to landlords
-3. `grant_audit_disclosure()` - Full audit access to regulators
-4. `revoke_disclosure()` - Revoke any disclosure permission
-5. `update_employment_status()` - Company updates employee status
-6. `verify_employment()` - Verifier checks employment authorization
-7. `register_trusted_verifier()` - Register ZKML verifier (Phase 2.1)
-8. `submit_income_proof()` - Submit ZKML proof (Phase 2.1)
-9. `verify_income_proof()` - Verify ZKML proof (Phase 2.1)
+**API Coverage:** 20/20 active circuits = 100% coverage
 
-**API Coverage:** 11/20 active circuits = 55% coverage (excluding batch_pay_employees)
-
-**E2E API Tests Coverage:**
-- ✅ Core lifecycle: deploy, mint, deposit, add employee, pay, withdraw
-- ✅ Recurring payments: create, pause, resume, edit, process
-- ✅ Timestamp updates
-- ✅ Multiple employees
-- ❌ Disclosure management (grant/revoke)
-- ❌ Employment verification
-- ❌ ZKML income proofs (Phase 2.1)
+**E2E API Tests:**
+- ✅ Core lifecycle: deploy, mint, deposit, add employee, pay, withdraw (31 tests)
+- ✅ Recurring payments: create, pause, resume, edit, process (31 tests)
+- ✅ Timestamp updates (31 tests)
+- ✅ Disclosure management: smoke tests (10 tests)
+- ✅ Employment verification: smoke tests (10 tests)
+- ✅ ZKML income proofs: smoke tests (10 tests)
 
 ---
 
@@ -439,9 +447,9 @@ PRIVACY GUARANTEES:
 
 ---
 
-## ⚡ Phase 2.1: Salary History Proofs (CIRCUITS ONLY - NO API)
+## ✅ Phase 2.1: Salary History Proofs (COMPLETED)
 
-**Status:** ⚡ CIRCUITS COMPLETED - ZKML circuits & tests working, but NO API integration
+**Status:** ✅ COMPLETED - ZKML circuits, tests, and API integration all working
 
 ### What We Built
 

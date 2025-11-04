@@ -10,7 +10,6 @@ import {
   type AccountId,
   type CompanyInfo,
   type EmployeeInfo,
-  type PayrollCircuitKeys,
 } from './common-types.js';
 import {
   type PayrollPrivateState,
@@ -78,6 +77,33 @@ export interface DeployedPayrollAPI {
 
   // Batch payment operations
   batchPayEmployees(companyId: string, payments: Array<{ employeeId: string; amount: string }>): Promise<void>;
+
+  // Disclosure management
+  grantIncomeDisclosure(employeeId: string, lenderId: string, minThreshold: string, expiresIn: number): Promise<void>;
+  grantEmploymentDisclosure(employeeId: string, verifierId: string, expiresIn: number): Promise<void>;
+  grantAuditDisclosure(auditorId: string, expiresIn: number): Promise<void>;
+  revokeDisclosure(grantorId: string, granteeId: string, permissionType: bigint): Promise<void>;
+
+  // Employment verification
+  updateEmploymentStatus(employeeId: string, newStatus: bigint): Promise<void>;
+  verifyEmployment(employeeId: string, verifierId: string): Promise<boolean>;
+
+  // ZKML Income Proofs (Phase 2.1)
+  registerTrustedVerifier(verifierPubkey: string): Promise<void>;
+  submitIncomeProof(
+    employeeId: string,
+    proofType: bigint,
+    thresholdMin: string,
+    thresholdMax: string,
+    txids: Array<string>,
+    merkleRoot: string,
+    attestationHash: string,
+    verifierPubkey: string,
+    timestamp: bigint,
+    expiresIn: number
+  ): Promise<void>;
+  verifyIncomeProof(employeeId: string, requiredProofType: bigint, requiredThreshold: string): Promise<void>;
+  getIncomeProof(employeeId: string): Promise<any | null>;
 }
 
 /**
@@ -147,6 +173,11 @@ export class PayrollAPI implements DeployedPayrollAPI {
   readonly transactions$: Subject<UserAction>;
   readonly privateStates$: Subject<PayrollPrivateState>;
 
+  // Type-safe circuit calls (workaround for empty witnesses type inference)
+  private get circuits() {
+    return this.deployedContract.callTx as unknown as import('./common-types.js').PayrollCircuitCalls;
+  }
+
   // ========================================
   // STATIC METHODS: Deploy & Connect
   // ========================================
@@ -179,11 +210,11 @@ export class PayrollAPI implements DeployedPayrollAPI {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         deployedPayrollContract = await deployContract(providers, {
-          privateStateId: 'deploy' as AccountId,
           contract: payrollContract,
+          privateStateId: `payroll-${companyId}` as AccountId,
           initialPrivateState: createPayrollPrivateState(),
           args: [initNonce, companyIdBytes, companyNameBytes, initialTimestamp],
-        });
+        } as any);
         break;
       } catch (err) {
         lastError = err;
@@ -255,7 +286,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     // Note: deposit_company_funds circuit only takes amount parameter
     // CompanyId is stored in contract ledger state (one contract per company)
-    await this.deployedContract.callTx.deposit_company_funds(utils.parseAmount(amount));
+    await this.circuits.deposit_company_funds(utils.parseAmount(amount));
   }
 
   async getCompanyInfo(companyId: string): Promise<CompanyInfo> {
@@ -298,7 +329,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     // Note: add_employee circuit signature: (employee_id)
     // CompanyId comes from contract ledger state (one contract per company)
-    await this.deployedContract.callTx.add_employee(employeeIdBytes);
+    await this.circuits.add_employee(employeeIdBytes);
   }
 
   async withdrawEmployeeSalary(employeeId: string, amount: string): Promise<void> {
@@ -315,7 +346,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     const employeeIdBytes = utils.stringToBytes32(employeeId);
 
-    await this.deployedContract.callTx.withdraw_employee_salary(employeeIdBytes, utils.parseAmount(amount));
+    await this.circuits.withdraw_employee_salary(employeeIdBytes, utils.parseAmount(amount));
   }
 
   async getEmployeeInfo(employeeId: string): Promise<EmployeeInfo> {
@@ -366,7 +397,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     // Note: pay_employee circuit signature: (employee_id, salary_amount)
     // CompanyId comes from contract ledger state (one contract per company)
-    await this.deployedContract.callTx.pay_employee(employeeIdBytes, utils.parseAmount(amount));
+    await this.circuits.pay_employee(employeeIdBytes, utils.parseAmount(amount));
   }
 
   async getEmployeePaymentHistory(employeeId: string): Promise<PaymentRecord[]> {
@@ -396,7 +427,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async updateTimestamp(newTimestamp: number): Promise<void> {
     this.logger?.info({ updateTimestamp: { newTimestamp } });
 
-    await this.deployedContract.callTx.update_timestamp(BigInt(newTimestamp));
+    await this.circuits.update_timestamp(BigInt(newTimestamp));
   }
 
   async mintTokens(amount: string): Promise<void> {
@@ -410,7 +441,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
       cancelledTransaction: undefined,
     });
 
-    await this.deployedContract.callTx.mint_tokens(utils.parseAmount(amount));
+    await this.circuits.mint_tokens(utils.parseAmount(amount));
   }
 
   // ========================================
@@ -439,7 +470,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     const endTimestamp = endDate ? toUnixTimestamp(endDate) : 0n;
     const nextPaymentTimestamp = toUnixTimestamp(nextPaymentDate);
 
-    await this.deployedContract.callTx.create_recurring_payment(
+    await this.circuits.create_recurring_payment(
       employeeIdBytes,
       utils.parseAmount(amount),
       frequency,
@@ -456,7 +487,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     this.logger?.info({ pauseRecurringPayment: { recurringPaymentId } });
 
     const idBytes = utils.hexToBytes32(recurringPaymentId);
-    await this.deployedContract.callTx.pause_recurring_payment(idBytes);
+    await this.circuits.pause_recurring_payment(idBytes);
   }
 
   async resumeRecurringPayment(recurringPaymentId: string): Promise<void> {
@@ -475,21 +506,21 @@ export class PayrollAPI implements DeployedPayrollAPI {
     const nextPaymentDate = calculateNextPaymentDate(new Date(), payment.frequency, dayOfWeek);
     const nextPaymentTimestamp = toUnixTimestamp(nextPaymentDate);
 
-    await this.deployedContract.callTx.resume_recurring_payment(idBytes, nextPaymentTimestamp);
+    await this.circuits.resume_recurring_payment(idBytes, nextPaymentTimestamp);
   }
 
   async editRecurringPayment(recurringPaymentId: string, newAmount: string): Promise<void> {
     this.logger?.info({ editRecurringPayment: { recurringPaymentId, newAmount } });
 
     const idBytes = utils.hexToBytes32(recurringPaymentId);
-    await this.deployedContract.callTx.edit_recurring_payment(idBytes, utils.parseAmount(newAmount));
+    await this.circuits.edit_recurring_payment(idBytes, utils.parseAmount(newAmount));
   }
 
   async processRecurringPayment(recurringPaymentId: string): Promise<void> {
     this.logger?.info({ processRecurringPayment: { recurringPaymentId } });
 
     const idBytes = utils.hexToBytes32(recurringPaymentId);
-    await this.deployedContract.callTx.process_recurring_payment(idBytes);
+    await this.circuits.process_recurring_payment(idBytes);
   }
 
   async getRecurringPayment(recurringPaymentId: string): Promise<RecurringPayment | null> {
@@ -593,7 +624,202 @@ export class PayrollAPI implements DeployedPayrollAPI {
       cancelledTransaction: undefined,
     });
 
-    await this.deployedContract.callTx.batch_pay_employees(batchEntries);
+    // NOTE: batch_pay_employees circuit is currently commented out in payroll.compact (testnet performance)
+    // await this.circuits.batch_pay_employees(batchEntries);
+    throw new Error('Batch payments temporarily disabled - use individual payEmployee calls');
+  }
+
+  // ========================================
+  // DISCLOSURE MANAGEMENT
+  // ========================================
+
+  async grantIncomeDisclosure(
+    employeeId: string,
+    lenderId: string,
+    minThreshold: string,
+    expiresIn: number
+  ): Promise<void> {
+    this.logger?.info({ grantIncomeDisclosure: { employeeId, lenderId, minThreshold, expiresIn } });
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    const lenderIdBytes = utils.stringToBytes32(lenderId);
+
+    await this.circuits.grant_income_disclosure(
+      employeeIdBytes,
+      lenderIdBytes,
+      utils.parseAmount(minThreshold),
+      BigInt(expiresIn)
+    );
+  }
+
+  async grantEmploymentDisclosure(
+    employeeId: string,
+    verifierId: string,
+    expiresIn: number
+  ): Promise<void> {
+    this.logger?.info({ grantEmploymentDisclosure: { employeeId, verifierId, expiresIn } });
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    const verifierIdBytes = utils.stringToBytes32(verifierId);
+
+    await this.circuits.grant_employment_disclosure(
+      employeeIdBytes,
+      verifierIdBytes,
+      BigInt(expiresIn)
+    );
+  }
+
+  async grantAuditDisclosure(auditorId: string, expiresIn: number): Promise<void> {
+    this.logger?.info({ grantAuditDisclosure: { auditorId, expiresIn } });
+
+    const auditorIdBytes = utils.stringToBytes32(auditorId);
+
+    await this.circuits.grant_audit_disclosure(
+      auditorIdBytes,
+      BigInt(expiresIn)
+    );
+  }
+
+  async revokeDisclosure(
+    grantorId: string,
+    granteeId: string,
+    permissionType: bigint
+  ): Promise<void> {
+    this.logger?.info({ revokeDisclosure: { grantorId, granteeId, permissionType } });
+
+    const grantorIdBytes = utils.stringToBytes32(grantorId);
+    const granteeIdBytes = utils.stringToBytes32(granteeId);
+
+    await this.circuits.revoke_disclosure(
+      grantorIdBytes,
+      granteeIdBytes,
+      permissionType
+    );
+  }
+
+  // ========================================
+  // EMPLOYMENT VERIFICATION
+  // ========================================
+
+  async updateEmploymentStatus(employeeId: string, newStatus: bigint): Promise<void> {
+    this.logger?.info({ updateEmploymentStatus: { employeeId, newStatus } });
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+
+    await this.circuits.update_employment_status(
+      employeeIdBytes,
+      newStatus
+    );
+  }
+
+  async verifyEmployment(employeeId: string, verifierId: string): Promise<boolean> {
+    this.logger?.info({ verifyEmployment: { employeeId, verifierId } });
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    const verifierIdBytes = utils.stringToBytes32(verifierId);
+
+    const result = await this.circuits.verify_employment(
+      employeeIdBytes,
+      verifierIdBytes
+    );
+
+    // Result is Bytes<1>, check if byte is 1 (true) or 0 (false)
+    return result[0] === 1;
+  }
+
+  // ========================================
+  // ZKML INCOME PROOFS (PHASE 2.1)
+  // ========================================
+
+  async registerTrustedVerifier(verifierPubkey: string): Promise<void> {
+    this.logger?.info({ registerTrustedVerifier: { verifierPubkey } });
+
+    const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
+
+    await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
+  }
+
+  async submitIncomeProof(
+    employeeId: string,
+    proofType: bigint,
+    thresholdMin: string,
+    thresholdMax: string,
+    txids: Array<string>,
+    merkleRoot: string,
+    attestationHash: string,
+    verifierPubkey: string,
+    timestamp: bigint,
+    expiresIn: number
+  ): Promise<void> {
+    this.logger?.info({
+      submitIncomeProof: {
+        employeeId,
+        proofType,
+        thresholdMin,
+        thresholdMax,
+        txidsCount: txids.length,
+        expiresIn,
+      },
+    });
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    const merkleRootBytes = utils.hexToBytes32(merkleRoot);
+    const attestationHashBytes = utils.hexToBytes32(attestationHash);
+    const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
+
+    // Convert txids array to Vector<12, Bytes<32>>
+    const txidVector: Uint8Array[] = txids.map((txid) => utils.hexToBytes32(txid));
+    // Pad to 12 entries if needed
+    while (txidVector.length < 12) {
+      txidVector.push(new Uint8Array(32));
+    }
+
+    await this.circuits.submit_income_proof(
+      employeeIdBytes,
+      proofType,
+      utils.parseAmount(thresholdMin),
+      utils.parseAmount(thresholdMax),
+      txidVector,
+      merkleRootBytes,
+      attestationHashBytes,
+      verifierPubkeyBytes,
+      timestamp,
+      BigInt(expiresIn)
+    );
+  }
+
+  async verifyIncomeProof(
+    employeeId: string,
+    requiredProofType: bigint,
+    requiredThreshold: string
+  ): Promise<void> {
+    this.logger?.info({ verifyIncomeProof: { employeeId, requiredProofType, requiredThreshold } });
+
+    const employeeIdBytes = utils.stringToBytes32(employeeId);
+
+    await this.circuits.verify_income_proof(
+      employeeIdBytes,
+      requiredProofType,
+      utils.parseAmount(requiredThreshold)
+    );
+  }
+
+  async getIncomeProof(employeeId: string): Promise<any | null> {
+    const normalizedId = utils.normalizeId(employeeId);
+    const employeeIdBytes = utils.stringToBytes32(normalizedId);
+
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return null;
+    }
+
+    const ledgerState = ledger(state.data);
+
+    if (!ledgerState.income_proofs.member(employeeIdBytes)) {
+      return null;
+    }
+
+    return ledgerState.income_proofs.lookup(employeeIdBytes);
   }
 }
 

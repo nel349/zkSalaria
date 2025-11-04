@@ -3,15 +3,80 @@ import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
 import {
   type PayrollPrivateState,
   type Contract,
-  type payrollWitnesses,
 } from '@zksalaria/payroll-contract';
 
 export type AccountId = string;
 
-export type PayrollContract = Contract<PayrollPrivateState, typeof payrollWitnesses>;
+export type PayrollContract = Contract<PayrollPrivateState>;
+
+// Explicit circuit call types (workaround for empty witnesses type inference issue)
+export interface PayrollCircuitCalls {
+  mint_tokens(amount: bigint): Promise<void>;
+  deposit_company_funds(amount: bigint): Promise<void>;
+  add_employee(employeeId: Uint8Array): Promise<void>;
+  withdraw_employee_salary(employeeId: Uint8Array, amount: bigint): Promise<void>;
+  pay_employee(employeeId: Uint8Array, salaryAmount: bigint): Promise<void>;
+  grant_income_disclosure(employeeId: Uint8Array, lenderId: Uint8Array, minThreshold: bigint, expiresIn: bigint): Promise<void>;
+  grant_employment_disclosure(employeeId: Uint8Array, verifierId: Uint8Array, expiresIn: bigint): Promise<void>;
+  grant_audit_disclosure(auditorId: Uint8Array, expiresIn: bigint): Promise<void>;
+  revoke_disclosure(grantorId: Uint8Array, granteeId: Uint8Array, permissionType: bigint): Promise<void>;
+  update_employment_status(employeeId: Uint8Array, newStatus: bigint): Promise<void>;
+  verify_employment(employeeId: Uint8Array, verifierId: Uint8Array): Promise<Uint8Array>;
+  create_recurring_payment(
+    employeeId: Uint8Array,
+    amount: bigint,
+    frequency: bigint,
+    startDate: bigint,
+    endDate: bigint,
+    nextPaymentDate: bigint,
+    paymentDayOfMonth1: bigint,
+    paymentDayOfMonth2: bigint,
+    paymentDayOfWeek: bigint
+  ): Promise<void>;
+  pause_recurring_payment(recurringPaymentId: Uint8Array): Promise<void>;
+  resume_recurring_payment(recurringPaymentId: Uint8Array, nextPaymentDate: bigint): Promise<void>;
+  edit_recurring_payment(recurringPaymentId: Uint8Array, newAmount: bigint): Promise<void>;
+  process_recurring_payment(recurringPaymentId: Uint8Array): Promise<void>;
+  register_trusted_verifier(verifierPubkey: Uint8Array): Promise<void>;
+  submit_income_proof(
+    employeeId: Uint8Array,
+    proofType: bigint,
+    thresholdMin: bigint,
+    thresholdMax: bigint,
+    txids: Uint8Array[],
+    merkleRoot: Uint8Array,
+    attestationHash: Uint8Array,
+    verifierPubkey: Uint8Array,
+    timestamp: bigint,
+    expiresIn: bigint
+  ): Promise<void>;
+  verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<void>;
+  update_timestamp(newTimestamp: bigint): Promise<void>;
+}
 
 // Auto-derive circuit keys from contract (bank-api pattern)
-export type PayrollCircuitKeys = Exclude<keyof PayrollContract['impureCircuits'], number | symbol>;
+export type PayrollCircuitKeys =
+  | 'deposit_company_funds'
+  | 'add_employee'
+  | 'pay_employee'
+  | 'withdraw_employee_salary'
+  | 'mint_tokens'
+  | 'update_timestamp'
+  | 'create_recurring_payment'
+  | 'pause_recurring_payment'
+  | 'resume_recurring_payment'
+  | 'edit_recurring_payment'
+  | 'process_recurring_payment'
+  | 'batch_pay_employees'
+  | 'grant_income_disclosure'
+  | 'grant_employment_disclosure'
+  | 'grant_audit_disclosure'
+  | 'revoke_disclosure'
+  | 'update_employment_status'
+  | 'verify_employment'
+  | 'register_trusted_verifier'
+  | 'submit_income_proof'
+  | 'verify_income_proof';
 
 export type PayrollProviders = MidnightProviders<PayrollCircuitKeys, AccountId, PayrollPrivateState>;
 

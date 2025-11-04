@@ -8,9 +8,10 @@
   "packageManager": "npm@10.0.0",
   "workspaces": [
     "payroll-contract",
-    "pay-api",
-    "pay-ui",
-    "pay-commons"
+    "payroll-api",
+    "payroll-ui",
+    "payroll-commons",
+    "pay-ui"
   ],
   "scripts": {
     "compact": "turbo run compact",
