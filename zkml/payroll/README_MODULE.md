@@ -23,15 +23,15 @@ zkml/payroll/
 ├── test/
 │   └── e2e.test.ts              # Real end-to-end tests
 │
-├── income_above_threshold/       # Pre-generated ONNX models & keys
-├── income_range/
-├── average_income/
-├── credit_score/
+├── generated/                    # Pre-generated ONNX models & keys
+│   ├── income_above_threshold/
+│   ├── income_range/
+│   ├── average_income/
+│   └── credit_score/
 │
-├── models/                       # Python scripts (one-time use)
-│   └── generate-all-proof-models.py
+├── dist/                         # Compiled JavaScript
 │
-└── dist/                         # Compiled JavaScript
+└── kzg.srs                       # 4MB trusted setup file
 ```
 
 ## Installation

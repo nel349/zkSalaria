@@ -55,31 +55,31 @@ const PAYROLL_DIR = join(__dirname, '..');
 
 export const MODEL_CONFIGS: Record<ProofType, ModelPaths> = {
   [ProofType.INCOME_ABOVE_THRESHOLD]: {
-    onnx: join(PAYROLL_DIR, 'income_above_threshold/income_above_threshold.onnx'),
-    compiled: join(PAYROLL_DIR, 'income_above_threshold/income_above_threshold.compiled'),
-    pk: join(PAYROLL_DIR, 'income_above_threshold/income_above_threshold_pk.key'),
-    vk: join(PAYROLL_DIR, 'income_above_threshold/income_above_threshold_vk.key'),
-    settings: join(PAYROLL_DIR, 'income_above_threshold/income_above_threshold_settings.json')
+    onnx: join(PAYROLL_DIR, 'generated/income_above_threshold/income_above_threshold.onnx'),
+    compiled: join(PAYROLL_DIR, 'generated/income_above_threshold/income_above_threshold.compiled'),
+    pk: join(PAYROLL_DIR, 'generated/income_above_threshold/income_above_threshold_pk.key'),
+    vk: join(PAYROLL_DIR, 'generated/income_above_threshold/income_above_threshold_vk.key'),
+    settings: join(PAYROLL_DIR, 'generated/income_above_threshold/income_above_threshold_settings.json')
   },
   [ProofType.INCOME_RANGE]: {
-    onnx: join(PAYROLL_DIR, 'income_range/income_range.onnx'),
-    compiled: join(PAYROLL_DIR, 'income_range/income_range.compiled'),
-    pk: join(PAYROLL_DIR, 'income_range/income_range_pk.key'),
-    vk: join(PAYROLL_DIR, 'income_range/income_range_vk.key'),
-    settings: join(PAYROLL_DIR, 'income_range/income_range_settings.json')
+    onnx: join(PAYROLL_DIR, 'generated/income_range/income_range.onnx'),
+    compiled: join(PAYROLL_DIR, 'generated/income_range/income_range.compiled'),
+    pk: join(PAYROLL_DIR, 'generated/income_range/income_range_pk.key'),
+    vk: join(PAYROLL_DIR, 'generated/income_range/income_range_vk.key'),
+    settings: join(PAYROLL_DIR, 'generated/income_range/income_range_settings.json')
   },
   [ProofType.AVERAGE_INCOME]: {
-    onnx: join(PAYROLL_DIR, 'average_income/average_income.onnx'),
-    compiled: join(PAYROLL_DIR, 'average_income/average_income.compiled'),
-    pk: join(PAYROLL_DIR, 'average_income/average_income_pk.key'),
-    vk: join(PAYROLL_DIR, 'average_income/average_income_vk.key'),
-    settings: join(PAYROLL_DIR, 'average_income/average_income_settings.json')
+    onnx: join(PAYROLL_DIR, 'generated/average_income/average_income.onnx'),
+    compiled: join(PAYROLL_DIR, 'generated/average_income/average_income.compiled'),
+    pk: join(PAYROLL_DIR, 'generated/average_income/average_income_pk.key'),
+    vk: join(PAYROLL_DIR, 'generated/average_income/average_income_vk.key'),
+    settings: join(PAYROLL_DIR, 'generated/average_income/average_income_settings.json')
   },
   [ProofType.CREDIT_SCORE]: {
-    onnx: join(PAYROLL_DIR, 'credit_score/credit_score.onnx'),
-    compiled: join(PAYROLL_DIR, 'credit_score/credit_score.compiled'),
-    pk: join(PAYROLL_DIR, 'credit_score/credit_score_pk.key'),
-    vk: join(PAYROLL_DIR, 'credit_score/credit_score_vk.key'),
-    settings: join(PAYROLL_DIR, 'credit_score/credit_score_settings.json')
+    onnx: join(PAYROLL_DIR, 'generated/credit_score/credit_score.onnx'),
+    compiled: join(PAYROLL_DIR, 'generated/credit_score/credit_score.compiled'),
+    pk: join(PAYROLL_DIR, 'generated/credit_score/credit_score_pk.key'),
+    vk: join(PAYROLL_DIR, 'generated/credit_score/credit_score_vk.key'),
+    settings: join(PAYROLL_DIR, 'generated/credit_score/credit_score_settings.json')
   }
 };
