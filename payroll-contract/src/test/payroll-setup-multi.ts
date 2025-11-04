@@ -704,43 +704,6 @@ export class PayrollMultiPartyTestSetup {
     return this.getLedgerState();
   }
 
-  // Prove eligibility based on verified attestation
-  proveEligibility(employeeId: string, minThreshold: bigint): boolean {
-    console.log(`🎯 Employee ${employeeId} proving eligibility (min threshold: ${minThreshold})`);
-
-    const employeeIdBytes = stringToBytes32(employeeId);
-
-    try {
-      this.executeAsParticipant(
-        employeeId,
-        (ctx, eidBytes, minThresh) =>
-          this.contract.impureCircuits.prove_eligibility(ctx, eidBytes, minThresh),
-        employeeIdBytes,
-        minThreshold
-      );
-
-      console.log(`✅ Employee ${employeeId} is ELIGIBLE`);
-      return true;
-    } catch (error) {
-      console.log(`❌ Employee ${employeeId} is NOT ELIGIBLE:`, (error as Error).message);
-      return false;
-    }
-  }
-
-  // Helper: Get verified attestation for an employee
-  getVerifiedAttestation(employeeId: string): any | null {
-    const ledgerState = this.getLedgerState();
-    const employeeIdBytes = stringToBytes32(employeeId);
-
-    const attestationsMap = ledgerState.verified_attestations as any;
-
-    if (attestationsMap.member(employeeIdBytes)) {
-      return attestationsMap.lookup(employeeIdBytes);
-    }
-
-    return null;
-  }
-
   // Helper: Check if verifier is trusted
   isTrustedVerifier(verifierPubkey: string): boolean {
     const ledgerState = this.getLedgerState();

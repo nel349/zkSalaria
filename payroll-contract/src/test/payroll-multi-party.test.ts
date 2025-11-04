@@ -1956,8 +1956,9 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
   // ========================================
   // Batch Payroll Processing (Phase 1.5.2)
+  // NOTE: Skipped - batch_pay_employees circuit commented out for testnet performance
   // ========================================
-  describe('Batch Payroll Processing', () => {
+  describe.skip('Batch Payroll Processing', () => {
     test('should batch pay 3 employees in one transaction', () => {
       const payroll = new PayrollMultiPartyTestSetup('Acme Corp', 'COMP001');
 
@@ -2212,7 +2213,8 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('✅ Single payment status verified as COMPLETED (1)');
     });
 
-    test('should set payment status to COMPLETED for batch payments', () => {
+    // NOTE: Skipped - batch_pay_employees circuit commented out for testnet performance
+    test.skip('should set payment status to COMPLETED for batch payments', () => {
       const payroll = new PayrollMultiPartyTestSetup('Batch Status Corp', 'COMP_STATUS_002');
 
       payroll.addEmployee('EMP_BATCH_1');

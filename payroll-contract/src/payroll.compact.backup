@@ -1042,6 +1042,102 @@ export circuit process_recurring_payment(
   recurring_payments.insert(disclose(recurring_payment_id), updated_payment);
 }
 
+// ========================================
+// ZKML ATTESTATION VERIFICATION (Phase 2)
+// ========================================
+
+/**
+ * Verify ZKML Attestation
+ *
+ * Verifies that an employee has a valid ZKML attestation from a trusted verifier.
+ * This is the on-chain verification step after the employee generates a ZK proof
+ * off-chain and gets it attested by the zkml-verifier service.
+ *
+ * IMPORTANT SECURITY DESIGN:
+ * - The cryptographic proof verification happens OFF-CHAIN by the verifier service
+ * - The contract does NOT recompute attestation hash (would require verifier_secret!)
+ * - The contract TRUSTS the verifier because verifier_pubkey is in trusted set
+ * - The verifier_secret NEVER leaves the verifier service (critical for security)
+ *
+ * Security Properties:
+ * - Verifier authentication: Only trusted verifiers (checked via verifier_pubkey)
+ * - Replay protection: Each attestation can only be used once
+ * - Freshness: Attestations expire after 1 hour
+ *
+ * @param employee_id Employee's wallet address (32 bytes)
+ * @param threshold Salary threshold for verification (e.g., 5000 = $5000)
+ * @param txids Transaction IDs proving payment history (4 payments)
+ * @param merkle_root Merkle root of payment history
+ * @param timestamp Unix timestamp when attestation was created
+ * @param attestation_hash Hash commitment from verifier (public)
+ * @param verifier_pubkey Public key of trusted verifier (public, NOT secret!)
+ */
+export circuit verify_attestation(
+  employee_id: Bytes<32>,
+  threshold: Uint<64>,
+  txids: Vector<4, Bytes<32>>,
+  merkle_root: Bytes<32>,
+  timestamp: Uint<64>,
+  attestation_hash: Bytes<32>,
+  verifier_pubkey: Bytes<32>  // Changed from verifier_secret - NO SECRETS ON-CHAIN!
+): [] {
+  // IMPORTANT: This circuit does NOT recompute the attestation hash!
+  // The cryptographic verification was done OFF-CHAIN by the verifier service.
+  // We TRUST the verifier because their public key is in our trusted set.
+
+  // Step 1: Verify verifier is trusted
+  // The verifier must be in the trusted set for us to accept their attestation
+  assert(
+    trusted_verifiers.member(disclose(verifier_pubkey)),
+    "Verifier not trusted"
+  );
+
+  // Step 2: Prevent replay attacks
+  // Each attestation can only be used once to prevent the same attestation
+  // from being reused for multiple claims
+  assert(
+    !used_attestations.member(disclose(attestation_hash)),
+    "Attestation already used (replay attack)"
+  );
+
+  // Mark attestation as used
+  used_attestations.insert(disclose(attestation_hash), 1 as Uint<1>);
+
+  // Step 3: Check timestamp freshness
+  // Reject attestations older than 1 hour (3600 seconds)
+  // This prevents old attestations from being used indefinitely
+  const current_time = current_timestamp as Uint<64>;
+  const one_hour_ago = (current_time - (3600 as Uint<64>)) as Uint<64>;
+
+  assert(
+    disclose(timestamp) > one_hour_ago,
+    "Attestation expired (older than 1 hour)"
+  );
+
+  assert(
+    disclose(timestamp) <= current_time,
+    "Attestation timestamp is in the future"
+  );
+
+  // Step 4: Store verified attestation for eligibility checks
+  // This allows prove_eligibility to check if employee has valid attestation
+  const verified_attestation = PC_VerifiedAttestation {
+    employee_id: disclose(employee_id),
+    threshold: disclose(threshold),
+    merkle_root: disclose(merkle_root),
+    attestation_hash: disclose(attestation_hash),
+    verifier_pubkey: disclose(verifier_pubkey),
+    verified_at: current_timestamp
+  };
+
+  // Store attestation (overwrites any previous attestation for this employee)
+  verified_attestations.insert(disclose(employee_id), verified_attestation);
+
+  // Note: The employee_id, threshold, txids, and merkle_root parameters
+  // are metadata from the attestation. They are not explicitly verified here,
+  // but can be used by calling circuits (e.g., prove_eligibility) to make
+  // decisions based on the attestation content.
+}
 
 /**
  * Register Trusted Verifier
@@ -1063,6 +1159,53 @@ export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): [] {
   trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
 }
 
+/**
+ * Prove Eligibility
+ *
+ * Allows employees to prove eligibility for benefits/loans based on verified ZKML attestation.
+ * Employees must first call verify_attestation() to get their ZKML proof verified and stored.
+ *
+ * Use cases:
+ * - Prove eligibility for loan based on income threshold
+ * - Prove eligibility for bonus based on salary history
+ * - Prove eligibility for company benefits
+ *
+ * @param employee_id Employee requesting eligibility proof
+ * @param min_threshold Minimum threshold required for eligibility (e.g., $5000)
+ * @returns Success if employee has valid attestation meeting threshold (assertion-based)
+ */
+export circuit prove_eligibility(
+  employee_id: Bytes<32>,
+  min_threshold: Uint<64>
+): [] {
+  // Step 1: Check if employee has a verified attestation
+  assert(
+    verified_attestations.member(disclose(employee_id)),
+    "Employee has no verified attestation - call verify_attestation first"
+  );
+
+  // Step 2: Retrieve the verified attestation
+  const attestation = verified_attestations.lookup(disclose(employee_id));
+
+  // Step 3: Verify threshold meets minimum requirement
+  assert(
+    disclose(attestation.threshold) >= disclose(min_threshold),
+    "Employee threshold does not meet minimum eligibility requirement"
+  );
+
+  // Step 4: Check attestation is still fresh (within 24 hours)
+  // This prevents using old attestations for eligibility after salary changes
+  const current_time = current_timestamp;
+  const twenty_four_hours_ago = current_time - (86400 as Uint<32>); // 24 hours in seconds
+
+  assert(
+    disclose(attestation.verified_at) > twenty_four_hours_ago,
+    "Attestation expired - must re-verify (older than 24 hours)"
+  );
+
+  // Success: If all assertions pass, employee is eligible
+  // Circuit execution success indicates eligibility
+}
 
 // ========================================
 // SECTION 2.1: SALARY HISTORY PROOFS

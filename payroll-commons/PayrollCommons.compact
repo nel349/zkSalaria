@@ -97,17 +97,6 @@ module PayrollCommons {
     last_updated: Uint<32>;
   }
 
-  // Verified attestation record for ZKML eligibility proofs
-  // Stores the result of verify_attestation circuit for later eligibility checks
-  export struct VerifiedAttestation {
-    employee_id: Bytes<32>;           // Which employee was verified
-    threshold: Uint<64>;              // Threshold proven (e.g., avg salary > $5000)
-    merkle_root: Bytes<32>;           // Merkle root of payment history
-    attestation_hash: Bytes<32>;      // Hash commitment from verifier
-    verifier_pubkey: Bytes<32>;       // Which trusted verifier signed this
-    verified_at: Uint<32>;            // When attestation was verified on-chain
-  }
-
   // Income Proof Record (Section 2.1: Salary History Proofs)
   // Stores ZKML income proofs submitted by employees for lender/landlord verification
   export struct IncomeProof {
