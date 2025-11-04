@@ -26,7 +26,7 @@ import {
 } from '@zksalaria/payroll-contract';
 import * as utils from './utils/index';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { combineLatest, concat, defer, firstValueFrom, from, map, type Observable, of, retry, scan, Subject } from 'rxjs';
+import { combineLatest, concat, defer, from, map, type Observable, of, retry, scan, Subject } from 'rxjs';
 
 const payrollContract: PayrollContract = new Contract(payrollWitnesses);
 
@@ -89,7 +89,7 @@ export interface DeployedPayrollAPI {
   verifyEmployment(employeeId: string, verifierId: string): Promise<boolean>;
 
   // ZKML Income Proofs (Phase 2.1)
-  registerTrustedVerifier(verifierPubkey: string): Promise<void>;
+  registerTrustedVerifier(verifierPubkey: string): Promise<boolean>;
   submitIncomeProof(
     employeeId: string,
     proofType: bigint,
@@ -101,8 +101,8 @@ export interface DeployedPayrollAPI {
     verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number
-  ): Promise<void>;
-  verifyIncomeProof(employeeId: string, requiredProofType: bigint, requiredThreshold: string): Promise<void>;
+  ): Promise<boolean>;
+  verifyIncomeProof(employeeId: string, requiredProofType: bigint, requiredThreshold: string): Promise<boolean>;
   getIncomeProof(employeeId: string): Promise<any | null>;
 }
 
@@ -731,12 +731,13 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // ZKML INCOME PROOFS (PHASE 2.1)
   // ========================================
 
-  async registerTrustedVerifier(verifierPubkey: string): Promise<void> {
+  async registerTrustedVerifier(verifierPubkey: string): Promise<boolean> {
     this.logger?.info({ registerTrustedVerifier: { verifierPubkey } });
 
     const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
 
-    await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
+    const result = await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
+    return result;
   }
 
   async submitIncomeProof(
@@ -750,7 +751,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     this.logger?.info({
       submitIncomeProof: {
         employeeId,
@@ -774,7 +775,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
       txidVector.push(new Uint8Array(32));
     }
 
-    await this.circuits.submit_income_proof(
+    const result = await this.circuits.submit_income_proof(
       employeeIdBytes,
       proofType,
       utils.parseAmount(thresholdMin),
@@ -786,22 +787,25 @@ export class PayrollAPI implements DeployedPayrollAPI {
       timestamp,
       BigInt(expiresIn)
     );
+    return result;
   }
 
   async verifyIncomeProof(
     employeeId: string,
     requiredProofType: bigint,
     requiredThreshold: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     this.logger?.info({ verifyIncomeProof: { employeeId, requiredProofType, requiredThreshold } });
 
     const employeeIdBytes = utils.stringToBytes32(employeeId);
 
-    await this.circuits.verify_income_proof(
+    const result = await this.circuits.verify_income_proof(
       employeeIdBytes,
       requiredProofType,
       utils.parseAmount(requiredThreshold)
     );
+
+    return result;
   }
 
   async getIncomeProof(employeeId: string): Promise<any | null> {

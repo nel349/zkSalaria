@@ -1051,16 +1051,17 @@ export circuit process_recurring_payment(
  *
  * @param verifier_pubkey Public key of the trusted verifier
  */
-export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): [] {
+export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
   // TODO: Add access control (only contract owner/governance)
   // For now, anyone can register a verifier (MVP simplification)
 
-  assert(
-    !trusted_verifiers.member(disclose(verifier_pubkey)),
-    "Verifier already registered"
-  );
+  // Check if verifier is already registered
+  if (trusted_verifiers.member(disclose(verifier_pubkey))) {
+    return false; // Already registered
+  }
 
   trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
+  return true; // Successfully registered
 }
 
 
@@ -1082,46 +1083,39 @@ export circuit submit_income_proof(
   verifier_pubkey: Bytes<32>,
   timestamp: Uint<64>,
   expires_in: Uint<32>  // Seconds until expiry (e.g., 2592000 for 30 days)
-): [] {
+): Boolean {
   // Step 1: Verify proof type is valid (1-4)
-  assert(
-    disclose(proof_type) >= (1 as Uint<8>) && disclose(proof_type) <= (4 as Uint<8>),
-    "Invalid proof type - must be 1 (ABOVE_THRESHOLD), 2 (RANGE), 3 (AVERAGE), or 4 (CREDIT_SCORE)"
-  );
+  if (disclose(proof_type) < (1 as Uint<8>) || disclose(proof_type) > (4 as Uint<8>)) {
+    return false; // Invalid proof type
+  }
 
   // Step 2: Verify verifier is trusted
-  assert(
-    trusted_verifiers.member(disclose(verifier_pubkey)),
-    "Verifier not trusted - register verifier first"
-  );
+  if (!trusted_verifiers.member(disclose(verifier_pubkey))) {
+    return false; // Verifier not trusted
+  }
 
   // Step 3: Prevent replay attacks - check attestation hash hasn't been used
-  assert(
-    !used_attestations.member(disclose(attestation_hash)),
-    "Attestation already used (replay attack prevention)"
-  );
+  if (used_attestations.member(disclose(attestation_hash))) {
+    return false; // Attestation already used
+  }
   used_attestations.insert(disclose(attestation_hash), 1 as Uint<1>);
 
   // Step 4: Verify timestamp is fresh (within 1 hour)
   const current_time = current_timestamp as Uint<64>;
   const one_hour_ago = (current_time - (3600 as Uint<64>)) as Uint<64>;
-  assert(
-    disclose(timestamp) > one_hour_ago,
-    "Proof timestamp too old (must be within 1 hour)"
-  );
-  assert(
-    disclose(timestamp) <= current_time,
-    "Proof timestamp is in the future"
-  );
+  if (disclose(timestamp) <= one_hour_ago) {
+    return false; // Proof timestamp too old
+  }
+  if (disclose(timestamp) > current_time) {
+    return false; // Proof timestamp is in the future
+  }
 
   // Step 5: Validate threshold values based on proof type
   // For INCOME_RANGE (type 2), threshold_max must be > threshold_min
-  // For other types, threshold_max should be 0
   if (disclose(proof_type) == (2 as Uint<8>)) {
-    assert(
-      disclose(threshold_max) > disclose(threshold_min),
-      "INCOME_RANGE proof must have threshold_max > threshold_min"
-    );
+    if (disclose(threshold_max) <= disclose(threshold_min)) {
+      return false; // Invalid range
+    }
   }
 
   // Step 6: Calculate expiration time
@@ -1144,6 +1138,7 @@ export circuit submit_income_proof(
   income_proofs.insert(disclose(employee_id), income_proof);
 
   // Success: Income proof stored and available for verification
+  return true;
 }
 
 // Verify Income Proof (ZKML Verification Circuit)
@@ -1153,58 +1148,52 @@ export circuit verify_income_proof(
   employee_id: Bytes<32>,
   required_proof_type: Uint<8>,
   required_threshold: Uint<64>
-): [] {
+): Boolean {
   // Step 1: Check if employee has submitted an income proof
-  assert(
-    income_proofs.member(disclose(employee_id)),
-    "Employee has no income proof - call submit_income_proof first"
-  );
+  if (!income_proofs.member(disclose(employee_id))) {
+    return false;
+  }
 
   // Step 2: Retrieve the income proof
   const proof = income_proofs.lookup(disclose(employee_id));
 
   // Step 3: Verify proof type matches requirement
-  assert(
-    disclose(proof.proof_type) == disclose(required_proof_type),
-    "Proof type mismatch - employee must submit required proof type"
-  );
+  if (disclose(proof.proof_type) != disclose(required_proof_type)) {
+    return false;
+  }
 
   // Step 4: Verify proof hasn't expired
   const current_time = current_timestamp;
-  assert(
-    disclose(proof.expires_at) == (0 as Uint<32>) || disclose(proof.expires_at) > current_time,
-    "Income proof has expired - employee must submit new proof"
-  );
+  if (disclose(proof.expires_at) != (0 as Uint<32>) && disclose(proof.expires_at) <= current_time) {
+    return false; // expired
+  }
 
   // Step 5: Verify threshold based on proof type
   if (disclose(required_proof_type) == (1 as Uint<8>)) {
     // INCOME_ABOVE_THRESHOLD: Check threshold_min >= required_threshold
-    assert(
-      disclose(proof.threshold_min) >= disclose(required_threshold),
-      "Income threshold not met - employee income below requirement"
-    );
+    if (disclose(proof.threshold_min) < disclose(required_threshold)) {
+      return false;
+    }
   } else if (disclose(required_proof_type) == (2 as Uint<8>)) {
     // INCOME_RANGE: Check required_threshold is within range
-    assert(
-      disclose(required_threshold) >= disclose(proof.threshold_min) &&
-      disclose(required_threshold) <= disclose(proof.threshold_max),
-      "Income not in required range"
-    );
+    if (disclose(required_threshold) < disclose(proof.threshold_min) ||
+        disclose(required_threshold) > disclose(proof.threshold_max)) {
+      return false;
+    }
   } else if (disclose(required_proof_type) == (3 as Uint<8>)) {
     // AVERAGE_INCOME: Check threshold_min >= required_threshold
-    assert(
-      disclose(proof.threshold_min) >= disclose(required_threshold),
-      "Average income below requirement"
-    );
+    if (disclose(proof.threshold_min) < disclose(required_threshold)) {
+      return false;
+    }
   } else if (disclose(required_proof_type) == (4 as Uint<8>)) {
     // CREDIT_SCORE: Check threshold_min >= required_threshold
-    assert(
-      disclose(proof.threshold_min) >= disclose(required_threshold),
-      "Credit score below requirement"
-    );
+    if (disclose(proof.threshold_min) < disclose(required_threshold)) {
+      return false;
+    }
   }
 
   // Success: Income proof verified and meets requirements
+  return true;
 }
 
 // ========================================

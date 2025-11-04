@@ -37,7 +37,7 @@ export interface PayrollCircuitCalls {
   resume_recurring_payment(recurringPaymentId: Uint8Array, nextPaymentDate: bigint): Promise<void>;
   edit_recurring_payment(recurringPaymentId: Uint8Array, newAmount: bigint): Promise<void>;
   process_recurring_payment(recurringPaymentId: Uint8Array): Promise<void>;
-  register_trusted_verifier(verifierPubkey: Uint8Array): Promise<void>;
+  register_trusted_verifier(verifierPubkey: Uint8Array): Promise<boolean>;
   submit_income_proof(
     employeeId: Uint8Array,
     proofType: bigint,
@@ -49,8 +49,8 @@ export interface PayrollCircuitCalls {
     verifierPubkey: Uint8Array,
     timestamp: bigint,
     expiresIn: bigint
-  ): Promise<void>;
-  verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<void>;
+  ): Promise<boolean>;
+  verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<boolean>;
   update_timestamp(newTimestamp: bigint): Promise<void>;
 }
 
