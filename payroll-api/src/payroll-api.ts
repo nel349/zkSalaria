@@ -725,8 +725,20 @@ export class PayrollAPI implements DeployedPayrollAPI {
       verifierIdBytes
     );
 
-    // Result is Bytes<1>, check if byte is 1 (true) or 0 (false)
-    return result[0] === 1;
+    // DEBUG: Log the result to see what we actually get
+    this.logger?.info({
+      verifyEmployment_result: {
+        result,
+        resultType: typeof result,
+        hasPrivate: 'private' in result,
+        privateResult: result.private?.result,
+        privateResultType: typeof result.private?.result,
+      }
+    });
+
+    // Result is CircuitResults<T, Uint8Array> - extract bytes from private.result
+    const bytes = result.private.result as Uint8Array;
+    return bytes[0] === 1;
   }
 
   // ========================================

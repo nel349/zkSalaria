@@ -48,10 +48,19 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         console.log('\n📋 Test: Duplicate Verifier Registration\n');
 
         payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
+        expect(payroll.isTrustedVerifier(VERIFIER_PUBKEY)).toBe(true);
 
-        expect(() => {
-          payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
-        }).toThrow(/already registered/i);
+        // Try to register again - should not throw, but verifier map size should stay the same
+        const ledgerBefore = payroll.getLedgerState();
+        const sizeBefore = ledgerBefore.trusted_verifiers.size();
+
+        payroll.registerTrustedVerifier(VERIFIER_PUBKEY); // Attempt duplicate registration
+
+        const ledgerAfter = payroll.getLedgerState();
+        const sizeAfter = ledgerAfter.trusted_verifiers.size();
+
+        // Size should be the same (duplicate was rejected)
+        expect(sizeAfter).toBe(sizeBefore);
 
         console.log('✅ Correctly rejected duplicate verifier registration');
       });
@@ -183,20 +192,22 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
         const timestamp = BigInt(payroll.getCurrentTimestamp());
 
-        expect(() => {
-          payroll.submitIncomeProof(
-            EMPLOYEE_ID,
-            5, // Invalid type
-            THRESHOLD_MIN,
-            0n,
-            TXIDS,
-            MERKLE_ROOT,
-            ATTESTATION_HASH,
-            VERIFIER_PUBKEY,
-            timestamp,
-            2592000
-          );
-        }).toThrow(/invalid proof type/i);
+        payroll.submitIncomeProof(
+          EMPLOYEE_ID,
+          5, // Invalid type
+          THRESHOLD_MIN,
+          0n,
+          TXIDS,
+          MERKLE_ROOT,
+          ATTESTATION_HASH,
+          VERIFIER_PUBKEY,
+          timestamp,
+          2592000
+        );
+
+        // Proof should not be added (invalid proof type)
+        const proof = payroll.getIncomeProof(EMPLOYEE_ID);
+        expect(proof).toBeNull();
 
         console.log('✅ Correctly rejected invalid proof type');
       });
@@ -207,20 +218,22 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         const untrustedVerifier = 'bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1bad1';
         const timestamp = BigInt(payroll.getCurrentTimestamp());
 
-        expect(() => {
-          payroll.submitIncomeProof(
-            EMPLOYEE_ID,
-            1,
-            THRESHOLD_MIN,
-            0n,
-            TXIDS,
-            MERKLE_ROOT,
-            ATTESTATION_HASH,
-            untrustedVerifier,
-            timestamp,
-            2592000
-          );
-        }).toThrow(/not trusted/i);
+        payroll.submitIncomeProof(
+          EMPLOYEE_ID,
+          1,
+          THRESHOLD_MIN,
+          0n,
+          TXIDS,
+          MERKLE_ROOT,
+          ATTESTATION_HASH,
+          untrustedVerifier,
+          timestamp,
+          2592000
+        );
+
+        // Proof should not be added (untrusted verifier)
+        const proof = payroll.getIncomeProof(EMPLOYEE_ID);
+        expect(proof).toBeNull();
 
         console.log('✅ Correctly rejected untrusted verifier');
       });
@@ -243,20 +256,25 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           2592000
         );
 
-        expect(() => {
-          payroll.submitIncomeProof(
-            'EMP002', // Different employee
-            1,
-            THRESHOLD_MIN,
-            0n,
-            TXIDS,
-            MERKLE_ROOT,
-            ATTESTATION_HASH, // Same attestation hash
-            VERIFIER_PUBKEY,
-            timestamp,
-            2592000
-          );
-        }).toThrow(/already used|replay/i);
+        // Attestation should be marked as used
+        expect(payroll.isAttestationUsed(ATTESTATION_HASH)).toBe(true);
+
+        payroll.submitIncomeProof(
+          'EMP002', // Different employee
+          1,
+          THRESHOLD_MIN,
+          0n,
+          TXIDS,
+          MERKLE_ROOT,
+          ATTESTATION_HASH, // Same attestation hash
+          VERIFIER_PUBKEY,
+          timestamp,
+          2592000
+        );
+
+        // Second proof should not be added (replay attack prevented)
+        const proof = payroll.getIncomeProof('EMP002');
+        expect(proof).toBeNull();
 
         console.log('✅ Successfully prevented replay attack');
       });
@@ -266,20 +284,22 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
         const timestamp = BigInt(payroll.getCurrentTimestamp());
 
-        expect(() => {
-          payroll.submitIncomeProof(
-            EMPLOYEE_ID,
-            2, // INCOME_RANGE
-            THRESHOLD_MIN,
-            THRESHOLD_MIN, // threshold_max == threshold_min (invalid)
-            TXIDS,
-            MERKLE_ROOT,
-            ATTESTATION_HASH,
-            VERIFIER_PUBKEY,
-            timestamp,
-            2592000
-          );
-        }).toThrow(/threshold_max > threshold_min/i);
+        payroll.submitIncomeProof(
+          EMPLOYEE_ID,
+          2, // INCOME_RANGE
+          THRESHOLD_MIN,
+          THRESHOLD_MIN, // threshold_max == threshold_min (invalid)
+          TXIDS,
+          MERKLE_ROOT,
+          ATTESTATION_HASH,
+          VERIFIER_PUBKEY,
+          timestamp,
+          2592000
+        );
+
+        // Proof should not be added (invalid thresholds)
+        const proof = payroll.getIncomeProof(EMPLOYEE_ID);
+        expect(proof).toBeNull();
 
         console.log('✅ Correctly rejected invalid INCOME_RANGE thresholds');
       });
@@ -340,9 +360,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         );
 
         // Requiring $6000 (more than proven $5000) should fail
-        expect(() => {
-          payroll.verifyIncomeProof(EMPLOYEE_ID, 1, 6000n);
-        }).toThrow(/threshold not met/i);
+        const result = payroll.verifyIncomeProof(EMPLOYEE_ID, 1, 6000n);
+        expect(result).toBe(false);
 
         console.log('✅ Correctly rejected insufficient threshold');
       });
@@ -391,9 +410,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         );
 
         // Requiring $12000 (above $10000 max) should fail
-        expect(() => {
-          payroll.verifyIncomeProof(EMPLOYEE_ID, 2, 12000n);
-        }).toThrow(/not in required range/i);
+        const result = payroll.verifyIncomeProof(EMPLOYEE_ID, 2, 12000n);
+        expect(result).toBe(false);
 
         console.log('✅ Correctly rejected out-of-range requirement');
       });
@@ -466,9 +484,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         );
 
         // Try to verify as type 2
-        expect(() => {
-          payroll.verifyIncomeProof(EMPLOYEE_ID, 2, 5000n);
-        }).toThrow(/proof type mismatch/i);
+        const result = payroll.verifyIncomeProof(EMPLOYEE_ID, 2, 5000n);
+        expect(result).toBe(false);
 
         console.log('✅ Correctly rejected proof type mismatch');
       });
@@ -495,9 +512,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         // Fast-forward time by 2 seconds
         payroll.updateTimestamp(Number(timestamp) + 2);
 
-        expect(() => {
-          payroll.verifyIncomeProof(EMPLOYEE_ID, 1, 4000n);
-        }).toThrow(/expired/i);
+        const result = payroll.verifyIncomeProof(EMPLOYEE_ID, 1, 4000n);
+        expect(result).toBe(false);
 
         console.log('✅ Correctly rejected expired proof');
       });

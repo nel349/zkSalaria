@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { PayrollAPI, type PayrollProviders, utils, PermissionType } from '../index.js';
+import { EmploymentStatus } from '@zksalaria/payroll-contract';
 import pino from 'pino';
 import { firstValueFrom } from 'rxjs';
 import WebSocket from 'ws';
@@ -92,7 +93,7 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       const contractAddress = await PayrollAPI.deploy(providers, companyId, 'Status Test Corp', logger);
       const companyAPI = await PayrollAPI.connect(providers, contractAddress, companyId, logger);
 
-      // Add employee (starts as PENDING = 0)
+      // Add employee (starts as ACTIVE = 1)
       await companyAPI.addEmployee(companyId, employeeId);
       const state = await firstValueFrom(companyAPI.state$);
       expect(state.totalEmployees).toBe(1n);
@@ -101,31 +102,31 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       logger.info('Granting employment disclosure to verifier…');
       await companyAPI.grantEmploymentDisclosure(employeeId, verifierId, 86400); // 1 day expiry
 
-      // Test employment status transitions: PENDING -> ACTIVE -> ON_LEAVE -> ACTIVE -> TERMINATED
-      logger.info('Transitioning: PENDING (0) -> ACTIVE (1)…');
-      await companyAPI.updateEmploymentStatus(employeeId, 1n);
+      // Test employment status transitions: Employee starts as ACTIVE when added
+      // Then: ACTIVE -> ON_LEAVE -> ACTIVE -> TERMINATED
+      logger.info(`Employee starts as ACTIVE (${EmploymentStatus.ACTIVE}) - verifying initial status…`);
 
       // Wait for transaction to be mined
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       let isEmployed = await companyAPI.verifyEmployment(employeeId, verifierId);
       expect(isEmployed).toBe(true);
-      logger.info('✅ Status verified as ACTIVE');
+      logger.info('✅ Initial status verified as ACTIVE');
 
-      logger.info('Transitioning: ACTIVE (1) -> ON_LEAVE (2)…');
-      await companyAPI.updateEmploymentStatus(employeeId, 2n);
+      logger.info(`Transitioning: ACTIVE (${EmploymentStatus.ACTIVE}) -> ON_LEAVE (${EmploymentStatus.ON_LEAVE})…`);
+      await companyAPI.updateEmploymentStatus(employeeId, EmploymentStatus.ON_LEAVE);
       isEmployed = await companyAPI.verifyEmployment(employeeId, verifierId);
       expect(isEmployed).toBe(true); // ON_LEAVE still counts as employed
       logger.info('✅ Status verified as ON_LEAVE (still employed)');
 
-      logger.info('Transitioning: ON_LEAVE (2) -> ACTIVE (1)…');
-      await companyAPI.updateEmploymentStatus(employeeId, 1n);
+      logger.info(`Transitioning: ON_LEAVE (${EmploymentStatus.ON_LEAVE}) -> ACTIVE (${EmploymentStatus.ACTIVE})…`);
+      await companyAPI.updateEmploymentStatus(employeeId, EmploymentStatus.ACTIVE);
       isEmployed = await companyAPI.verifyEmployment(employeeId, verifierId);
       expect(isEmployed).toBe(true);
       logger.info('✅ Status verified as ACTIVE');
 
-      logger.info('Transitioning: ACTIVE (1) -> TERMINATED (3)…');
-      await companyAPI.updateEmploymentStatus(employeeId, 3n);
+      logger.info(`Transitioning: ACTIVE (${EmploymentStatus.ACTIVE}) -> TERMINATED (${EmploymentStatus.TERMINATED})…`);
+      await companyAPI.updateEmploymentStatus(employeeId, EmploymentStatus.TERMINATED);
       isEmployed = await companyAPI.verifyEmployment(employeeId, verifierId);
       expect(isEmployed).toBe(false); // TERMINATED = not employed
       logger.info('✅ Status verified as TERMINATED (not employed)');
@@ -249,7 +250,7 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
         const txids = paymentHistory.slice(0, 3).map(p => Buffer.from(p.payment_id).toString('hex'));
         const merkleRoot = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
         const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
-        const timestamp = BigInt(Math.floor(Date.now() / 1000));
+        const timestamp = BigInt(currentTime); // Reuse contract timestamp to avoid "timestamp in future" errors
 
         // Submit proof
         const submitted = await employeeAPI.submitIncomeProof(

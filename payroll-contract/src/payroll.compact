@@ -197,12 +197,12 @@ export circuit add_employee(
 
   // Create employment record with active status
   const employment_record_id = PC_generate_employment_record_id(
-    disclose(company_id),
+    company_id,  // Already public ledger variable, don't disclose
     disclose(employee_id)
   );
 
   const employment_record = PC_EmploymentRecord {
-    company_id: disclose(company_id),
+    company_id: company_id,  // Already public ledger variable
     employee_id: disclose(employee_id),
     status: PC_EMPLOYMENT_STATUS_ACTIVE(),
     hire_date: current_timestamp,
@@ -698,10 +698,12 @@ export circuit verify_employment(
 
   const employment_record = employment_records.lookup(employment_record_id);
 
-  // 3. Check if status is ACTIVE
+  // 3. Check if status is ACTIVE or ON_LEAVE (both count as employed)
   const is_active = employment_record.status == PC_EMPLOYMENT_STATUS_ACTIVE();
+  const is_on_leave = employment_record.status == PC_EMPLOYMENT_STATUS_ON_LEAVE();
+  const is_employed = is_active || is_on_leave;
 
-  if (is_active) {
+  if (is_employed) {
     return pad(1, "\x01");
   } else {
     return pad(1, "\x00");

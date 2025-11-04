@@ -455,9 +455,9 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       console.log('├─ Step 4: Company updates employee status to ON_LEAVE');
       payroll.updateEmploymentStatus(employeeId, EmploymentStatus.ON_LEAVE);
 
-      console.log('├─ Step 5: Landlord re-verifies employment (NOT ACTIVE)');
+      console.log('├─ Step 5: Landlord re-verifies employment (STILL EMPLOYED - ON_LEAVE)');
       result = payroll.verifyEmployment(employeeId, landlordId);
-      expect(result[0]).toBe(0);
+      expect(result[0]).toBe(1);  // ON_LEAVE is still considered employed
 
       console.log('├─ Step 6: Company reactivates employee (ACTIVE)');
       payroll.updateEmploymentStatus(employeeId, EmploymentStatus.ACTIVE);

@@ -46,7 +46,7 @@ export interface PayrollCircuitCalls {
   grant_audit_disclosure(companyId: Uint8Array, auditorId: Uint8Array, expiresIn: bigint): Promise<void>;
   revoke_disclosure(grantorId: Uint8Array, granteeId: Uint8Array, permissionType: bigint): Promise<void>;
   update_employment_status(employeeId: Uint8Array, newStatus: bigint): Promise<void>;
-  verify_employment(employeeId: Uint8Array, verifierId: Uint8Array): Promise<Uint8Array>;
+  verify_employment(employeeId: Uint8Array, verifierId: Uint8Array): Promise<CircuitResults<PayrollPrivateState, Uint8Array>>;
   create_recurring_payment(
     employeeId: Uint8Array,
     amount: bigint,

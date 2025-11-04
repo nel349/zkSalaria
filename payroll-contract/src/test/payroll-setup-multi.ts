@@ -848,7 +848,7 @@ export class PayrollMultiPartyTestSetup {
     const employeeIdBytes = stringToBytes32(employeeId);
     const requiredProofTypeU8 = BigInt(requiredProofType); // Convert to bigint for Uint<8>
 
-    this.executeAsParticipant(
+    const result = this.executeAsParticipant(
       this.companyId,
       (ctx, empId, reqType, reqThreshold) =>
         this.contract.impureCircuits.verify_income_proof(
@@ -862,7 +862,15 @@ export class PayrollMultiPartyTestSetup {
       requiredThreshold
     );
 
-    console.log('✅ Income proof verification succeeded');
-    return true;
+    // Circuit returns Boolean (true/false) directly
+    const isValid = result === true;
+
+    if (isValid) {
+      console.log('✅ Income proof verification succeeded');
+    } else {
+      console.log('❌ Income proof verification failed');
+    }
+
+    return isValid;
   }
 }
