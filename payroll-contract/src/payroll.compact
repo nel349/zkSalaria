@@ -66,6 +66,10 @@ export ledger trusted_verifiers: Map<Bytes<32>, Uint<1>>;       // verifier_pubk
 export ledger used_attestations: Map<Bytes<32>, Uint<1>>;       // attestation_hash -> 1
 export ledger verified_attestations: Map<Bytes<32>, PC_VerifiedAttestation>;  // employee_id -> attestation details
 
+// ZKML Income Proofs (Section 2.1: Salary History Proofs)
+// Stores comprehensive income proofs for lender/landlord verification
+export ledger income_proofs: Map<Bytes<32>, PC_IncomeProof>;    // employee_id -> income_proof
+
 constructor(
   initNonce: Bytes<32>,
   companyId: Bytes<32>,
@@ -1202,6 +1206,149 @@ export circuit prove_eligibility(
 
   // Success: If all assertions pass, employee is eligible
   // Circuit execution success indicates eligibility
+}
+
+// ========================================
+// SECTION 2.1: SALARY HISTORY PROOFS
+// ========================================
+
+// Submit Income Proof (ZKML Circuit)
+// Employee submits ZKML proof to demonstrate income eligibility
+// Proof types: 1=INCOME_ABOVE_THRESHOLD, 2=INCOME_RANGE, 3=AVERAGE_INCOME, 4=CREDIT_SCORE
+export circuit submit_income_proof(
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  txids: Vector<12, Bytes<32>>,
+  merkle_root: Bytes<32>,
+  attestation_hash: Bytes<32>,
+  verifier_pubkey: Bytes<32>,
+  timestamp: Uint<64>,
+  expires_in: Uint<32>  // Seconds until expiry (e.g., 2592000 for 30 days)
+): [] {
+  // Step 1: Verify proof type is valid (1-4)
+  assert(
+    disclose(proof_type) >= (1 as Uint<8>) && disclose(proof_type) <= (4 as Uint<8>),
+    "Invalid proof type - must be 1 (ABOVE_THRESHOLD), 2 (RANGE), 3 (AVERAGE), or 4 (CREDIT_SCORE)"
+  );
+
+  // Step 2: Verify verifier is trusted
+  assert(
+    trusted_verifiers.member(disclose(verifier_pubkey)),
+    "Verifier not trusted - register verifier first"
+  );
+
+  // Step 3: Prevent replay attacks - check attestation hash hasn't been used
+  assert(
+    !used_attestations.member(disclose(attestation_hash)),
+    "Attestation already used (replay attack prevention)"
+  );
+  used_attestations.insert(disclose(attestation_hash), 1 as Uint<1>);
+
+  // Step 4: Verify timestamp is fresh (within 1 hour)
+  const current_time = current_timestamp as Uint<64>;
+  const one_hour_ago = (current_time - (3600 as Uint<64>)) as Uint<64>;
+  assert(
+    disclose(timestamp) > one_hour_ago,
+    "Proof timestamp too old (must be within 1 hour)"
+  );
+  assert(
+    disclose(timestamp) <= current_time,
+    "Proof timestamp is in the future"
+  );
+
+  // Step 5: Validate threshold values based on proof type
+  // For INCOME_RANGE (type 2), threshold_max must be > threshold_min
+  // For other types, threshold_max should be 0
+  if (disclose(proof_type) == (2 as Uint<8>)) {
+    assert(
+      disclose(threshold_max) > disclose(threshold_min),
+      "INCOME_RANGE proof must have threshold_max > threshold_min"
+    );
+  }
+
+  // Step 6: Calculate expiration time
+  const expiration_time = (current_timestamp + disclose(expires_in)) as Uint<32>;
+
+  // Step 7: Store income proof in ledger
+  const income_proof = PC_IncomeProof {
+    employee_id: disclose(employee_id),
+    proof_type: disclose(proof_type),
+    threshold_min: disclose(threshold_min),
+    threshold_max: disclose(threshold_max),
+    txids: disclose(txids),
+    merkle_root: disclose(merkle_root),
+    attestation_hash: disclose(attestation_hash),
+    verifier_pubkey: disclose(verifier_pubkey),
+    submitted_at: current_timestamp,
+    expires_at: expiration_time
+  };
+
+  income_proofs.insert(disclose(employee_id), income_proof);
+
+  // Success: Income proof stored and available for verification
+}
+
+// Verify Income Proof (ZKML Verification Circuit)
+// Lender/landlord verifies employee's income proof meets their requirements
+// Returns true if proof exists and meets requirements, false otherwise
+export circuit verify_income_proof(
+  employee_id: Bytes<32>,
+  required_proof_type: Uint<8>,
+  required_threshold: Uint<64>
+): [] {
+  // Step 1: Check if employee has submitted an income proof
+  assert(
+    income_proofs.member(disclose(employee_id)),
+    "Employee has no income proof - call submit_income_proof first"
+  );
+
+  // Step 2: Retrieve the income proof
+  const proof = income_proofs.lookup(disclose(employee_id));
+
+  // Step 3: Verify proof type matches requirement
+  assert(
+    disclose(proof.proof_type) == disclose(required_proof_type),
+    "Proof type mismatch - employee must submit required proof type"
+  );
+
+  // Step 4: Verify proof hasn't expired
+  const current_time = current_timestamp;
+  assert(
+    disclose(proof.expires_at) == (0 as Uint<32>) || disclose(proof.expires_at) > current_time,
+    "Income proof has expired - employee must submit new proof"
+  );
+
+  // Step 5: Verify threshold based on proof type
+  if (disclose(required_proof_type) == (1 as Uint<8>)) {
+    // INCOME_ABOVE_THRESHOLD: Check threshold_min >= required_threshold
+    assert(
+      disclose(proof.threshold_min) >= disclose(required_threshold),
+      "Income threshold not met - employee income below requirement"
+    );
+  } else if (disclose(required_proof_type) == (2 as Uint<8>)) {
+    // INCOME_RANGE: Check required_threshold is within range
+    assert(
+      disclose(required_threshold) >= disclose(proof.threshold_min) &&
+      disclose(required_threshold) <= disclose(proof.threshold_max),
+      "Income not in required range"
+    );
+  } else if (disclose(required_proof_type) == (3 as Uint<8>)) {
+    // AVERAGE_INCOME: Check threshold_min >= required_threshold
+    assert(
+      disclose(proof.threshold_min) >= disclose(required_threshold),
+      "Average income below requirement"
+    );
+  } else if (disclose(required_proof_type) == (4 as Uint<8>)) {
+    // CREDIT_SCORE: Check threshold_min >= required_threshold
+    assert(
+      disclose(proof.threshold_min) >= disclose(required_threshold),
+      "Credit score below requirement"
+    );
+  }
+
+  // Success: Income proof verified and meets requirements
 }
 
 // ========================================

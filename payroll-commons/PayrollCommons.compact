@@ -20,6 +20,12 @@ module PayrollCommons {
   export pure circuit PERMISSION_TYPE_CREDIT_SCORE(): Uint<8> { return 2 as Uint<8>; }
   export pure circuit PERMISSION_TYPE_AUDIT(): Uint<8> { return 3 as Uint<8>; }
 
+  // ZKML Income Proof Types (Section 2.1: Salary History Proofs)
+  export pure circuit PROOF_TYPE_INCOME_ABOVE_THRESHOLD(): Uint<8> { return 1 as Uint<8>; }
+  export pure circuit PROOF_TYPE_INCOME_RANGE(): Uint<8> { return 2 as Uint<8>; }
+  export pure circuit PROOF_TYPE_AVERAGE_INCOME(): Uint<8> { return 3 as Uint<8>; }
+  export pure circuit PROOF_TYPE_CREDIT_SCORE(): Uint<8> { return 4 as Uint<8>; }
+
   // Payment record for history tracking (used by ZKML credit scoring)
   // NOTE: Amounts are ENCRYPTED for privacy - employee decrypts locally for ZKML
   export struct PaymentRecord {
@@ -100,6 +106,21 @@ module PayrollCommons {
     attestation_hash: Bytes<32>;      // Hash commitment from verifier
     verifier_pubkey: Bytes<32>;       // Which trusted verifier signed this
     verified_at: Uint<32>;            // When attestation was verified on-chain
+  }
+
+  // Income Proof Record (Section 2.1: Salary History Proofs)
+  // Stores ZKML income proofs submitted by employees for lender/landlord verification
+  export struct IncomeProof {
+    employee_id: Bytes<32>;           // Which employee submitted this proof
+    proof_type: Uint<8>;              // 1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE
+    threshold_min: Uint<64>;          // Minimum threshold proven (e.g., "income > $5000")
+    threshold_max: Uint<64>;          // Maximum threshold (0 for non-range proofs)
+    txids: Vector<12, Bytes<32>>;     // Transaction IDs used in proof (12 months max)
+    merkle_root: Bytes<32>;           // Merkle root of payment history
+    attestation_hash: Bytes<32>;      // Hash of the ZKML proof
+    verifier_pubkey: Bytes<32>;       // Trusted verifier who signed this
+    submitted_at: Uint<32>;           // When proof was submitted
+    expires_at: Uint<32>;             // When proof expires (0 = never)
   }
 
   // Helper to create a new payment record (with encrypted amount)

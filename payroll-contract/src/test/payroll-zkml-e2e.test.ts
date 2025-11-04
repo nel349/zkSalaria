@@ -139,7 +139,7 @@ describe('zkSalaria End-to-End ZKML Integration', () => {
           body: JSON.stringify(request)
         });
 
-        const result: VerifyProofResponse = await response.json();
+        const result = (await response.json()) as VerifyProofResponse;
 
         if (!result.success || !result.attestation) {
           throw new Error(
