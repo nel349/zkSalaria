@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CssBaseline } from '@mui/material';
 import { RuntimeConfigurationProvider } from './config/RuntimeConfiguration';
-import { App as RootApp } from './App';
+import { App } from './App';
 import { ThemeProvider, ThemeStyleInjector, DynamicMuiThemeProvider } from './theme';
 
 /**
@@ -26,24 +26,18 @@ const queryClient = new QueryClient({
   },
 });
 
-const App: React.FC = () => {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider> {/* Midnight theme provider with automatic switching */}
-        <ThemeStyleInjector />
-        <DynamicMuiThemeProvider> {/* Dynamic Material-UI theme provider */}
-          <CssBaseline />
-          <RootApp />
-        </DynamicMuiThemeProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
-  );
-};
-
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RuntimeConfigurationProvider>
-      <App />
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ThemeStyleInjector />
+          <DynamicMuiThemeProvider>
+            <CssBaseline />
+            <App />
+          </DynamicMuiThemeProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
     </RuntimeConfigurationProvider>
   </React.StrictMode>,
 );
