@@ -1,0 +1,890 @@
+# zkSalaria UI Implementation Roadmap
+
+**Version:** 1.0
+**Date:** 2025-11-04
+**Status:** Ready to Implement
+**Backend Coverage:** 96% Complete ✅
+
+---
+
+## Executive Summary
+
+This document provides a **complete implementation roadmap** for the zkSalaria UI, synthesizing all wireframe documents into a prioritized, phased development plan.
+
+**Total Screens:** 28 unique pages/views
+**Total Components:** ~85 reusable components
+**Estimated Timeline:** 6-8 weeks (2 developers)
+**Backend Readiness:** ✅ All critical APIs implemented
+
+---
+
+## Phase Overview
+
+| Phase | Focus | Screens | Duration | Priority |
+|-------|-------|---------|----------|----------|
+| **Phase 1** | Auth & Core Setup | 5 screens | 1 week | 🔴 Critical |
+| **Phase 2** | Payment Operations | 8 screens | 2 weeks | 🔴 Critical |
+| **Phase 3** | Dashboard & Lists | 6 screens | 1.5 weeks | 🟠 High |
+| **Phase 4** | Settings & Management | 5 screens | 1 week | 🟡 Medium |
+| **Phase 5** | Polish & UX | 4 features | 1 week | 🟢 Nice-to-have |
+
+---
+
+## Phase 1: Authentication & Core Setup (Week 1)
+
+**Goal:** Get users connected and onboarded with role detection.
+
+### Screens to Build
+
+#### 1.1 Landing Page (`/`)
+- **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Page 1)
+- **Components:**
+  - Hero section with 3D illustrations
+  - Feature cards (Private Payroll, ZK Verification, Compliance)
+  - "Open App" CTA button
+  - Footer with links
+- **Backend:** None (static page)
+- **Complexity:** 🟢 Low (1 day)
+
+#### 1.2 Connect Wallet Page (`/connect`)
+- **File Reference:** `AUTHENTICATION_ONBOARDING_WIREFRAMES.md` (Page 2)
+- **Components:**
+  - Wallet connection modal
+  - Network selector (Midnight testnet/mainnet)
+  - Error states (wallet not found, wrong network)
+- **Backend:** Midnight Wallet SDK integration
+- **Complexity:** 🟡 Medium (2 days)
+- **Critical:** ✅ Blocking for all other pages
+
+#### 1.3 Role Detection & Loading (`/loading`)
+- **File Reference:** `AUTHENTICATION_ONBOARDING_WIREFRAMES.md` (Page 3)
+- **Components:**
+  - Loading spinner with status messages
+  - Role detection logic
+  - Redirect logic (company vs employee vs new user)
+- **Backend API:** `getCompanyInfo()`, `getEmployeeInfo()`
+- **Complexity:** 🟢 Low (0.5 day)
+
+#### 1.4 Company Onboarding Wizard (`/onboard/company`)
+- **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Pages 3-5)
+- **Screens:**
+  - Step 1: Company registration form
+  - Step 2: Fund payroll account
+  - Step 3: Add first employee
+  - Step 4: Setup recurring payment (optional)
+- **Components:**
+  - Multi-step wizard
+  - Form validation
+  - Success modals
+  - Progress indicator
+- **Backend API:**
+  - `PayrollAPI.deploy()`
+  - `depositCompanyFunds()`
+  - `addEmployee()`
+  - `createRecurringPayment()` (optional)
+- **Complexity:** 🔴 High (3 days)
+- **Critical:** ✅ MVP blocker
+
+#### 1.5 Employee Welcome Page (`/welcome`)
+- **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Page 6)
+- **Components:**
+  - Welcome message
+  - Balance display (encrypted)
+  - Decrypt button
+  - Quick actions (Withdraw, Generate Proof)
+- **Backend API:** `getEmployeeInfo()`, `getEmployeePaymentHistory()`
+- **Complexity:** 🟡 Medium (1 day)
+
+### Phase 1 Deliverables
+- ✅ Landing page with branding
+- ✅ Wallet connection flow
+- ✅ Role-based routing
+- ✅ Company onboarding wizard (4 steps)
+- ✅ Employee welcome screen
+
+**Total Effort:** 1 week (2 developers in parallel)
+
+---
+
+## Phase 2: Payment Operations (Weeks 2-3)
+
+**Goal:** Enable companies to pay employees and employees to withdraw.
+
+### Screens to Build
+
+#### 2.1 Add Employee Page (`/employees/add`)
+- **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 1)
+- **Components:**
+  - Employee info form (name, wallet, email, role, salary)
+  - Validation
+  - Success modal
+- **Backend API:** `addEmployee()`
+- **Complexity:** 🟢 Low (0.5 day)
+
+#### 2.2 Pay Employee (One-Time) (`/pay`)
+- **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 2)
+- **Components:**
+  - Employee dropdown (searchable)
+  - Amount selection (base salary vs custom)
+  - Payment type dropdown
+  - Memo field
+  - Summary section
+  - Success modal
+- **Backend API:** `payEmployee()`
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 2.3 Setup Recurring Payment (`/recurring/setup`)
+- **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 3)
+- **Components:**
+  - Employee dropdown
+  - Amount input
+  - Frequency dropdown (weekly, biweekly, monthly)
+  - Schedule picker (start/end dates)
+  - Preview modal (shows next 10 payments)
+  - Success modal
+- **Backend API:** `createRecurringPayment()`
+- **Complexity:** 🟡 Medium (1.5 days)
+
+#### 2.4 Run Payroll (Batch Payment) (`/payroll/batch`)
+- **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 4)
+- **Components:**
+  - Employee table with checkboxes
+  - Per-employee amount override
+  - Select all / deselect all
+  - Warnings (paid recently)
+  - Confirmation modal
+  - Progress modal (batch processing)
+  - Success modal with PDF download
+- **Backend API:** `payEmployee()` (called N times)
+- **Complexity:** 🔴 High (2 days)
+
+#### 2.5 Recurring Payments Management (`/recurring`)
+- **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 5)
+- **Components:**
+  - Card grid of recurring payments
+  - Filters (active, paused, cancelled)
+  - Actions: Edit, Pause, Resume, Cancel
+  - Modals for each action
+  - Empty state
+- **Backend API:** Query `state$`, `pauseRecurringPayment()`, `resumeRecurringPayment()`, `editRecurringPayment()`
+- **Complexity:** 🟡 Medium (1.5 days)
+
+#### 2.6 Withdraw Salary Modal (Employee)
+- **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 1)
+- **Components:**
+  - Amount input (withdraw all vs custom)
+  - Destination wallet input
+  - Summary with gas estimate
+  - Success modal
+- **Backend API:** `withdrawEmployeeSalary()`
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 2.7 Generate Proof Modal (Employee)
+- **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 2)
+- **Components:**
+  - Proof type dropdown (4 types)
+  - Threshold inputs
+  - Options checkboxes (include employment, company name)
+  - Expiration dropdown
+  - Processing state (10-30s)
+  - Success modal with share link
+- **Backend API:** `submitIncomeProof()`
+- **Complexity:** 🔴 High (2 days)
+
+#### 2.8 Download Receipt Modal
+- **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 3)
+- **Components:**
+  - Format selection (PDF, CSV, JSON)
+  - Detail checkboxes
+  - Privacy options (encrypted vs plaintext)
+  - PDF generator
+- **Backend API:** None (frontend generates PDF)
+- **Complexity:** 🟡 Medium (1 day)
+
+### Phase 2 Deliverables
+- ✅ Add employee flow
+- ✅ One-time payment
+- ✅ Recurring payment setup
+- ✅ Batch payroll
+- ✅ Recurring payment management
+- ✅ Withdraw salary (employee)
+- ✅ Generate ZK proof (employee)
+- ✅ Download receipt
+
+**Total Effort:** 2 weeks (2 developers)
+
+---
+
+## Phase 3: Dashboard & Lists (Weeks 4-5)
+
+**Goal:** Display data, history, and navigation.
+
+### Screens to Build
+
+#### 3.1 Company Dashboard (`/dashboard`)
+- **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md` (Company View)
+- **Components:**
+  - Top navigation bar
+  - Alert banner (dismissible)
+  - 3 feature cards (Private Payroll, ZK Verification, Compliance)
+  - Quick stats grid (4 columns)
+  - Quick actions floating panel
+  - Featured companies carousel
+- **Backend API:** `state$` observable
+- **Complexity:** 🟡 Medium (1.5 days)
+
+#### 3.2 Employee Dashboard (`/dashboard`)
+- **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md` (Employee View)
+- **Components:**
+  - Same layout as company, different cards:
+    - My Salary (balance, last payment)
+    - Verification Proofs
+    - Employment Status
+  - Different quick actions (Withdraw, Generate Proof, Grant Disclosure)
+- **Backend API:** `state$`, `getEmployeeInfo()`, `getEmployeePaymentHistory()`
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 3.3 Payment List View (`/payments`)
+- **File Reference:** `3_PAYROLL_LIST_VIEW_WIREFRAME.md`
+- **Components:**
+  - Tab navigation (All, Received, Sent, Search)
+  - Table with columns (Status, Employee, Amount, Date, Type, Actions)
+  - Encrypted amount display with decrypt button
+  - Actions dropdown (View Details, Generate Proof, Download Receipt)
+  - Empty state cards
+  - Search modal with filters
+  - Privacy banner (employee view)
+- **Backend API:** `getEmployeePaymentHistory()`, decrypt locally
+- **Complexity:** 🔴 High (2 days)
+
+#### 3.4 Payment Detail Page (`/payments/:id`)
+- **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md`
+- **Components:**
+  - Left panel: Payment card (visual center)
+  - Right panel: Attributes, Balance Status, Transaction Details, Actions
+  - Details modal (tabbed: Overview, Accounting, History)
+  - All action modals (Withdraw, Generate Proof, Download Receipt)
+- **Backend API:** `getEmployeePaymentHistory()`, `state$`
+- **Complexity:** 🔴 High (2 days)
+
+#### 3.5 Notification Center
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md`
+- **Components:**
+  - Bell icon with badge in header
+  - Dropdown with notifications list
+  - Toast notifications (bottom-right)
+  - Mark all read button
+- **Backend API:** WebSocket or polling for real-time updates
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 3.6 Role Switcher (Dual Role Users)
+- **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md`
+- **Components:**
+  - Toggle in top nav (Company vs Employee)
+  - Persists in localStorage
+  - Switches entire dashboard view
+- **Backend API:** None (client-side routing)
+- **Complexity:** 🟢 Low (0.5 day)
+
+### Phase 3 Deliverables
+- ✅ Company dashboard
+- ✅ Employee dashboard
+- ✅ Payment list view (table with filters)
+- ✅ Payment detail page
+- ✅ Notification center
+- ✅ Role switcher (dual role support)
+
+**Total Effort:** 1.5 weeks (2 developers)
+
+---
+
+## Phase 4: Settings & Management (Week 6)
+
+**Goal:** Account management, notifications, and funding.
+
+### Screens to Build
+
+#### 4.1 Settings - Company Profile (`/settings/profile`)
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 1)
+- **Components:**
+  - Company logo upload
+  - Company info form (name, industry, size, email)
+  - Save button
+- **Backend API:** Off-chain storage (not on contract)
+- **Complexity:** 🟢 Low (0.5 day)
+
+#### 4.2 Settings - Wallet Management (`/settings/wallet`)
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 2)
+- **Components:**
+  - Connected wallet display
+  - Payroll account balance
+  - Fund account button → modal
+  - Gas fee reserve display
+  - Transaction history link
+- **Backend API:** `state$`, `depositCompanyFunds()`
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 4.3 Fund Account Modal
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Flow)
+- **Components:**
+  - Amount input with recommendations
+  - Token dropdown (USDC, DUST, DAI)
+  - Deposit source (connected wallet vs external)
+  - Wallet approval flow
+  - Processing modal
+  - Success modal
+- **Backend API:** `depositCompanyFunds()`
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 4.4 Settings - Notification Preferences (`/settings/notifications`)
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 4)
+- **Components:**
+  - Email notification checkboxes
+  - In-app notification toggles
+  - Webhook integration (advanced)
+- **Backend API:** Off-chain user preferences
+- **Complexity:** 🟢 Low (0.5 day)
+
+#### 4.5 Settings - Privacy & Security (`/settings/privacy`)
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 5)
+- **Components:**
+  - Encryption status
+  - Data visibility settings
+  - Session management (active sessions list)
+  - Revoke session buttons
+- **Backend API:** Session management API
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 4.6 Settings - Employee Profile (`/settings/profile`) (Employee View)
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 1, Employee)
+- **Components:**
+  - Personal info form (name, email, role)
+  - Connected wallet (read-only)
+  - Employment info (read-only)
+- **Backend API:** `getEmployeeInfo()`
+- **Complexity:** 🟢 Low (0.5 day)
+
+#### 4.7 Settings - Privacy & Disclosure (Employee)
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 3, Employee)
+- **Components:**
+  - Generated proofs list (cards)
+  - Revoke/download buttons
+  - Granted disclosures list
+  - Revoke access buttons
+- **Backend API:** Query proofs from contract state
+- **Complexity:** 🟡 Medium (1 day)
+
+### Phase 4 Deliverables
+- ✅ Company settings (profile, wallet, notifications, privacy)
+- ✅ Employee settings (profile, privacy, disclosures)
+- ✅ Fund account flow
+- ✅ Notification preferences
+- ✅ Session management
+
+**Total Effort:** 1 week (2 developers)
+
+---
+
+## Phase 5: Polish & UX (Week 7)
+
+**Goal:** Help, error handling, accessibility, loading states.
+
+### Features to Build
+
+#### 5.1 Help Center (`/help`)
+- **File Reference:** `MISC_UX_COMPONENTS.md` (Section 1)
+- **Components:**
+  - Search bar
+  - Topic cards (6 categories)
+  - FAQ accordion
+  - Video tutorials (embedded)
+  - Contact support buttons
+- **Backend API:** Static content
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 5.2 Interactive Product Tour
+- **File Reference:** `MISC_UX_COMPONENTS.md` (Section 2)
+- **Components:**
+  - 5-step tutorial overlay
+  - Highlighting specific UI elements
+  - Progress indicator
+  - Skip/dismiss options
+  - "Don't show again" checkbox
+- **Backend API:** None (localStorage for seen state)
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 5.3 Loading States & Skeletons
+- **File Reference:** `MISC_UX_COMPONENTS.md` (Section 3)
+- **Components:**
+  - Skeleton screens for all data-heavy pages
+  - Progress indicators for transactions
+  - Infinite scroll loading
+  - Optimistic UI updates
+- **Backend API:** None (frontend patterns)
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 5.4 Error Pages
+- **File Reference:** `MISC_UX_COMPONENTS.md` (Section 5)
+- **Pages:**
+  - 404 Not Found
+  - 500 Server Error
+  - Network Error
+  - Maintenance Mode
+- **Backend API:** None (static pages)
+- **Complexity:** 🟢 Low (0.5 day)
+
+#### 5.5 Accessibility Features
+- **File Reference:** `MISC_UX_COMPONENTS.md` (Section 4)
+- **Features:**
+  - Keyboard navigation (Tab, Enter, Esc)
+  - ARIA labels for all interactive elements
+  - Skip links
+  - Screen reader announcements
+  - Focus indicators
+- **Backend API:** None (frontend patterns)
+- **Complexity:** 🟡 Medium (1 day)
+
+#### 5.6 Browser Compatibility & Session Management
+- **File Reference:** `MISC_UX_COMPONENTS.md` (Sections 6, 7)
+- **Features:**
+  - Unsupported browser warning
+  - Session timeout warning (30 min)
+  - Session expired page
+  - Concurrent session detection
+- **Backend API:** Session management API
+- **Complexity:** 🟡 Medium (1 day)
+
+### Phase 5 Deliverables
+- ✅ Help center with FAQ
+- ✅ Product tour (first-time users)
+- ✅ Loading states & skeletons
+- ✅ Error pages (404, 500, network, maintenance)
+- ✅ Accessibility (WCAG 2.1 AA)
+- ✅ Browser compatibility checks
+- ✅ Session management
+
+**Total Effort:** 1 week (2 developers)
+
+---
+
+## Component Library
+
+### Reusable Components (Build Once, Use Everywhere)
+
+#### Layout Components (8)
+- `<AppLayout>` - Main layout with nav + content
+- `<TopNavigation>` - Header with wallet, network, notifications
+- `<Sidebar>` - Settings sidebar
+- `<PageHeader>` - Breadcrumb + title
+- `<Footer>` - Links and branding
+- `<Container>` - Max-width wrapper
+- `<Card>` - Rounded card with border
+- `<EmptyState>` - Illustration + message + CTA
+
+#### Form Components (10)
+- `<Input>` - Text input with validation
+- `<Dropdown>` - Select/dropdown with search
+- `<Checkbox>` - Styled checkbox
+- `<Radio>` - Radio button
+- `<DatePicker>` - Date selection
+- `<AmountInput>` - Number input with currency
+- `<WalletAddressInput>` - Wallet input with paste button
+- `<FormGroup>` - Label + input + error
+- `<ValidationMessage>` - Error/success message
+- `<FormWizard>` - Multi-step form
+
+#### Button Components (5)
+- `<Button>` - Primary/secondary/ghost variants
+- `<IconButton>` - Icon-only button
+- `<LoadingButton>` - Button with spinner
+- `<DropdownButton>` - Button + dropdown
+- `<FAB>` - Floating action button (mobile)
+
+#### Data Display Components (12)
+- `<Table>` - Data table with sorting/filtering
+- `<DataCard>` - Card with data fields
+- `<StatCard>` - Stat widget (number + label + change)
+- `<Badge>` - Status badge
+- `<Tag>` - Category tag
+- `<Tooltip>` - Hover tooltip
+- `<ProgressBar>` - Progress indicator
+- `<Timeline>` - Event timeline
+- `<Chart>` - Analytics chart (wrapper for charting library)
+- `<EncryptedAmount>` - Amount with decrypt button
+- `<SkeletonLoader>` - Loading placeholder
+- `<Avatar>` - User/company avatar
+
+#### Modal Components (8)
+- `<Modal>` - Base modal with backdrop
+- `<ConfirmModal>` - Confirmation dialog
+- `<SuccessModal>` - Success message
+- `<ErrorModal>` - Error message
+- `<LoadingModal>` - Processing state
+- `<FormModal>` - Modal with form
+- `<DetailsModal>` - Tabbed detail view
+- `<WizardModal>` - Multi-step modal
+
+#### Notification Components (4)
+- `<Toast>` - Toast notification (bottom-right)
+- `<NotificationBell>` - Bell icon with badge
+- `<NotificationDropdown>` - Notification list
+- `<AlertBanner>` - Page-level alert
+
+#### Payment Components (8)
+- `<PaymentCard>` - Visual payment card (detail page left panel)
+- `<PaymentRow>` - Table row for payment list
+- `<PaymentSummary>` - Payment summary section
+- `<RecurringPaymentCard>` - Card for recurring payment
+- `<EmployeeDropdown>` - Searchable employee selector
+- `<AmountSelector>` - Base salary vs custom amount
+- `<PaymentTypeDropdown>` - Salary/Bonus/Advance selector
+- `<WithdrawalHistoryList>` - List of withdrawals
+
+#### Utility Components (6)
+- `<SearchBar>` - Search input with icon
+- `<FilterBar>` - Filter buttons
+- `<Pagination>` - Page navigation
+- `<InfiniteScroll>` - Load more on scroll
+- `<CopyButton>` - Copy to clipboard
+- `<ExportButton>` - Export dropdown (CSV/PDF/JSON)
+
+**Total Components:** ~75 reusable components
+
+---
+
+## Implementation Order (Dependency Graph)
+
+### Critical Path (Must Build in Order)
+
+```
+1. Landing Page (independent)
+   ↓
+2. Connect Wallet (independent)
+   ↓
+3. Role Detection (depends on wallet)
+   ↓
+4. Company Onboarding OR Employee Welcome (depends on role)
+   ↓
+5. Dashboard (depends on onboarding)
+   ↓
+6. Payment Operations (depends on dashboard)
+   ↓
+7. Lists & Detail Views (depends on payment data)
+   ↓
+8. Settings (depends on dashboard navigation)
+   ↓
+9. Polish & UX (can happen in parallel with 5-8)
+```
+
+### Parallel Workstreams
+
+**Developer 1:** Focus on company flows
+- Onboarding wizard
+- Pay employee
+- Batch payroll
+- Recurring payments
+- Company dashboard
+
+**Developer 2:** Focus on employee flows + shared components
+- Employee welcome
+- Withdraw salary
+- Generate proof
+- Employee dashboard
+- Shared components (buttons, inputs, modals)
+
+**Week 5-7:** Both developers on shared features
+- Payment list view
+- Payment detail page
+- Settings
+- Polish & UX
+
+---
+
+## Technology Stack
+
+### Frontend Framework
+- **React 18** with TypeScript
+- **Next.js 14** (App Router) for routing
+- **Tailwind CSS** for styling
+
+### State Management
+- **Zustand** for global state (user, wallet, notifications)
+- **React Query** for server state (API calls, caching)
+
+### Forms & Validation
+- **React Hook Form** for form state
+- **Zod** for validation schemas
+
+### UI Libraries
+- **Headless UI** for accessible components (dropdowns, modals)
+- **Framer Motion** for animations
+- **Lucide React** for icons
+- **Recharts** for analytics charts
+
+### Web3 Integration
+- **Midnight SDK** for wallet connection
+- **PayrollAPI** (TypeScript client) for contract calls
+
+### Utilities
+- **date-fns** for date formatting
+- **clsx** for conditional classes
+- **react-hot-toast** for notifications
+- **jsPDF** for PDF generation
+- **papaparse** for CSV export
+
+---
+
+## Routing Structure
+
+```
+/                          → Landing page
+/connect                   → Connect wallet
+/loading                   → Role detection
+/onboard/company           → Company onboarding wizard
+/welcome                   → Employee welcome
+
+/dashboard                 → Main dashboard (company or employee)
+
+/employees
+  /add                     → Add employee
+  /:id                     → Employee detail (future)
+
+/payments                  → Payment list view
+  /:id                     → Payment detail page
+  /pay                     → Pay employee (one-time)
+  /batch                   → Run payroll (batch)
+
+/recurring                 → Recurring payments management
+  /setup                   → Setup new recurring payment
+
+/settings
+  /profile                 → Company/employee profile
+  /wallet                  → Wallet management
+  /team                    → Team management (future)
+  /employees               → Employee list (future)
+  /recurring               → Recurring payment settings
+  /notifications           → Notification preferences
+  /privacy                 → Privacy & security
+  /backup                  → Backup & recovery (future)
+  /api                     → API keys (future)
+
+/help                      → Help center
+/changelog                 → Changelog
+
+/404                       → Not found
+/500                       → Server error
+/network-error             → Network error
+/maintenance               → Maintenance mode
+```
+
+---
+
+## API Integration Points
+
+### PayrollAPI Methods (Backend Ready ✅)
+
+**Deployment:**
+- `PayrollAPI.deploy(providers, companyId, name)` → Deploy contract
+
+**Company Operations:**
+- `depositCompanyFunds(companyId, amount)` → Fund payroll account
+- `addEmployee(companyId, employeeId)` → Add employee
+- `payEmployee(companyId, employeeId, amount, paymentType)` → One-time payment
+
+**Recurring Payments:**
+- `createRecurringPayment(...)` → Setup recurring schedule
+- `processRecurringPayment(recurringPaymentId)` → Execute scheduled payment
+- `pauseRecurringPayment(recurringPaymentId)` → Pause schedule
+- `resumeRecurringPayment(recurringPaymentId, nextPaymentDate)` → Resume schedule
+- `editRecurringPayment(recurringPaymentId, newAmount)` → Edit amount
+
+**Employee Operations:**
+- `withdrawEmployeeSalary(employeeId, amount)` → Withdraw to wallet
+- `getEmployeePaymentHistory(employeeId)` → Get payments
+- `getEmployeeInfo(employeeId)` → Get employee details
+
+**Disclosure & Privacy:**
+- `grantIncomeDisclosure(employeeId, lenderId, minThreshold, expiresIn)`
+- `grantEmploymentDisclosure(employeeId, verifierId, expiresIn)`
+- `grantAuditDisclosure(companyId, auditorId, expiresIn)`
+- `revokeDisclosure(grantorId, granteeId, permissionType)`
+
+**ZKML Income Proofs:**
+- `registerTrustedVerifier(verifierPubkey)`
+- `submitIncomeProof(employeeId, proofType, ...)`
+- `verifyIncomeProof(employeeId, requiredProofType, requiredThreshold)`
+
+**State Observables:**
+- `state$` → Observable for real-time updates (balances, counters)
+
+---
+
+## Gaps & Workarounds
+
+### Known Gaps (from Gap Analysis)
+
+#### Gap 1: Payment Type Field ⚠️ **ADDRESSED IN PREVIOUS WORK**
+- **Status:** ✅ **COMPLETED** - Payment type parameter added to `pay_employee` circuit
+- **Backend:** `payEmployee(companyId, employeeId, amount, paymentType: number = 0)`
+- **UI:** Dropdown with Salary (0), Advance (1), Bonus (2)
+
+#### Gap 2: Withdrawal History (Per-Payment Tracking) 🟡 Low Priority
+- **Status:** ⚠️ **IMPLEMENTED** - API-layer storage via `privateStateProvider`
+- **Backend:** `getWithdrawalHistory()` returns withdrawal log
+- **UI:** Show aggregate balance + withdrawal history in payment detail page
+
+#### Gap 3: Company Metadata (Industry, Size, Email) 🟢 Skip for MVP
+- **Solution:** Store in off-chain database or skip entirely
+- **UI:** Optional fields in company profile settings
+
+#### Gap 4: Employee Role/Base Salary 🟢 Skip for MVP
+- **Solution:** Store in off-chain database or skip entirely
+- **UI:** Optional fields in add employee form
+
+#### Gap 5: CSV Import 🟢 Post-MVP
+- **Solution:** Build admin dashboard with CSV parser later
+- **UI:** Remove "Import CSV" button from empty state
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+- All components with Jest + React Testing Library
+- Coverage target: 80%
+
+### Integration Tests
+- API integration with mocked PayrollAPI
+- Form submission flows
+- Navigation flows
+
+### E2E Tests (Cypress)
+- Critical paths:
+  - Company onboarding → Add employee → Pay employee
+  - Employee login → View balance → Withdraw
+  - Setup recurring payment → Process payment
+
+### Accessibility Tests
+- Automated: `axe-core` + Lighthouse
+- Manual: NVDA/VoiceOver testing
+
+---
+
+## Performance Targets
+
+- **Time to Interactive:** < 2s
+- **First Contentful Paint:** < 1s
+- **Lighthouse Score:** > 90
+- **Bundle Size:** < 500 KB (gzipped)
+
+### Optimization Strategies
+- Code splitting by route
+- Lazy load modals
+- Image optimization (WebP)
+- Virtual scrolling for long lists
+- Web Workers for decryption
+
+---
+
+## Success Criteria
+
+### MVP Launch Checklist
+
+**Phase 1 (Auth & Setup):**
+- ✅ User can connect wallet
+- ✅ Role detection works
+- ✅ Company can complete onboarding
+- ✅ Employee sees welcome screen
+
+**Phase 2 (Payments):**
+- ✅ Company can add employees
+- ✅ Company can pay employees (one-time)
+- ✅ Company can setup recurring payments
+- ✅ Employee can withdraw salary
+- ✅ Employee can generate income proof
+
+**Phase 3 (Dashboard & Lists):**
+- ✅ Dashboard shows accurate data
+- ✅ Payment list view works
+- ✅ Payment detail page works
+- ✅ Notifications work
+
+**Phase 4 (Settings):**
+- ✅ Company can fund account
+- ✅ User can manage settings
+- ✅ Privacy controls work
+
+**Phase 5 (Polish):**
+- ✅ Help center accessible
+- ✅ Error pages work
+- ✅ Accessibility compliant (WCAG 2.1 AA)
+
+---
+
+## Timeline Estimate
+
+### 6-Week Timeline (2 Developers)
+
+| Week | Phase | Focus | Deliverables |
+|------|-------|-------|--------------|
+| **1** | Phase 1 | Auth & Onboarding | Landing, wallet connection, company wizard, employee welcome |
+| **2** | Phase 2A | Core Payments | Add employee, pay employee, recurring setup |
+| **3** | Phase 2B | Advanced Payments | Batch payroll, recurring management, withdraw, proof generation |
+| **4** | Phase 3 | Dashboard & Lists | Company/employee dashboards, payment list, payment detail |
+| **5** | Phase 4 | Settings | Company/employee settings, fund account, notifications |
+| **6** | Phase 5 | Polish | Help, error pages, accessibility, loading states |
+
+### 8-Week Timeline (1 Developer)
+
+Multiply all estimates by 1.5x for single developer.
+
+---
+
+## Next Steps
+
+### Immediate Actions (Start Phase 1)
+
+1. **Setup Project:**
+   - Initialize Next.js 14 project
+   - Install dependencies (Tailwind, Zustand, React Query, etc.)
+   - Setup folder structure (components, pages, hooks, utils)
+
+2. **Build Component Library:**
+   - Create base components (Button, Input, Card, Modal)
+   - Setup Storybook for component development
+   - Define color tokens and spacing system
+
+3. **Integrate Midnight SDK:**
+   - Add Midnight Wallet connection logic
+   - Test wallet connection on testnet
+   - Setup PayrollAPI client
+
+4. **Build Phase 1 Screens:**
+   - Landing page
+   - Connect wallet
+   - Role detection
+   - Company onboarding wizard
+   - Employee welcome
+
+**Target:** Complete Phase 1 in Week 1 ✅
+
+---
+
+## Summary
+
+**Total Implementation:**
+- **28 screens** across 5 phases
+- **~75 reusable components**
+- **96% backend coverage** (ready for UI)
+- **6-8 weeks** timeline (2 developers)
+
+**Critical Path:**
+Landing → Connect Wallet → Role Detection → Onboarding → Dashboard → Payments → Settings → Polish
+
+**Backend Readiness:** ✅ All critical APIs implemented, minimal gaps (payment type, withdrawal history addressed)
+
+**Recommendation:** **Start Phase 1 immediately** - no backend blockers remaining.
+
+---
+
+*Generated: November 4, 2025 | zkSalaria v1.0 MVP*
