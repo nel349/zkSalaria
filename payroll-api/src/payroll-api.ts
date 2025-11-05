@@ -219,12 +219,12 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        deployedPayrollContract = await deployContract(providers as any, {
+        deployedPayrollContract = await deployContract(providers, {
           contract: payrollContract,
           privateStateId: `payroll-${companyId}` as AccountId,
           initialPrivateState: createPayrollPrivateState(),
           args: [initNonce, companyIdBytes, companyNameBytes, initialTimestamp],
-        }) as DeployedPayrollContract;
+        });
         break;
       } catch (err) {
         lastError = err;

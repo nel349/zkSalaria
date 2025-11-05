@@ -18,19 +18,19 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 
 /**
- * Deep Red Color Palette (#800517 base)
+ * Teal/Cyan Color Palette (Modern Fintech)
  */
-const DEEP_RED = {
-  50: '#fef2f2',   // Very light red tint
-  100: '#fee2e2',  // Light red tint
-  200: '#fecaca',  // Lighter red
-  300: '#fca5a5',  // Light red
-  400: '#f87171',  // Medium light red
-  500: '#c70039',  // Brighter red for better contrast
-  600: '#a0071e',  // Medium red
-  700: '#800517',  // Base deep red (Venetian Red)
-  800: '#600412',  // Darker deep red
-  900: '#400310',  // Very dark red
+const TEAL = {
+  50: '#f0fdfa',   // Very light teal tint
+  100: '#ccfbf1',  // Light teal tint
+  200: '#99f6e4',  // Lighter teal
+  300: '#5eead4',  // Light teal
+  400: '#2dd4bf',  // Medium light teal
+  500: '#14b8a6',  // Main teal (Tailwind teal-500)
+  600: '#0d9488',  // Darker teal
+  700: '#0f766e',  // Deep teal
+  800: '#115e59',  // Very dark teal
+  900: '#134e4a',  // Darkest teal
 };
 
 const CHARCOAL = {
@@ -50,7 +50,7 @@ const CHARCOAL = {
 /**
  * Sample Theme Playground for zkSalaria
  * Used to test and showcase different theme variations
- * Based on Deep Red (#800517) × Charcoal color scheme
+ * Based on Teal/Cyan × Charcoal color scheme
  *
  * Access via: /theme-playground
  */
@@ -62,12 +62,12 @@ export const SampleThemePage: React.FC = () => {
     navigate('/connect');
   };
 
-  // Theme colors based on mode - Better contrast for red
+  // Theme colors based on mode - Teal/Cyan for modern fintech
   const theme = {
     bg: {
       default: isDark ? '#13151f' : '#ffffff',        // Dark navy instead of black
       paper: isDark ? '#1a1d29' : CHARCOAL[50],       // Slightly lighter navy
-      surface: isDark ? '#242835' : CHARCOAL[100],    // Lighter for better contrast with red
+      surface: isDark ? '#242835' : CHARCOAL[100],    // Lighter for better contrast
       elevated: isDark ? '#2d3140' : CHARCOAL[200],   // Elevated elements
     },
     text: {
@@ -78,12 +78,12 @@ export const SampleThemePage: React.FC = () => {
     },
     border: isDark ? '#363b4d' : CHARCOAL[300],       // Lighter borders for visibility
     borderLight: isDark ? '#2a2f3e' : CHARCOAL[200],
-    red: {
-      primary: isDark ? DEEP_RED[500] : DEEP_RED[700],     // Brighter red for dark mode
-      light: isDark ? DEEP_RED[400] : DEEP_RED[600],
-      lighter: isDark ? DEEP_RED[300] : DEEP_RED[500],
-      dark: isDark ? DEEP_RED[600] : DEEP_RED[800],
-      darker: isDark ? DEEP_RED[700] : DEEP_RED[900],
+    accent: {
+      primary: isDark ? TEAL[400] : TEAL[600],     // Bright teal for dark mode
+      light: isDark ? TEAL[300] : TEAL[500],
+      lighter: isDark ? TEAL[200] : TEAL[400],
+      dark: isDark ? TEAL[500] : TEAL[700],
+      darker: isDark ? TEAL[600] : TEAL[800],
     },
   };
 
@@ -111,11 +111,11 @@ export const SampleThemePage: React.FC = () => {
           zIndex: 0,
           opacity: isDark ? 0.3 : 0.25,
           background: isDark
-            ? `radial-gradient(ellipse at 20% 20%, ${theme.red.primary}25 0%, transparent 50%),
-               radial-gradient(ellipse at 80% 80%, ${theme.red.dark}20 0%, transparent 50%),
+            ? `radial-gradient(ellipse at 20% 20%, ${theme.accent.primary}25 0%, transparent 50%),
+               radial-gradient(ellipse at 80% 80%, ${theme.accent.dark}20 0%, transparent 50%),
                radial-gradient(ellipse at 50% 100%, #2d314060 0%, transparent 50%)`
-            : `radial-gradient(ellipse at 20% 20%, ${theme.red.lighter}20 0%, transparent 50%),
-               radial-gradient(ellipse at 80% 80%, ${theme.red.light}15 0%, transparent 50%),
+            : `radial-gradient(ellipse at 20% 20%, ${theme.accent.lighter}20 0%, transparent 50%),
+               radial-gradient(ellipse at 80% 80%, ${theme.accent.light}15 0%, transparent 50%),
                radial-gradient(ellipse at 50% 50%, ${CHARCOAL[200]}30 0%, transparent 50%)`,
           filter: 'blur(100px)',
           animation: 'meshGradient 20s ease infinite',
@@ -150,7 +150,7 @@ export const SampleThemePage: React.FC = () => {
       <Box sx={{ position: 'fixed', top: 20, right: 20, zIndex: 1000 }}>
         <Stack direction="row" spacing={1} alignItems="center">
           <Chip
-            label={isDark ? 'Dark Mode' : 'Light Mode'}
+            label={ <Typography> {isDark ? "Dark Mode": "Light Mode" } </Typography> }
             size="small"
             sx={{
               bgcolor: isDark ? `${theme.bg.surface}cc` : `${theme.bg.paper}cc`,
@@ -174,7 +174,7 @@ export const SampleThemePage: React.FC = () => {
               transition: 'all 0.3s ease',
             }}
           >
-            {isDark ? <LightModeIcon /> : <DarkModeIcon />}
+            {isDark ? <LightModeIcon sx={{ fontSize: '1rem', color: 'white' }} /> : <DarkModeIcon sx={{ fontSize: '1rem', color: 'dark' }} />}
           </IconButton>
         </Stack>
       </Box>
@@ -192,8 +192,8 @@ export const SampleThemePage: React.FC = () => {
                 px: 3,
                 py: 1,
                 borderRadius: '50px',
-                bgcolor: isDark ? `${theme.red.primary}15` : `${theme.red.primary}10`,
-                border: `1px solid ${theme.red.primary}40`,
+                bgcolor: isDark ? `${theme.accent.primary}15` : `${theme.accent.primary}10`,
+                border: `1px solid ${theme.accent.primary}40`,
                 backdropFilter: 'blur(10px)',
                 animation: 'float 3s ease-in-out infinite',
                 '@keyframes float': {
@@ -207,7 +207,7 @@ export const SampleThemePage: React.FC = () => {
                 sx={{
                   fontWeight: 'bold',
                   letterSpacing: '0.1em',
-                  background: `linear-gradient(135deg, ${theme.red.primary}, ${theme.red.light})`,
+                  background: `linear-gradient(135deg, ${theme.accent.primary}, ${theme.accent.light})`,
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
@@ -223,7 +223,7 @@ export const SampleThemePage: React.FC = () => {
               fontWeight="extrabold"
               sx={{
                 fontSize: { xs: '3rem', md: '4.5rem' },
-                background: `linear-gradient(135deg, ${theme.red.light} 0%, ${theme.red.primary} 50%, ${theme.red.darker} 100%)`,
+                background: `linear-gradient(135deg, ${theme.accent.light} 0%, ${theme.accent.primary} 50%, ${theme.accent.darker} 100%)`,
                 backgroundSize: '200% 200%',
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
@@ -233,7 +233,7 @@ export const SampleThemePage: React.FC = () => {
                   '0%, 100%': { backgroundPosition: '0% 50%' },
                   '50%': { backgroundPosition: '100% 50%' },
                 },
-                textShadow: `0 0 80px ${theme.red.primary}40`,
+                textShadow: `0 0 80px ${theme.accent.primary}40`,
                 letterSpacing: '-0.02em',
               }}
             >
@@ -276,7 +276,7 @@ export const SampleThemePage: React.FC = () => {
                 transform: 'translate(-50%, -50%)',
                 width: '120%',
                 height: '120%',
-                background: `radial-gradient(circle, ${theme.red.primary}60, transparent 70%)`,
+                background: `radial-gradient(circle, ${theme.accent.primary}60, transparent 70%)`,
                 filter: 'blur(20px)',
                 opacity: 0.6,
                 animation: 'pulse 2s ease-in-out infinite',
@@ -297,14 +297,14 @@ export const SampleThemePage: React.FC = () => {
                 fontSize: '1.2rem',
                 fontWeight: 'bold',
                 borderRadius: '50px',
-                background: `linear-gradient(135deg, ${theme.red.primary} 0%, ${theme.red.dark} 100%)`,
+                background: `linear-gradient(135deg, ${theme.accent.primary} 0%, ${theme.accent.dark} 100%)`,
                 color: 'white',
-                boxShadow: `0 10px 40px ${theme.red.primary}60, 0 0 0 1px ${theme.red.primary}40`,
-                border: `1px solid ${theme.red.light}60`,
+                boxShadow: `0 10px 40px ${theme.accent.primary}60, 0 0 0 1px ${theme.accent.primary}40`,
+                border: `1px solid ${theme.accent.light}60`,
                 '&:hover': {
-                  background: `linear-gradient(135deg, ${theme.red.lighter} 0%, ${theme.red.primary} 100%)`,
+                  background: `linear-gradient(135deg, ${theme.accent.lighter} 0%, ${theme.accent.primary} 100%)`,
                   transform: 'translateY(-4px) scale(1.02)',
-                  boxShadow: `0 20px 60px ${theme.red.primary}80, 0 0 20px ${theme.red.primary}40`,
+                  boxShadow: `0 20px 60px ${theme.accent.primary}80, 0 0 20px ${theme.accent.primary}40`,
                 },
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
@@ -340,7 +340,7 @@ export const SampleThemePage: React.FC = () => {
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              Deep Red (#800517) × Charcoal Theme
+              Teal/Cyan × Charcoal Theme
             </Typography>
 
             {/* Button Variations */}
@@ -352,7 +352,7 @@ export const SampleThemePage: React.FC = () => {
                 {/* Primary - Deep Red */}
                 <Button
                   variant="contained"
-                  sx={{ bgcolor: theme.red.primary, color: 'white', '&:hover': { bgcolor: theme.red.dark } }}
+                  sx={{ bgcolor: theme.accent.primary, color: 'white', '&:hover': { bgcolor: theme.accent.dark } }}
                 >
                   Pay Employee
                 </Button>
@@ -360,7 +360,7 @@ export const SampleThemePage: React.FC = () => {
                 {/* Lighter Red */}
                 <Button
                   variant="contained"
-                  sx={{ bgcolor: theme.red.light, color: 'white', '&:hover': { bgcolor: theme.red.primary } }}
+                  sx={{ bgcolor: theme.accent.light, color: 'white', '&:hover': { bgcolor: theme.accent.primary } }}
                 >
                   Withdraw Salary
                 </Button>
@@ -377,9 +377,9 @@ export const SampleThemePage: React.FC = () => {
                 <Button
                   variant="outlined"
                   sx={{
-                    borderColor: theme.red.primary,
-                    color: theme.red.primary,
-                    '&:hover': { borderColor: theme.red.dark, bgcolor: `${theme.red.primary}10` }
+                    borderColor: theme.accent.primary,
+                    color: theme.accent.primary,
+                    '&:hover': { borderColor: theme.accent.dark, bgcolor: `${theme.accent.primary}10` }
                   }}
                 >
                   Cancel Payment
@@ -405,16 +405,16 @@ export const SampleThemePage: React.FC = () => {
                 Color Swatches
               </Typography>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-                {/* Bright Red - Primary */}
+                {/* Teal - Primary */}
                 <Card
                   sx={{
                     flex: 1,
-                    background: `linear-gradient(135deg, ${theme.red.primary} 0%, ${theme.red.dark} 100%)`,
+                    background: `linear-gradient(135deg, ${theme.accent.primary} 0%, ${theme.accent.dark} 100%)`,
                     color: 'white',
                     border: 'none',
                     position: 'relative',
                     overflow: 'hidden',
-                    boxShadow: `0 8px 32px ${theme.red.primary}50, 0 0 0 1px ${theme.red.primary}30`,
+                    boxShadow: `0 8px 32px ${theme.accent.primary}50, 0 0 0 1px ${theme.accent.primary}30`,
                     '&::before': {
                       content: '""',
                       position: 'absolute',
@@ -433,7 +433,7 @@ export const SampleThemePage: React.FC = () => {
                   }}
                 >
                   <CardContent sx={{ position: 'relative', zIndex: 1 }}>
-                    <Typography variant="h6" fontWeight="bold">Bright Red ({theme.red.primary})</Typography>
+                    <Typography variant="h6" fontWeight="bold">Teal ({theme.accent.primary})</Typography>
                     <Typography variant="body2" sx={{ opacity: 0.95 }}>Primary Actions • Payments • CTAs</Typography>
                   </CardContent>
                 </Card>
@@ -455,20 +455,20 @@ export const SampleThemePage: React.FC = () => {
                   </CardContent>
                 </Card>
 
-                {/* Light Red - Accent */}
+                {/* Light Teal - Accent */}
                 <Card
                   sx={{
                     flex: 1,
-                    background: `linear-gradient(135deg, ${theme.red.lighter} 0%, ${theme.red.primary} 100%)`,
+                    background: `linear-gradient(135deg, ${theme.accent.lighter} 0%, ${theme.accent.primary} 100%)`,
                     color: 'white',
                     border: 'none',
                     position: 'relative',
                     overflow: 'hidden',
-                    boxShadow: `0 8px 32px ${theme.red.lighter}40`,
+                    boxShadow: `0 8px 32px ${theme.accent.lighter}40`,
                   }}
                 >
                   <CardContent>
-                    <Typography variant="h6" fontWeight="bold">Light Red ({theme.red.lighter})</Typography>
+                    <Typography variant="h6" fontWeight="bold">Light Teal ({theme.accent.lighter})</Typography>
                     <Typography variant="body2" sx={{ opacity: 0.95 }}>Highlights • Hovers • Accents</Typography>
                   </CardContent>
                 </Card>
@@ -484,7 +484,7 @@ export const SampleThemePage: React.FC = () => {
                 <Box sx={{ px: 3, py: 1.5, bgcolor: '#10b981', color: 'white', borderRadius: 1 }}>
                   ✓ Payment Successful
                 </Box>
-                <Box sx={{ px: 3, py: 1.5, bgcolor: theme.red.primary, color: 'white', borderRadius: 1 }}>
+                <Box sx={{ px: 3, py: 1.5, bgcolor: '#ef4444', color: 'white', borderRadius: 1 }}>
                   ✗ Payment Failed
                 </Box>
                 <Box sx={{ px: 3, py: 1.5, bgcolor: '#f59e0b', color: 'white', borderRadius: 1 }}>
@@ -507,20 +507,20 @@ export const SampleThemePage: React.FC = () => {
                   sx={{
                     flex: 1,
                     bgcolor: isDark ? theme.bg.surface : theme.bg.paper,
-                    border: `1px solid ${isDark ? theme.red.primary : theme.border}`,
+                    border: `1px solid ${isDark ? theme.accent.primary : theme.border}`,
                     color: theme.text.primary,
                     position: 'relative',
                     overflow: 'hidden',
                     boxShadow: isDark
-                      ? `0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px ${theme.red.primary}60, inset 0 1px 0 0 ${theme.red.primary}20`
+                      ? `0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px ${theme.accent.primary}60, inset 0 1px 0 0 ${theme.accent.primary}20`
                       : `0 2px 8px rgba(0, 0, 0, 0.08)`,
                     transition: 'all 0.2s ease',
                     '&:hover': {
                       transform: 'translateY(-2px)',
                       boxShadow: isDark
-                        ? `0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${theme.red.primary}, 0 0 20px ${theme.red.primary}30`
+                        ? `0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${theme.accent.primary}, 0 0 20px ${theme.accent.primary}30`
                         : `0 8px 24px rgba(0, 0, 0, 0.12)`,
-                      borderColor: theme.red.lighter,
+                      borderColor: theme.accent.lighter,
                     },
                     '&::before': {
                       content: '""',
@@ -529,7 +529,7 @@ export const SampleThemePage: React.FC = () => {
                       right: -50,
                       width: '150px',
                       height: '150px',
-                      background: `radial-gradient(circle, ${theme.red.primary}25, transparent 70%)`,
+                      background: `radial-gradient(circle, ${theme.accent.primary}25, transparent 70%)`,
                       filter: 'blur(40px)',
                     },
                   }}
@@ -540,9 +540,9 @@ export const SampleThemePage: React.FC = () => {
                         sx={{
                           width: 10,
                           height: 10,
-                          bgcolor: theme.red.primary,
+                          bgcolor: theme.accent.primary,
                           borderRadius: '50%',
-                          boxShadow: `0 0 10px ${theme.red.primary}`,
+                          boxShadow: `0 0 10px ${theme.accent.primary}`,
                           animation: 'pulse 2s ease-in-out infinite',
                         }}
                       />
@@ -562,15 +562,15 @@ export const SampleThemePage: React.FC = () => {
                       size="small"
                       sx={{
                         mt: 2,
-                        background: `linear-gradient(135deg, ${theme.red.primary}, ${theme.red.dark})`,
+                        background: `linear-gradient(135deg, ${theme.accent.primary}, ${theme.accent.dark})`,
                         color: 'white',
                         fontWeight: 'bold',
-                        boxShadow: `0 4px 12px ${theme.red.primary}40`,
-                        border: `1px solid ${theme.red.lighter}30`,
+                        boxShadow: `0 4px 12px ${theme.accent.primary}40`,
+                        border: `1px solid ${theme.accent.lighter}30`,
                         '&:hover': {
-                          background: `linear-gradient(135deg, ${theme.red.lighter}, ${theme.red.primary})`,
+                          background: `linear-gradient(135deg, ${theme.accent.lighter}, ${theme.accent.primary})`,
                           transform: 'scale(1.02)',
-                          boxShadow: `0 6px 20px ${theme.red.primary}60`,
+                          boxShadow: `0 6px 20px ${theme.accent.primary}60`,
                         },
                         transition: 'all 0.2s ease',
                       }}
@@ -653,19 +653,19 @@ export const SampleThemePage: React.FC = () => {
             sx={{ mt: 8, width: '100%' }}
           >
             <FeatureCard
-              icon={<LockIcon sx={{ fontSize: 48, color: theme.red.primary }} />}
+              icon={<LockIcon sx={{ fontSize: 48, color: theme.accent.primary }} />}
               title="Private Payroll"
               description="Manage encrypted employee payments on-chain. Only you and your employees can see salary amounts."
               theme={theme}
             />
             <FeatureCard
-              icon={<VerifiedUserIcon sx={{ fontSize: 48, color: theme.red.primary }} />}
+              icon={<VerifiedUserIcon sx={{ fontSize: 48, color: theme.accent.primary }} />}
               title="ZK Verification"
               description="Employees generate zero-knowledge proofs of income without revealing exact amounts to lenders or landlords."
               theme={theme}
             />
             <FeatureCard
-              icon={<AssessmentIcon sx={{ fontSize: 48, color: theme.red.light }} />}
+              icon={<AssessmentIcon sx={{ fontSize: 48, color: theme.accent.light }} />}
               title="Compliance Ready"
               description="Built-in audit disclosures and employment verification for regulatory requirements."
               theme={theme}
@@ -731,16 +731,16 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, the
           left: '-50%',
           width: '200%',
           height: '200%',
-          background: `radial-gradient(circle, ${theme.red.primary}12, transparent 50%)`,
+          background: `radial-gradient(circle, ${theme.accent.primary}12, transparent 50%)`,
           opacity: 0,
           transition: 'opacity 0.3s ease',
         },
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: isDark
-            ? `0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${theme.red.primary}80, 0 0 20px ${theme.red.primary}25`
+            ? `0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${theme.accent.primary}80, 0 0 20px ${theme.accent.primary}25`
             : `0 12px 32px rgba(0, 0, 0, 0.12)`,
-          borderColor: isDark ? theme.red.primary : theme.red.primary,
+          borderColor: isDark ? theme.accent.primary : theme.accent.primary,
           '&::before': {
             opacity: 1,
           },
@@ -754,8 +754,8 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, the
             display: 'inline-flex',
             p: 2,
             borderRadius: '16px',
-            bgcolor: `${theme.red.primary}15`,
-            border: `1px solid ${theme.red.primary}30`,
+            bgcolor: `${theme.accent.primary}15`,
+            border: `1px solid ${theme.accent.primary}30`,
           }}
         >
           {icon}
