@@ -12,9 +12,9 @@ export default defineConfig({
       // Allow serving UI root as well as local workspace lib paths
       allow: [
         '.',
-        '../pay-api',
-        '../pay-api/dist',
-        '../pay-api/src',
+        '../payroll-api',
+        '../payroll-api/dist',
+        '../payroll-api/src',
         '../..',
       ],
     },
@@ -42,7 +42,7 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       '@midnight-ntwrk/compact-runtime',
-      '@midnight-pay/pay-contract',
+      '@zksalaria/payroll-contract',
     ],
     exclude: [
       // Avoid pre-bundling the wasm runtime to prevent TLA in esbuild

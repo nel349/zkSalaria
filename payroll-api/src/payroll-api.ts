@@ -219,12 +219,12 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        deployedPayrollContract = await deployContract(providers, {
+        deployedPayrollContract = await deployContract(providers as any, {
           contract: payrollContract,
           privateStateId: `payroll-${companyId}` as AccountId,
           initialPrivateState: createPayrollPrivateState(),
           args: [initNonce, companyIdBytes, companyNameBytes, initialTimestamp],
-        } as any);
+        }) as DeployedPayrollContract;
         break;
       } catch (err) {
         lastError = err;
@@ -263,12 +263,12 @@ export class PayrollAPI implements DeployedPayrollAPI {
     const normalizedUserId = utils.normalizeId(userId);
     const stateKey = normalizedUserId as AccountId;
 
-    const deployedPayrollContract = await findDeployedContract(providers, {
+    const deployedPayrollContract = await findDeployedContract(providers as any, {
       contractAddress,
       contract: payrollContract,
       privateStateId: stateKey,
       initialPrivateState: createPayrollPrivateState(),
-    });
+    }) as DeployedPayrollContract;
 
     const payrollAPI = new PayrollAPI(stateKey, normalizedUserId, deployedPayrollContract, providers, logger);
 

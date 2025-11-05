@@ -10,8 +10,7 @@
     "payroll-contract",
     "payroll-api",
     "payroll-ui",
-    "payroll-commons",
-    "pay-ui"
+    "payroll-commons"
   ],
   "scripts": {
     "compact": "turbo run compact",
@@ -20,17 +19,17 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev",
-    "dev:local": "turbo run dev:local --filter=@midnight-pay/pay-ui",
-    "dev:testnet": "turbo run dev:testnet --filter=@midnight-pay/pay-ui",
-    "pay-ui": "npm run build && turbo run start --filter=@midnight-pay/pay-ui",
-    "pay-ui:local": "npm run config:local && npm run build && turbo run start --filter=@midnight-pay/pay-ui",
-    "pay-ui:testnet": "npm run config:testnet && npm run build && turbo run start --filter=@midnight-pay/pay-ui",
-    "config:testnet": "cp pay-ui/public/config.testnet.json pay-ui/public/config.json",
-    "config:local": "cp pay-ui/public/config.local.json pay-ui/public/config.json",
-    "build:ui:testnet": "turbo run build --filter=@midnight-pay/pay-api && cd pay-ui && npm run build:testnet",
-    "recompile": "turbo run build --filter=@midnight-pay/pay-contract",
+    "dev:local": "turbo run dev:local --filter=@zksalaria/payroll-ui",
+    "dev:testnet": "turbo run dev:testnet --filter=@zksalaria/payroll-ui",
+    "payroll-ui": "npm run build && turbo run start --filter=@zksalaria/payroll-ui",
+    "payroll-ui:local": "npm run config:local && npm run build && turbo run start --filter=@zksalaria/payroll-ui",
+    "payroll-ui:testnet": "npm run config:testnet && npm run build && turbo run start --filter=@zksalaria/payroll-ui",
+    "config:testnet": "cp payroll-ui/public/config.testnet.json payroll-ui/public/config.json",
+    "config:local": "cp payroll-ui/public/config.local.json payroll-ui/public/config.json",
+    "build:ui:testnet": "turbo run build --filter=@zksalaria/payroll-api && cd payroll-ui && npm run build:testnet",
+    "recompile": "turbo run build --filter=@zksalaria/payroll-contract",
     "update-keys": "cd payroll-contract && npm run update-api-resources",
-    "copy-keys-to-ui": "cd pay-api && npm run copy-keys-to-ui",
+    "copy-keys-to-ui": "cd payroll-api && npm run copy-keys-to-ui",
     "clean": "turbo run clean"
   },
   "dependencies": {

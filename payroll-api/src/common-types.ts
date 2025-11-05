@@ -92,7 +92,7 @@ export type PayrollCircuitKeys =
   | 'resume_recurring_payment'
   | 'edit_recurring_payment'
   | 'process_recurring_payment'
-  | 'batch_pay_employees'
+  // | 'batch_pay_employees' // Commented out for testnet performance
   | 'grant_income_disclosure'
   | 'grant_employment_disclosure'
   | 'grant_audit_disclosure'

@@ -6,12 +6,12 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "main": "./dist/payroll-contract/src/index.js",
-  "types": "./dist/payroll-contract/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/payroll-contract/src/index.d.ts",
-      "default": "./dist/payroll-contract/src/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
