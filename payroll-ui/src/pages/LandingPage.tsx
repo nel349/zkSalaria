@@ -25,6 +25,10 @@ import {
 } from '../theme';
 import { UseCasesSection } from '../components/landing/UseCasesSection';
 import { FeaturesSection } from '../components/landing/FeaturesSection';
+import { DeveloperSection } from '../components/landing/DeveloperSection';
+import { MetricsSection } from '../components/landing/MetricsSection';
+import { CTASection } from '../components/landing/CTASection';
+import { Footer } from '../components/landing/Footer';
 import { ThemeToggle } from '../components';
 
 /**
@@ -52,17 +56,68 @@ export const LandingPage: React.FC = () => {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: theme.colors.background.default,
+        bgcolor: 'transparent',
         color: theme.colors.text.primary,
         position: 'relative',
-        overflow: 'hidden',
       }}
     >
+      {/* Video Background (Dark Mode Only) */}
+      {mode === 'dark' && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 0,
+            overflow: 'hidden',
+            bgcolor: theme.colors.background.default,
+          }}
+        >
+          <Box
+            component="video"
+            autoPlay
+            loop
+            muted
+            playsInline
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 'auto',
+              height: 'auto',
+              maxWidth: '1920px',
+              maxHeight: '1080px',
+              opacity: 0.3,
+            }}
+          >
+            <source src="/assets/grok-lock-fluid.mp4" type="video/mp4" />
+          </Box>
+        </Box>
+      )}
+
+      {/* Background layer for light mode */}
+      {mode === 'light' && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 0,
+            bgcolor: theme.colors.background.default,
+          }}
+        />
+      )}
+
       {/* Animated Mesh Gradient Background */}
-      <Box sx={createMeshGradient(theme, mode)} />
+      <Box sx={{ ...createMeshGradient(theme, mode), zIndex: 1 }} />
 
       {/* Grid Pattern Overlay */}
-      <Box sx={createGridPattern(theme, mode)} />
+      <Box sx={{ ...createGridPattern(theme, mode), zIndex: 1 }} />
 
       {/* Navigation Bar */}
       <AppBar
@@ -71,7 +126,7 @@ export const LandingPage: React.FC = () => {
         sx={{
           ...createGlassMorphism(theme, mode),
           bgcolor: `${theme.colors.background.default}cc`,
-          zIndex: 1000,
+          zIndex: 100,
         }}
       >
         <Toolbar sx={{ height: '80px', justifyContent: 'space-between', px: { xs: 2, md: 6 } }}>
@@ -151,7 +206,7 @@ export const LandingPage: React.FC = () => {
           justifyContent: 'center',
           textAlign: 'center',
           position: 'relative',
-          zIndex: 2,
+          zIndex: 10,
           py: { xs: 8, md: 12 },
         }}
       >
@@ -277,11 +332,26 @@ export const LandingPage: React.FC = () => {
         </Stack>
       </Container>
 
-      {/* Section 2: Use Cases */}
-      <UseCasesSection />
+      {/* All Sections - Above Video Background */}
+      <Box sx={{ position: 'relative', zIndex: 10 }}>
+        {/* Section 2: Use Cases */}
+        <UseCasesSection />
 
-      {/* Section 3: Features */}
-      <FeaturesSection />
+        {/* Section 3: Features */}
+        <FeaturesSection />
+
+        {/* Section 4: Developer */}
+        <DeveloperSection />
+
+        {/* Section 5: Metrics */}
+        <MetricsSection />
+
+        {/* Section 6: CTA */}
+        <CTASection />
+
+        {/* Section 7: Footer */}
+        <Footer />
+      </Box>
     </Box>
   );
 };

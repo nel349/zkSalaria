@@ -43,7 +43,6 @@ export const UseCasesSection: React.FC = () => {
       maxWidth="lg"
       sx={{
         py: { xs: theme.spacing[8], md: theme.spacing[16] },
-        bgcolor: theme.colors.background.default,
       }}
     >
       {/* Section Header */}

@@ -344,9 +344,9 @@ Visual representation changes based on selected feature:
 
 ## Section 4: Developer Section
 
-**Background:** #0A0E27
-**Padding:** 128px 0
-**Container:** Max-width 1280px, centered
+**Background:** theme.colors.background.default
+**Padding:** theme.spacing (5xl vertical)
+**Container:** Max-width lg, centered
 
 ### Section Header
 
@@ -365,8 +365,8 @@ Visual representation changes based on selected feature:
 
 **Grid:**
 - Columns: 3 equal width
-- Gap: 32px
-- Margin-top: 64px
+- Gap: theme.spacing[4]
+- Margin-top: theme.spacing[8]
 
 **Column Design:**
 
@@ -388,41 +388,41 @@ Visual representation changes based on selected feature:
 ```
 
 **Column 1: Explore**
-- Icon: Compass (gradient #00D9FF)
-- Title: "Explore"
+- Icon: Compass (theme.colors.primary gradient)
+- Title: "Explore" (Typography h5)
 - Features:
   - • Midnight Network zkApps
   - • ZKML with EZKL
   - • LLM Integration APIs
   - • Smart Contract Patterns
-- Button: "Browse Examples →" (Border: #00D9FF, Text: #00D9FF)
+- Button: "Browse Examples →" (Border: theme.colors.primary, Text: theme.colors.primary)
 
 **Column 2: Validate**
-- Icon: Shield with checkmark (gradient #10B981)
-- Title: "Validate"
+- Icon: Shield with checkmark (theme.colors.success)
+- Title: "Validate" (Typography h5)
 - Features:
   - • Test Payroll Circuits
   - • Verify ZK Proofs
   - • Run Compliance Audits
   - • Simulate Transactions
-- Button: "Try Sandbox →" (Border: #10B981, Text: #10B981)
+- Button: "Try Sandbox →" (Border: theme.colors.success, Text: theme.colors.success)
 
 **Column 3: Integrate**
-- Icon: Code brackets (gradient #7B61FF)
-- Title: "Integrate"
+- Icon: Code brackets (theme.colors.secondary)
+- Title: "Integrate" (Typography h5)
 - Features:
   - • TypeScript SDK
   - • REST API Documentation
   - • GraphQL Queries
   - • React Components
-- Button: "Read Docs →" (Border: #7B61FF, Text: #7B61FF)
+- Button: "Read Docs →" (Border: theme.colors.secondary, Text: theme.colors.secondary)
 
 ### Code Example Section
 
 **Below 3-column grid:**
 
-**Title:** "Get started in minutes"
-**Margin-top:** 96px
+**Title:** "Get started in minutes" (Typography h4)
+**Margin-top:** theme.spacing[12]
 
 **Code Block:**
 
@@ -463,21 +463,21 @@ const isVerified = await payroll.verifyCreditProof({
 ```
 
 **Code Block Styling:**
-- Background: #1A1F3A
-- Border: 1px solid #2D3748
-- Border-radius: 12px
-- Padding: 32px
-- Font: JetBrains Mono 14px
-- Syntax highlighting: VSCode Dark+ theme
+- Background: theme.colors.background.elevated
+- Border: 1px solid theme.colors.border.default
+- Border-radius: theme.borderRadius.lg
+- Padding: theme.spacing[4]
+- Font: theme.typography.fontFamily.mono, theme.typography.fontSize.sm
+- Syntax highlighting: Theme-aware (dark/light)
 - Copy button: Top-right corner
 
 ---
 
 ## Section 5: Social Proof / Metrics
 
-**Background:** Linear gradient from #1A1F3A to #0A0E27
-**Padding:** 96px 0
-**Container:** Max-width 1280px, centered
+**Background:** createGradientBackground(theme, mode) or theme.colors.background.surface
+**Padding:** theme.spacing[12] 0
+**Container:** Max-width lg, centered
 
 ### Metrics Grid (4 Columns)
 
@@ -491,16 +491,16 @@ const isVerified = await payroll.verifyCreditProof({
 ```
 
 **Each Metric:**
-- Number: Inter Bold 48px, gradient #00D9FF to #7B61FF
-- Label: Inter Regular 16px, #A0AEC0
-- Animated count-up on scroll into view
+- Number: Typography h2, createGradientText(theme, mode)
+- Label: Typography body1, theme.colors.text.secondary
+- Animated count-up on scroll into view (optional)
 
 ---
 
 ## Section 6: CTA Section
 
-**Background:** #0A0E27
-**Padding:** 128px 0
+**Background:** theme.colors.background.default
+**Padding:** theme.spacing[16] 0
 **Container:** Max-width 800px, centered
 
 ```
@@ -518,27 +518,27 @@ const isVerified = await payroll.verifyCreditProof({
 
 **Title:**
 - Text: "Ready to go private?"
-- Font: Inter Bold 48px
-- Color: White
+- Typography: h2
+- Color: theme.colors.text.primary
 - Center-aligned
 
 **Description:**
-- Font: Inter Regular 20px
-- Color: #A0AEC0
-- Margin-top: 16px
+- Typography: h6
+- Color: theme.colors.text.secondary
+- Margin-top: theme.spacing[2]
 
 **Buttons:**
-- Primary: "Open App" (Orange #FF6B35, same style as hero)
-- Secondary: "Schedule Demo →" (Border #00D9FF, same style as hero secondary)
-- Margin-top: 48px
+- Primary: "Open App" (createPrimaryCTA(theme, mode))
+- Secondary: "Schedule Demo →" (Outlined button with theme.colors.primary border)
+- Margin-top: theme.spacing[6]
 
 ---
 
 ## Section 7: Footer
 
-**Background:** #1A1F3A
-**Padding:** 64px 0 32px 0
-**Border-top:** 1px solid #2D3748
+**Background:** theme.colors.background.surface
+**Padding:** theme.spacing[8] 0 theme.spacing[4] 0
+**Border-top:** 1px solid theme.colors.border.default
 
 ### Footer Layout (4 Columns)
 
@@ -561,19 +561,19 @@ const isVerified = await payroll.verifyCreditProof({
 
 **Column 1: Brand**
 - Logo: Same as nav (32px)
-- Tagline: Inter Regular 14px, #A0AEC0
+- Tagline: Typography body2, theme.colors.text.secondary
 - Max-width: 240px
 
 **Columns 2-4: Links**
-- Header: Inter Semibold 14px, White
-- Links: Inter Regular 14px, #A0AEC0
-- Hover: #00D9FF
-- Spacing: 12px between links
+- Header: Typography subtitle2, theme.colors.text.primary
+- Links: Typography body2, theme.colors.text.secondary
+- Hover: theme.colors.primary with underline
+- Spacing: theme.spacing[1.5] between links
 
 **Bottom Bar:**
-- Copyright: Inter Regular 14px, #A0AEC0
-- Social Icons: 24px × 24px, #A0AEC0
-- Hover: #00D9FF with scale(1.1)
+- Copyright: Typography caption, theme.colors.text.secondary
+- Social Icons: 24px × 24px, theme.colors.text.secondary
+- Hover: theme.colors.primary with scale(1.1)
 
 ---
 
