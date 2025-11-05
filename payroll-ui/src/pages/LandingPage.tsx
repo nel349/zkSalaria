@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -41,6 +41,54 @@ export const LandingPage: React.FC = () => {
   const { mode } = useTheme();
   const theme = useThemeValues();
 
+  const [showSplash, setShowSplash] = useState(true);
+  const [scrollY, setScrollY] = useState(0);
+  const [typedText, setTypedText] = useState('');
+  const [showCursor, setShowCursor] = useState(true);
+
+  const fullText = 'Private Payroll with ZKML, Verified On-Chain.';
+
+  useEffect(() => {
+    // Hide splash screen after 2 seconds
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    // Start typing animation after splash screen
+    if (!showSplash) {
+      let currentIndex = 0;
+      const typingInterval = setInterval(() => {
+        if (currentIndex <= fullText.length) {
+          setTypedText(fullText.slice(0, currentIndex));
+          currentIndex++;
+        } else {
+          clearInterval(typingInterval);
+          // Stop cursor blinking after typing is complete
+          setTimeout(() => setShowCursor(false), 500);
+        }
+      }, 50); // 50ms per character
+
+      return () => clearInterval(typingInterval);
+    }
+  }, [showSplash]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Calculate video opacity based on scroll position
+  // Start at 0.3, decrease to 0.05 as user scrolls down
+  const videoOpacity = Math.max(0.05, 0.3 - (scrollY / 2000) * 0.25);
+
   const handleOpenApp = () => {
     navigate('/connect');
   };
@@ -61,8 +109,66 @@ export const LandingPage: React.FC = () => {
         position: 'relative',
       }}
     >
+      {/* Splash Screen (Dark Mode Only) */}
+      {mode === 'dark' && showSplash && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 9999,
+            bgcolor: theme.colors.background.default,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'opacity 0.5s ease-out',
+            opacity: showSplash ? 1 : 0,
+          }}
+        >
+          <Box
+            sx={{
+              position: 'relative',
+              width: 'auto',
+              height: 'auto',
+              maxWidth: '800px',
+              maxHeight: '600px',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: `radial-gradient(ellipse at center, transparent 40%, ${theme.colors.background.default} 100%)`,
+                pointerEvents: 'none',
+              },
+            }}
+          >
+            <Box
+              component="video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              sx={{
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '800px',
+                maxHeight: '600px',
+                opacity: 0.8,
+                display: 'block',
+              }}
+            >
+              <source src="/assets/grok-lock-fluid-b1.mp4" type="video/mp4" />
+            </Box>
+          </Box>
+        </Box>
+      )}
+
       {/* Video Background (Dark Mode Only) */}
-      {mode === 'dark' && (
+      {mode === 'dark' && !showSplash && (
         <Box
           sx={{
             position: 'fixed',
@@ -76,11 +182,6 @@ export const LandingPage: React.FC = () => {
           }}
         >
           <Box
-            component="video"
-            autoPlay
-            loop
-            muted
-            playsInline
             sx={{
               position: 'absolute',
               top: '50%',
@@ -88,12 +189,38 @@ export const LandingPage: React.FC = () => {
               transform: 'translate(-50%, -50%)',
               width: 'auto',
               height: 'auto',
-              maxWidth: '1920px',
-              maxHeight: '1080px',
-              opacity: 0.3,
+              maxWidth: '800px',
+              maxHeight: '600px',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: `radial-gradient(ellipse at center, transparent 30%, ${theme.colors.background.default} 100%)`,
+                pointerEvents: 'none',
+              },
             }}
           >
-            <source src="/assets/grok-lock-fluid.mp4" type="video/mp4" />
+            <Box
+              component="video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              sx={{
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '800px',
+                maxHeight: '600px',
+                opacity: videoOpacity,
+                transition: 'opacity 0.3s ease',
+                display: 'block',
+              }}
+            >
+              <source src="/assets/grok-lock-fluid.mp4" type="video/mp4" />
+            </Box>
           </Box>
         </Box>
       )}
@@ -211,7 +338,7 @@ export const LandingPage: React.FC = () => {
         }}
       >
         <Stack spacing={6} alignItems="center" maxWidth="900px">
-          {/* Main Headline */}
+          {/* Main Headline with Typing Animation */}
           <Typography
             variant="h1"
             component="h1"
@@ -219,12 +346,30 @@ export const LandingPage: React.FC = () => {
             sx={{
               ...createGradientText(theme, mode),
               fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
-              textShadow: createTextShadow(theme, mode, 'md'),
+              textShadow: createTextShadow(theme, mode, 'lg'),
               letterSpacing: '-0.02em',
-              maxWidth: '800px',
+              maxWidth: '900px',
+              minHeight: { xs: '120px', sm: '200px', md: '240px' },
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              filter: 'brightness(1.2) contrast(1.1)',
+              '& .cursor': {
+                display: showCursor ? 'inline-block' : 'none',
+                width: '4px',
+                height: '1em',
+                backgroundColor: theme.colors.primary[mode === 'dark' ? 400 : 600],
+                marginLeft: '4px',
+                animation: showCursor ? 'blink 1s step-end infinite' : 'none',
+              },
+              '@keyframes blink': {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: 0 },
+              },
             }}
           >
-            Private Payroll, Verified On-Chain.
+            {typedText}
+            <Box component="span" className="cursor" />
           </Typography>
 
           {/* Subheadline */}
@@ -234,10 +379,10 @@ export const LandingPage: React.FC = () => {
             sx={{
               fontSize: { xs: '1.125rem', md: '1.5rem' },
               lineHeight: 1.5,
-              maxWidth: '640px',
+              maxWidth: '720px',
             }}
           >
-            Pay your employees with encrypted balances, ZK proofs, and compliance built-in.
+            Pay employees with encrypted balances and verify income with ZKML proofs—no salary data revealed, fully compliant.
           </Typography>
 
           {/* CTA Buttons */}

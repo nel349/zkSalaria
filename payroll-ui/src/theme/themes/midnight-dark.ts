@@ -72,9 +72,9 @@ export const midnightDarkTheme: MidnightCompleteTheme = {
 
     // Text colors - High contrast on dark navy
     text: {
-      primary: '#f8f9fa',     // Very light gray for primary text
-      secondary: '#a8adb7',   // Medium light gray for secondary text
-      disabled: '#6b7280',    // Medium gray for disabled text
+      primary: '#ffffff',     // Pure white for primary text
+      secondary: '#d1d5db',   // Light gray for secondary text (much brighter)
+      disabled: '#9ca3af',    // Medium-light gray for disabled text (brighter)
       inverse: '#13151f',     // Dark navy (for use on light backgrounds)
     },
 
@@ -198,7 +198,7 @@ export const midnightDarkTheme: MidnightCompleteTheme = {
         background: '#242835',        // Dark navy secondary
         backgroundHover: '#2d3140',   // Slightly lighter on hover
         backgroundActive: '#1a1d29',  // Darker on active
-        text: '#f8f9fa',              // Light text
+        text: '#ffffff',              // White text for better contrast
         border: '#363b4d',            // Medium border
       },
       outlined: {
@@ -220,8 +220,8 @@ export const midnightDarkTheme: MidnightCompleteTheme = {
       background: '#242835',          // Slightly lighter navy for inputs
       border: '#363b4d',              // Visible border
       borderFocus: '#2dd4bf',         // Teal focus border
-      text: '#f8f9fa',                // Light text
-      placeholder: '#6b7280',         // Medium gray placeholder
+      text: '#ffffff',                // White text for better contrast
+      placeholder: '#9ca3af',         // Brighter placeholder
     },
   },
 };

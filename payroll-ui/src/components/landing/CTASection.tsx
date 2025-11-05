@@ -24,7 +24,7 @@ export const CTASection: React.FC = () => {
   return (
     <Box
       sx={{
-        bgcolor: 'transparent',
+        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.97)' : 'transparent',
         py: { xs: theme.spacing[12], md: theme.spacing[16] },
       }}
     >

@@ -58,7 +58,7 @@ export const Footer: React.FC = () => {
   return (
     <Box
       sx={{
-        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.6)' : theme.colors.background.surface,
+        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.98)' : theme.colors.background.surface,
         borderTop: `1px solid ${theme.colors.border.default}`,
         py: theme.spacing[8],
       }}

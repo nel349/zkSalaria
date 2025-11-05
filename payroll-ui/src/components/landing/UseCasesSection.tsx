@@ -2,7 +2,7 @@ import React from 'react';
 import { Container, Box } from '@mui/material';
 import { SectionHeader } from '../SectionHeader';
 import { FeatureCard } from '../FeatureCard';
-import { useThemeValues } from '../../theme';
+import { useThemeValues, useTheme } from '../../theme';
 import ShieldIcon from '@mui/icons-material/Shield';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import VerifiedIcon from '@mui/icons-material/Verified';
@@ -14,6 +14,7 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
  */
 export const UseCasesSection: React.FC = () => {
   const theme = useThemeValues();
+  const { mode } = useTheme();
 
   const useCases = [
     {
@@ -39,12 +40,13 @@ export const UseCasesSection: React.FC = () => {
   ];
 
   return (
-    <Container
-      maxWidth="lg"
+    <Box
       sx={{
+        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.85)' : 'transparent',
         py: { xs: theme.spacing[8], md: theme.spacing[16] },
       }}
     >
+      <Container maxWidth="lg">
       {/* Section Header */}
       <SectionHeader
         title="Built for Privacy"
@@ -79,5 +81,6 @@ export const UseCasesSection: React.FC = () => {
         ))}
       </Box>
     </Container>
+    </Box>
   );
 };

@@ -295,7 +295,7 @@ export const createGradientText = (
   mode: 'light' | 'dark' = 'dark'
 ): SxProps<MuiTheme> => {
   const [start, mid, end] = mode === 'dark'
-    ? [theme.colors.primary[300], theme.colors.primary[400], theme.colors.primary[600]]
+    ? [theme.colors.primary[200], theme.colors.primary[300], theme.colors.primary[500]]
     : [theme.colors.primary[500], theme.colors.primary[600], theme.colors.primary[800]];
 
   return {

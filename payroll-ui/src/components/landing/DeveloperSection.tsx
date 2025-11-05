@@ -108,7 +108,7 @@ const isVerified = await payroll.verifyCreditProof({
   return (
     <Box
       sx={{
-        bgcolor: 'transparent',
+        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.93)' : 'transparent',
         py: { xs: theme.spacing[8], md: theme.spacing[16] },
       }}
     >

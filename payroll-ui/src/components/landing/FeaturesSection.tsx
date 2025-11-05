@@ -360,7 +360,7 @@ export const FeaturesSection: React.FC = () => {
   return (
     <Box
       sx={{
-        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.6)' : theme.colors.background.surface,
+        bgcolor: mode === 'dark' ? 'rgba(19, 21, 31, 0.9)' : theme.colors.background.surface,
         py: { xs: theme.spacing[8], md: theme.spacing[16] },
       }}
     >
