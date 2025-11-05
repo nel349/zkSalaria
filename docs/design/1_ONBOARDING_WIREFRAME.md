@@ -1,50 +1,26 @@
-# zkSalaria Onboarding Page - Detailed Wireframe Specification
+# zkSalaria Onboarding Page - Wireframe Specification
 
-**Version:** 1.0
-**Date:** 2025-10-31
-**Purpose:** Complete visual and content specification for zkSalaria landing page
+**Version:** 2.0
+**Date:** 2025-11-05
+**Purpose:** Structural and content specification for zkSalaria landing page
 
 ---
 
-## Design System
+## Design System Reference
 
-### Color Palette
-```
-Primary Background: #0A0E27 (Deep midnight blue)
-Secondary Background: #1A1F3A (Lighter midnight blue)
-Accent Primary: #00D9FF (Cyan - for privacy/encryption theme)
-Accent Secondary: #7B61FF (Purple - for ZKML/AI theme)
-Warning/CTA: #FF6B35 (Orange - for primary actions)
-Text Primary: #FFFFFF (White)
-Text Secondary: #A0AEC0 (Light gray)
-Success: #10B981 (Green)
-Border: #2D3748 (Dark gray)
-```
+**Theme Source of Truth:** `/payroll-ui/src/theme/`
+- **Colors:** `themes/midnight-dark.ts` and `themes/midnight-light.ts`
+- **Typography:** Defined in theme files (Inter font family)
+- **Spacing:** Theme spacing system
+- **Utilities:** `utils.ts` - Pre-built patterns (gradients, glass morphism, shadows, etc.)
 
-### Typography
-```
-Heading 1: Inter, 72px, Bold, -2% letter-spacing
-Heading 2: Inter, 48px, Bold, -1% letter-spacing
-Heading 3: Inter, 32px, Semibold
-Heading 4: Inter, 24px, Medium
-Body Large: Inter, 18px, Regular, 150% line-height
-Body: Inter, 16px, Regular, 160% line-height
-Body Small: Inter, 14px, Regular, 150% line-height
-Monospace: JetBrains Mono, 14px (for code snippets)
-```
-
-### Spacing System
-```
-xs: 4px
-sm: 8px
-md: 16px
-lg: 24px
-xl: 32px
-2xl: 48px
-3xl: 64px
-4xl: 96px
-5xl: 128px
-```
+**Key Theme Features:**
+- Teal/Cyan primary accent colors for modern fintech feel
+- Dark navy backgrounds (not pure black) for depth
+- Glass morphism effects with backdrop blur
+- Multi-layer shadows with teal accents
+- Animated gradient text effects
+- Mesh gradient backgrounds
 
 ---
 
@@ -52,7 +28,7 @@ xl: 32px
 
 ### Navigation Bar
 **Height:** 80px
-**Background:** Semi-transparent #0A0E27 with 80% opacity + backdrop blur
+**Background:** Glass morphism effect (use `createGlassMorphism()` utility)
 **Position:** Sticky top, z-index: 1000
 
 **Layout:**
@@ -61,29 +37,30 @@ xl: 32px
 
 Left (240px):                         Center:                        Right (160px):
 - zkSalaria Logo (icon + text)        - Use Cases                    - "Open App" button
-  #00D9FF glow effect                 - Features                       Orange (#FF6B35)
-                                      - Developers                      Rounded-full
-                                      - Docs                            Hover: scale(1.05)
+  Teal glow effect                    - Features                       Use createPrimaryCTA()
+                                      - Developers
+                                      - Docs
 ```
 
 **Logo Specifications:**
 - Icon: 32px × 32px shield with lock symbol
-- Text: "zkSalaria" in Inter Bold 20px
-- Glow: 0 0 20px rgba(0, 217, 255, 0.5)
+- Text: "zkSalaria" - Typography h6 variant
+- Glow: Teal accent shadow (use `createTextShadow()`)
 
 **Nav Links:**
-- Font: Inter Medium 16px
-- Color: #A0AEC0
-- Hover: #FFFFFF with underline animation
-- Spacing: 32px between links
+- Typography: subtitle2
+- Color: theme.text.secondary
+- Hover: theme.text.primary with underline animation
+- Spacing: lg (24px) between links
 
 ---
 
 ## Section 1: Hero Section
 
 **Height:** 100vh (full viewport)
-**Background:** Radial gradient from #1A1F3A (center) to #0A0E27 (edges)
-**Animated Background:** Floating encrypted balance particles (subtle)
+**Background:**
+- Mesh gradient background (use `createMeshGradient()` utility)
+- Grid pattern overlay (use `createGridPattern()` utility)
 
 ### Content Layout
 
@@ -98,7 +75,7 @@ Left (240px):                         Center:                        Right (160p
 │    │              Verified On-Chain.                    │    │
 │    │                                                    │    │
 │    │    Pay employees with encrypted balances, ZK      │    │
-│    │    proofs, and AI-powered compliance audits.      │    │
+│    │    proofs, and compliance built-in.               │    │
 │    │                                                    │    │
 │    │    [Open App Button]  [View Documentation →]      │    │
 │    │                                                    │    │
@@ -116,62 +93,56 @@ Left (240px):                         Center:                        Right (160p
 
 **Main Headline:**
 - Text: "Private Payroll, Verified On-Chain."
-- Font: Inter Bold 72px
-- Color: White (#FFFFFF)
-- Letter-spacing: -2%
+- Typography: h1 variant
+- Effect: Animated gradient text (use `createGradientText()` utility)
+- Text shadow: use `createTextShadow()` with 'md' intensity
 - Max-width: 800px
 - Center-aligned
-- Gradient text effect: Linear gradient from #FFFFFF to #00D9FF
 
 **Subheadline:**
-- Text: "Pay employees with encrypted balances, ZK proofs, and AI-powered compliance audits."
-- Font: Inter Regular 24px
-- Color: #A0AEC0
-- Line-height: 150%
+- Text: "Pay employees with encrypted balances, ZK proofs, and compliance built-in."
+- Typography: h5 variant
+- Color: theme.text.secondary
 - Max-width: 640px
 - Center-aligned
-- Margin-top: 24px
+- Margin-top: spacing.lg
 
 **Primary CTA - "Open App":**
-- Background: #FF6B35 (Orange)
-- Text: "Open App" in Inter Semibold 18px
-- Color: White
-- Padding: 16px 48px
-- Border-radius: 9999px (pill shape)
-- Hover: Background #FF8255, scale(1.05), shadow: 0 20px 40px rgba(255, 107, 53, 0.4)
-- Transition: all 0.3s ease
-- Margin-top: 48px
+- Component: Button with `createPrimaryCTA()` utility
+- Text: "Open App"
+- Include glow effect wrapper (use `createGlowEffect()`)
+- Margin-top: spacing.2xl
 
 **Secondary CTA - "View Documentation":**
-- Background: Transparent
-- Border: 2px solid #00D9FF
-- Text: "View Documentation →" in Inter Medium 18px
-- Color: #00D9FF
-- Padding: 14px 32px
+- Component: Button variant="outlined"
+- Text: "View Documentation →"
+- Color: theme.primary (teal)
+- Border: 2px solid theme.primary
 - Border-radius: 9999px
 - Hover: Background rgba(0, 217, 255, 0.1)
 - Margin-left: 16px
 
 **Social Proof Stats:**
-- Container: Flex row, gap: 48px, center-aligned
-- Margin-top: 64px
+- Container: Flex row, gap: spacing.2xl, center-aligned
+- Margin-top: spacing.3xl
 - Each stat:
   - Icon: 24px × 24px (lock for payments, users for employees)
-  - Number: Inter Bold 32px, gradient #00D9FF to #7B61FF
-  - Label: Inter Regular 16px, #A0AEC0
+  - Icon color: theme.success[500]
+  - Typography: body2
+  - Color: theme.text.secondary
 
 **Scroll Indicator:**
-- Animated bouncing arrow
-- Color: #00D9FF with 50% opacity
-- Position: Absolute bottom 32px
+- Animated bouncing arrow (optional enhancement)
+- Color: theme.primary with opacity
+- Position: Absolute bottom spacing.xl
 
 ---
 
 ## Section 2: Use Cases
 
-**Background:** #0A0E27
-**Padding:** 128px 0
-**Container:** Max-width 1280px, centered
+**Background:** theme.background.default
+**Padding:** spacing.5xl 0
+**Container:** Max-width lg, centered
 
 ### Section Header
 
@@ -189,24 +160,24 @@ Left (240px):                         Center:                        Right (160p
 
 **Title:**
 - Text: "Built for Privacy"
-- Font: Inter Bold 48px
-- Color: White
+- Typography: h2 variant
+- Color: theme.text.primary
 - Center-aligned
 
 **Description:**
-- Font: Inter Regular 18px
-- Color: #A0AEC0
+- Typography: h6 or body1
+- Color: theme.text.secondary
 - Max-width: 640px
 - Center-aligned
-- Margin-top: 16px
+- Margin-top: spacing.md
 
 ### Use Case Cards (4-Column Grid)
 
 **Grid Layout:**
 - Display: Grid
 - Columns: 4 (responsive: 2 on tablet, 1 on mobile)
-- Gap: 24px
-- Margin-top: 64px
+- Gap: spacing.lg
+- Margin-top: spacing.3xl
 
 **Card Design (each card):**
 
@@ -215,7 +186,7 @@ Left (240px):                         Center:                        Right (160p
 │                                     │
 │         [Icon - 64px × 64px]        │
 │                                     │
-│         Card Title (24px)           │
+│         Card Title (h5)             │
 │                                     │
 │    Card description explaining      │
 │    the use case in 2-3 lines of    │
@@ -227,44 +198,45 @@ Left (240px):                         Center:                        Right (160p
 ```
 
 **Card Specifications:**
-- Background: #1A1F3A
-- Border: 1px solid #2D3748
-- Border-radius: 16px
-- Padding: 32px
-- Hover: Border color #00D9FF, translate Y -4px, shadow: 0 20px 40px rgba(0, 217, 255, 0.2)
+- Component: MUI Card
+- Background: theme.background.paper
+- Border: theme.border.default
+- Border-radius: borderRadius.lg
+- Padding: spacing.xl
+- Hover: Border color changes to theme.primary, translateY(-4px), shadow with createAccentShadow()
 - Transition: all 0.3s ease
 
 **Card 1: Private Payroll**
-- Icon: Shield with lock (gradient #00D9FF to #7B61FF)
-- Title: "Private Payroll"
-- Description: "Pay employees with fully encrypted balances. No one can see salaries, not even the blockchain validator."
-- CTA: "Learn More →" (#00D9FF)
+- Icon: Shield with lock (use theme.primary gradient)
+- Title: "Private Payroll" (Typography h5)
+- Description: "Pay employees with fully encrypted balances. No one can see salaries, not even the blockchain validator." (Typography body2)
+- CTA: "Learn More →" (Link with theme.primary color)
 
 **Card 2: Credit Scoring**
-- Icon: Graph trending up with checkmark (gradient #7B61FF to #00D9FF)
+- Icon: Graph trending up with checkmark (use theme.primary gradient)
 - Title: "ZK Credit Scoring"
 - Description: "Employees generate verifiable credit scores using ZKML proofs, without revealing actual income amounts."
-- CTA: "Learn More →" (#00D9FF)
+- CTA: "Learn More →"
 
 **Card 3: Compliance Audits**
-- Icon: Document with checkmark (gradient #00D9FF to #10B981)
+- Icon: Document with checkmark (use theme.primary + theme.success gradient)
 - Title: "Compliance Audits"
 - Description: "AI-powered audits detect pay equity issues, tax irregularities, and fraud with zero-knowledge proofs."
-- CTA: "Learn More →" (#00D9FF)
+- CTA: "Learn More →"
 
 **Card 4: AI Reports**
-- Icon: Brain with circuits (gradient #7B61FF to #FF6B35)
+- Icon: Brain with circuits (use theme.primary gradient)
 - Title: "Natural Language Reports"
 - Description: "Ask questions in plain English. Get audit reports, compliance summaries, and insights from LLM."
-- CTA: "Learn More →" (#00D9FF)
+- CTA: "Learn More →"
 
 ---
 
 ## Section 3: Features (Expandable Accordion)
 
-**Background:** #1A1F3A
-**Padding:** 128px 0
-**Container:** Max-width 1280px, centered
+**Background:** theme.background.surface (alternate background)
+**Padding:** spacing.5xl 0
+**Container:** Max-width lg, centered
 
 ### Section Header
 
@@ -278,6 +250,9 @@ Left (240px):                         Center:                        Right (160p
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
 ```
+
+**Title:** Typography h2, color theme.text.primary, center-aligned
+**Description:** Typography h6, color theme.text.secondary, center-aligned
 
 ### Accordion Layout
 
@@ -308,16 +283,17 @@ Left (240px):                         Center:                        Right (160p
 ```
 
 **Accordion Item Specifications:**
-- Background: Transparent (inactive), #0A0E27 (active)
-- Border-left: 4px solid transparent (inactive), #00D9FF (active)
-- Padding: 24px
+- Component: MUI Accordion or custom
+- Background: Transparent (inactive), theme.background.elevated (active)
+- Border-left: 4px solid transparent (inactive), theme.primary (active)
+- Padding: spacing.lg
 - Cursor: pointer
-- Hover: Background rgba(0, 217, 255, 0.05)
+- Hover: Background theme.action.hover
 
 **Accordion Item Content:**
-- Icon: 32px × 32px (chevron down when open, chevron right when closed)
-- Title: Inter Semibold 20px, White
-- Description: Inter Regular 14px, #A0AEC0
+- Icon: ChevronDown/ChevronRight (32px)
+- Title: Typography h6, color theme.text.primary
+- Description: Typography body2, color theme.text.secondary
 - Transition: all 0.3s ease
 
 **Right Column (60% width):**
