@@ -10,6 +10,7 @@ import {
   type AccountId,
   type CompanyInfo,
   type EmployeeInfo,
+  type DetailedWithdrawalTransaction,
 } from './common-types.js';
 import {
   type PayrollPrivateState,
@@ -50,8 +51,11 @@ export interface DeployedPayrollAPI {
   getEmployeeInfo(employeeId: string): Promise<EmployeeInfo>;
 
   // Payment operations
-  payEmployee(companyId: string, employeeId: string, amount: string): Promise<void>;
+  payEmployee(companyId: string, employeeId: string, amount: string, paymentType?: number): Promise<void>;
   getEmployeePaymentHistory(employeeId: string): Promise<PaymentRecord[]>;
+
+  // Withdrawal history (API-layer storage)
+  getWithdrawalHistory(): Promise<import('./common-types.js').DetailedWithdrawalTransaction[]>;
 
   // System operations
   updateTimestamp(newTimestamp: number): Promise<void>;
@@ -135,6 +139,9 @@ export class PayrollAPI implements DeployedPayrollAPI {
     this.transactions$ = new Subject<UserAction>();
     this.privateStates$ = new Subject<PayrollPrivateState>();
 
+    // Initialize withdrawal history storage key (following bank-api pattern)
+    this.withdrawalLogKey = `${this.deployedContractAddress}:${this.userId}:withdrawals`;
+
     // Reactive state stream combining ledger state, private state, and user actions
     this.state$ = combineLatest(
       [
@@ -172,6 +179,9 @@ export class PayrollAPI implements DeployedPayrollAPI {
   readonly state$: Observable<PayrollDerivedState>;
   readonly transactions$: Subject<UserAction>;
   readonly privateStates$: Subject<PayrollPrivateState>;
+
+  // Withdrawal history tracking (API-layer storage following bank-api pattern)
+  private readonly withdrawalLogKey: string;
 
   // Type-safe circuit calls (workaround for empty witnesses type inference)
   private get circuits() {
@@ -334,11 +344,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
   async withdrawEmployeeSalary(employeeId: string, amount: string): Promise<void> {
     this.logger?.info({ withdrawEmployeeSalary: { employeeId, amount } });
+    const withdrawalAmount = utils.parseAmount(amount);
+    const withdrawalTimestamp = new Date();
+
     this.transactions$.next({
       transaction: {
         type: 'withdraw',
-        amount: utils.parseAmount(amount),
-        timestamp: new Date(),
+        amount: withdrawalAmount,
+        timestamp: withdrawalTimestamp,
         employeeId,
       },
       cancelledTransaction: undefined,
@@ -346,7 +359,21 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     const employeeIdBytes = utils.stringToBytes32(employeeId);
 
-    await this.circuits.withdraw_employee_salary(employeeIdBytes, utils.parseAmount(amount));
+    await this.circuits.withdraw_employee_salary(employeeIdBytes, withdrawalAmount);
+
+    // Get updated balance after withdrawal
+    const employeeInfo = await this.getEmployeeInfo(employeeId);
+    const balanceAfter = employeeInfo.balance ?? 0n;
+
+    // Log withdrawal to history (API-layer storage)
+    const withdrawalId = `withdraw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await this.appendWithdrawalLog({
+      withdrawal_id: withdrawalId,
+      employee_id: employeeId,
+      amount: withdrawalAmount,
+      balance_after: balanceAfter,
+      timestamp: withdrawalTimestamp,
+    });
   }
 
   async getEmployeeInfo(employeeId: string): Promise<EmployeeInfo> {
@@ -380,8 +407,9 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // PAYMENT OPERATIONS
   // ========================================
 
-  async payEmployee(companyId: string, employeeId: string, amount: string): Promise<void> {
-    this.logger?.info({ payEmployee: { companyId, employeeId, amount } });
+  async payEmployee(companyId: string, employeeId: string, amount: string, paymentType: number = 0): Promise<void> {
+    const typeLabel = paymentType === 0 ? 'SALARY' : paymentType === 1 ? 'ADVANCE' : 'BONUS';
+    this.logger?.info({ payEmployee: { companyId, employeeId, amount, paymentType, typeLabel } });
     this.transactions$.next({
       transaction: {
         type: 'pay_salary',
@@ -395,9 +423,10 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     const employeeIdBytes = utils.stringToBytes32(employeeId);
 
-    // Note: pay_employee circuit signature: (employee_id, salary_amount)
+    // Note: pay_employee circuit signature: (employee_id, salary_amount, payment_type)
     // CompanyId comes from contract ledger state (one contract per company)
-    await this.circuits.pay_employee(employeeIdBytes, utils.parseAmount(amount));
+    // payment_type: 0=SALARY, 1=ADVANCE, 2=BONUS
+    await this.circuits.pay_employee(employeeIdBytes, utils.parseAmount(amount), BigInt(paymentType));
   }
 
   async getEmployeePaymentHistory(employeeId: string): Promise<PaymentRecord[]> {
@@ -841,6 +870,40 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     return ledgerState.income_proofs.lookup(employeeIdBytes);
+  }
+
+  // ========================================
+  // WITHDRAWAL HISTORY TRACKING (API-LAYER)
+  // ========================================
+
+  /**
+   * Get withdrawal history for current user (employee)
+   * Stored in privateStateProvider (following bank-api transaction history pattern)
+   */
+  async getWithdrawalHistory(): Promise<DetailedWithdrawalTransaction[]> {
+    try {
+      const raw = await this.providers.privateStateProvider.get(this.withdrawalLogKey as unknown as AccountId);
+      return (raw as unknown as DetailedWithdrawalTransaction[]) ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Append withdrawal to history log (private method)
+   * Keeps last 100 withdrawals following bank-api pattern
+   */
+  private async appendWithdrawalLog(entry: DetailedWithdrawalTransaction): Promise<void> {
+    try {
+      const current = await this.getWithdrawalHistory();
+      const updated = [...current, entry].slice(-100); // Keep last 100
+      await this.providers.privateStateProvider.set(
+        this.withdrawalLogKey as unknown as AccountId,
+        updated as unknown as PayrollPrivateState,
+      );
+    } catch (error) {
+      this.logger?.warn({ appendWithdrawalLog: { error } });
+    }
   }
 }
 

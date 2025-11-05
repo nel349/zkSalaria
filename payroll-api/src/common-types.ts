@@ -40,7 +40,7 @@ export interface PayrollCircuitCalls {
   deposit_company_funds(amount: bigint): Promise<void>;
   add_employee(employeeId: Uint8Array): Promise<void>;
   withdraw_employee_salary(employeeId: Uint8Array, amount: bigint): Promise<void>;
-  pay_employee(employeeId: Uint8Array, salaryAmount: bigint): Promise<void>;
+  pay_employee(employeeId: Uint8Array, salaryAmount: bigint, paymentType: bigint): Promise<void>;
   grant_income_disclosure(employeeId: Uint8Array, lenderId: Uint8Array, minThreshold: bigint, expiresIn: bigint): Promise<void>;
   grant_employment_disclosure(employeeId: Uint8Array, verifierId: Uint8Array, expiresIn: bigint): Promise<void>;
   grant_audit_disclosure(companyId: Uint8Array, auditorId: Uint8Array, expiresIn: bigint): Promise<void>;
@@ -125,6 +125,14 @@ export type DetailedPayrollTransaction = {
   readonly companyName?: string;
   readonly txHash?: string;
   readonly blockHeight?: bigint;
+};
+
+export type DetailedWithdrawalTransaction = {
+  readonly withdrawal_id: string;
+  readonly employee_id: string;
+  readonly amount: bigint;
+  readonly balance_after: bigint;
+  readonly timestamp: Date;
 };
 
 export type UserAction = {

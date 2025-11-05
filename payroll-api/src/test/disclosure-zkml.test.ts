@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { PayrollAPI, type PayrollProviders, utils, PermissionType } from '../index.js';
-import { EmploymentStatus } from '@zksalaria/payroll-contract';
+import { EmploymentStatus, PaymentType } from '@zksalaria/payroll-contract';
 import pino from 'pino';
 import { firstValueFrom } from 'rxjs';
 import WebSocket from 'ws';
@@ -52,11 +52,18 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       logger.info('Setting up employee with payment history…');
       await companyAPI.addEmployee(companyId, employeeId);
       await companyAPI.depositCompanyFunds(companyId, '10000.00');
-      await companyAPI.payEmployee(companyId, employeeId, '5000.00');
+      await companyAPI.payEmployee(companyId, employeeId, '5000.00'); // Uses default SALARY
 
       let state = await firstValueFrom(companyAPI.state$);
       expect(state.totalEmployees).toBe(1n);
       expect(state.totalPayments).toBe(1n);
+
+      // Verify payment type defaults to SALARY
+      const employeeAPI = await PayrollAPI.connect(providers, contractAddress, employeeId, logger);
+      const paymentHistory = await employeeAPI.getEmployeePaymentHistory(employeeId);
+      expect(paymentHistory.length).toBeGreaterThanOrEqual(1);
+      expect(paymentHistory[0].payment_type).toBe(PaymentType.SALARY);
+      logger.info('✅ Payment type verified as SALARY (default)');
 
       // Test 1: Income Disclosure
       logger.info('Testing income disclosure (grant + revoke)…');

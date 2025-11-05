@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { PayrollMultiPartyTestSetup } from './payroll-setup-multi.js';
-import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus, PaymentStatus, PermissionType } from '../types.js';
+import { EmploymentStatus, RecurringPaymentFrequency, RecurringPaymentStatus, PaymentStatus, PaymentType, PermissionType } from '../types.js';
 import { stringToBytes32 } from './utils.js';
 
 describe('zkSalaria Multi-Party Privacy Tests', () => {
@@ -2444,6 +2444,104 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       }
 
       console.log('✅ Empty payment records have status = 0 (PENDING)');
+    });
+  });
+
+  describe('Payment Type Tracking', () => {
+    test('should store and track different payment types (SALARY, ADVANCE, BONUS)', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Payment Type Corp', 'COMP_TYPE_001');
+
+      // Setup: Add employee and deposit funds
+      payroll.addEmployee('EMP_TYPE_001');
+      payroll.depositCompanyFunds(50000n);
+
+      // Make 3 payments with different types
+      payroll.payEmployee('EMP_TYPE_001', 5000n, Number(PaymentType.SALARY));
+      payroll.payEmployee('EMP_TYPE_001', 1000n, Number(PaymentType.ADVANCE));
+      payroll.payEmployee('EMP_TYPE_001', 500n, Number(PaymentType.BONUS));
+
+      const ledger = payroll.getLedgerState();
+      const empId = stringToBytes32('EMP_TYPE_001');
+      const history = ledger.employee_payment_history.lookup(empId);
+
+      // Filter out empty payment records (timestamp = 0)
+      const payments = history.filter(p => p.timestamp > 0n);
+      expect(payments.length).toBe(3);
+
+      // Verify each payment has correct payment_type
+      expect(payments[0].payment_type).toBe(PaymentType.SALARY);   // 0n
+      expect(payments[1].payment_type).toBe(PaymentType.ADVANCE);  // 1n
+      expect(payments[2].payment_type).toBe(PaymentType.BONUS);    // 2n
+
+      // Verify amounts are correctly encrypted and retrievable
+      const amount1 = payroll.decryptPaymentAmount(payments[0].encrypted_amount);
+      const amount2 = payroll.decryptPaymentAmount(payments[1].encrypted_amount);
+      const amount3 = payroll.decryptPaymentAmount(payments[2].encrypted_amount);
+
+      expect(amount1).toBe(5000n);
+      expect(amount2).toBe(1000n);
+      expect(amount3).toBe(500n);
+
+      console.log('✅ Payment types verified: SALARY (0), ADVANCE (1), BONUS (2)');
+    });
+
+    test('should default to SALARY when payment type not specified', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Default Type Corp', 'COMP_TYPE_002');
+
+      payroll.addEmployee('EMP_TYPE_002');
+      payroll.depositCompanyFunds(10000n);
+
+      // Make payment without specifying type (uses default = 0 = SALARY)
+      payroll.payEmployee('EMP_TYPE_002', 3000n);
+
+      const ledger = payroll.getLedgerState();
+      const empId = stringToBytes32('EMP_TYPE_002');
+      const history = ledger.employee_payment_history.lookup(empId);
+
+      const payments = history.filter(p => p.timestamp > 0n);
+      expect(payments.length).toBe(1);
+      expect(payments[0].payment_type).toBe(PaymentType.SALARY); // Default to SALARY
+
+      console.log('✅ Default payment type verified as SALARY (0)');
+    });
+
+    test('should track mixed payment types for multiple employees', () => {
+      const payroll = new PayrollMultiPartyTestSetup('Multi Employee Type Corp', 'COMP_TYPE_003');
+
+      // Setup multiple employees
+      payroll.addEmployee('EMP_TYPE_A');
+      payroll.addEmployee('EMP_TYPE_B');
+      payroll.depositCompanyFunds(100000n);
+
+      // Employee A: SALARY + BONUS
+      payroll.payEmployee('EMP_TYPE_A', 5000n, Number(PaymentType.SALARY));
+      payroll.payEmployee('EMP_TYPE_A', 2000n, Number(PaymentType.BONUS));
+
+      // Employee B: ADVANCE + SALARY
+      payroll.payEmployee('EMP_TYPE_B', 1000n, Number(PaymentType.ADVANCE));
+      payroll.payEmployee('EMP_TYPE_B', 6000n, Number(PaymentType.SALARY));
+
+      const ledger = payroll.getLedgerState();
+
+      // Verify Employee A payment types
+      const empAId = stringToBytes32('EMP_TYPE_A');
+      const historyA = ledger.employee_payment_history.lookup(empAId);
+      const paymentsA = historyA.filter(p => p.timestamp > 0n);
+
+      expect(paymentsA.length).toBe(2);
+      expect(paymentsA[0].payment_type).toBe(PaymentType.SALARY);
+      expect(paymentsA[1].payment_type).toBe(PaymentType.BONUS);
+
+      // Verify Employee B payment types
+      const empBId = stringToBytes32('EMP_TYPE_B');
+      const historyB = ledger.employee_payment_history.lookup(empBId);
+      const paymentsB = historyB.filter(p => p.timestamp > 0n);
+
+      expect(paymentsB.length).toBe(2);
+      expect(paymentsB[0].payment_type).toBe(PaymentType.ADVANCE);
+      expect(paymentsB[1].payment_type).toBe(PaymentType.SALARY);
+
+      console.log('✅ Mixed payment types verified for multiple employees');
     });
   });
 });

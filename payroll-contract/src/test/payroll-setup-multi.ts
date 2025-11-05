@@ -156,17 +156,19 @@ export class PayrollMultiPartyTestSetup {
   }
 
   // Test method: Pay employee (executed by company participant)
-  payEmployee(employeeId: string, amount: bigint): Ledger {
-    console.log(`💸 ${this.companyName} paying employee ${employeeId}: ${amount} tokens`);
+  payEmployee(employeeId: string, amount: bigint, paymentType: number = 0): Ledger {
+    const typeLabel = paymentType === 0 ? 'SALARY' : paymentType === 1 ? 'ADVANCE' : 'BONUS';
+    console.log(`💸 ${this.companyName} paying employee ${employeeId}: ${amount} tokens (${typeLabel})`);
 
     const employeeIdBytes = stringToBytes32(employeeId);
 
     // Execute circuit first, then update trackers only on success
     this.executeAsParticipant(
       this.companyId,
-      (ctx, eidBytes, amt) => this.contract.impureCircuits.pay_employee(ctx, eidBytes, amt),
+      (ctx, eidBytes, amt, pType) => this.contract.impureCircuits.pay_employee(ctx, eidBytes, amt, pType),
       employeeIdBytes,
-      amount
+      amount,
+      BigInt(paymentType)
     );
 
     // Track allocation: total_supply unchanged, allocated_to_employees increases

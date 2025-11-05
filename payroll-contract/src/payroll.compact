@@ -280,11 +280,18 @@ export circuit withdraw_employee_salary(
 // NOTE: Only this contract's company can pay (enforced at API layer)
 export circuit pay_employee(
   employee_id: Bytes<32>,
-  salary_amount: Uint<64>
+  salary_amount: Uint<64>,
+  payment_type: Uint<8>  // 0=SALARY, 1=ADVANCE, 2=BONUS
 ): [] {
   // Verify employee exists
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
   assert(disclose(salary_amount) > 0 as Uint<64>, "Amount must be positive");
+
+  // Validate payment_type (0=SALARY, 1=ADVANCE, 2=BONUS)
+  const is_valid_type = (disclose(payment_type) == PC_PAYMENT_TYPE_SALARY()) ||
+                        (disclose(payment_type) == PC_PAYMENT_TYPE_ADVANCE()) ||
+                        (disclose(payment_type) == PC_PAYMENT_TYPE_BONUS());
+  assert(is_valid_type, "Invalid payment type");
 
   // Calculate available budget (total_supply - allocated_to_employees)
   assert(total_supply >= allocated_to_employees, "Accounting error: allocated exceeds supply");
@@ -337,7 +344,7 @@ export circuit pay_employee(
     current_timestamp,
     encrypted_payment_amount,  // Encrypted amount (not plain text!)
     company_id,  // This contract's company ID (from ledger)
-    PC_PAYMENT_TYPE_SALARY(),
+    disclose(payment_type),  // Use provided payment type (0=SALARY, 1=ADVANCE, 2=BONUS)
     PC_PAYMENT_STATUS_COMPLETED()  // Payment successful
   );
 

@@ -172,6 +172,16 @@ describe('PayrollAPI', () => {
       logger.info('Withdrawing employee salary…');
       await employeeAPI.withdrawEmployeeSalary(employeeId, '2500.00');
 
+      // Verify withdrawal history was logged
+      logger.info('Checking withdrawal history…');
+      const withdrawalHistory = await employeeAPI.getWithdrawalHistory();
+      expect(withdrawalHistory.length).toBe(1);
+      expect(withdrawalHistory[0].employee_id).toBe(employeeId);
+      expect(withdrawalHistory[0].amount).toBe(2500_00n); // 2500.00 in atomic units
+      expect(withdrawalHistory[0].withdrawal_id).toBeDefined();
+      expect(withdrawalHistory[0].timestamp).toBeInstanceOf(Date);
+      logger.info('✅ Withdrawal history verified');
+
       logger.info('✅ Full lifecycle test completed successfully');
     }, 5 * 60_000); // 5 minute timeout
 
