@@ -24,6 +24,7 @@ import {
   createGlassMorphism,
 } from '../theme';
 import { UseCasesSection } from '../components/landing/UseCasesSection';
+import { FeaturesSection } from '../components/landing/FeaturesSection';
 import { ThemeToggle } from '../components';
 
 /**
@@ -278,6 +279,9 @@ export const LandingPage: React.FC = () => {
 
       {/* Section 2: Use Cases */}
       <UseCasesSection />
+
+      {/* Section 3: Features */}
+      <FeaturesSection />
     </Box>
   );
 };
