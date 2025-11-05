@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { LandingPage, ConnectWalletPage, DashboardPage } from './pages';
+import { LandingPage, SampleThemePage, ConnectWalletPage, DashboardPage } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
@@ -20,6 +20,9 @@ export const App: React.FC = () => {
       <Routes>
         {/* Landing page */}
         <Route path="/" element={<LandingPage />} />
+
+        {/* Theme Playground */}
+        <Route path="/theme-playground" element={<SampleThemePage />} />
 
         {/* Wallet connection */}
         <Route path="/connect" element={<ConnectWalletPage />} />

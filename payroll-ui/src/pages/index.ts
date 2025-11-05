@@ -4,5 +4,6 @@
  */
 
 export { LandingPage } from './LandingPage';
+export { SampleThemePage } from './SampleThemePage';
 export { ConnectWalletPage } from './ConnectWalletPage';
 export { DashboardPage } from './DashboardPage';
