@@ -38,6 +38,18 @@ export {
   colors,
   createFocusRingStyles,
   createHoverStyles,
+  // Advanced pattern utilities
+  createGradientBackground,
+  createAnimatedGradient,
+  createGradientText,
+  createAccentShadow,
+  createGlassMorphism,
+  createGlowEffect,
+  createTextShadow,
+  createPrimaryCTA,
+  createFloatingBadge,
+  createMeshGradient,
+  createGridPattern,
 } from './utils';
 
 // Material-UI theme integration

@@ -6,9 +6,9 @@ import { midnightDarkTheme } from './themes/midnight-dark';
  * Creates a Material-UI theme from our Midnight theme
  */
 export const createMuiThemeFromMidnight = (theme: MidnightCompleteTheme = midnightDarkTheme): MuiTheme => {
-  // Determine theme mode based on background color
-  const isDark = theme.colors.background.default === '#0a0a0a' || theme.colors.background.default.startsWith('#0') || theme.colors.background.default.startsWith('#1');
-  
+  // Determine theme mode based on background color (dark navy #13151f or pure white #ffffff)
+  const isDark = theme.colors.background.default !== '#ffffff';
+
   return createTheme({
     palette: {
       mode: isDark ? 'dark' : 'light',

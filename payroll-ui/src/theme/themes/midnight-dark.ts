@@ -1,40 +1,40 @@
-// MidnightPay Dark Theme - Privacy-First Payment Gateway
-// Deep dark theme with black/charcoal accents and purple highlights for payment UI
+// zkSalaria Dark Theme - Privacy-Preserving Payroll
+// Modern fintech theme with teal/cyan accents and dark navy backgrounds
 
 import type { MidnightCompleteTheme } from '../types';
 
 export const midnightDarkTheme: MidnightCompleteTheme = {
-  name: 'MidnightPay Dark',
-  
+  name: 'zkSalaria Dark',
+
   colors: {
-    // Primary colors - Deep blacks and charcoals (as requested - black instead of blue)
+    // Primary colors - Teal/Cyan (Modern Fintech Brand Color)
     primary: {
-      50: '#f8fafc',   // Very light gray (for text on dark backgrounds)
-      100: '#f1f5f9',  // Light gray
-      200: '#e2e8f0',  // Lighter gray
-      300: '#cbd5e1',  // Medium light gray
-      400: '#94a3b8',  // Medium gray
-      500: '#1a1a1a',  // Main primary - Deep black/charcoal
-      600: '#0f0f0f',  // Darker black
-      700: '#000000',  // Pure black
-      800: '#000000',  // Pure black
-      900: '#000000',  // Pure black
-      950: '#000000',  // Pure black
+      50: '#f0fdfa',   // Very light teal tint
+      100: '#ccfbf1',  // Light teal tint
+      200: '#99f6e4',  // Lighter teal
+      300: '#5eead4',  // Light teal
+      400: '#2dd4bf',  // Medium light teal (main for dark mode)
+      500: '#14b8a6',  // Main teal (Tailwind teal-500)
+      600: '#0d9488',  // Darker teal
+      700: '#0f766e',  // Deep teal
+      800: '#115e59',  // Very dark teal
+      900: '#134e4a',  // Darkest teal
+      950: '#0f3d39',  // Almost black teal
     },
-    
-    // Secondary colors - Deep purples (Midnight protocol inspired)
+
+    // Secondary colors - Charcoal/Gray (Neutral UI Elements)
     secondary: {
-      50: '#faf5ff',   // Very light purple
-      100: '#f3e8ff',  // Light purple
-      200: '#e9d5ff',  // Lighter purple
-      300: '#d8b4fe',  // Medium light purple
-      400: '#c084fc',  // Medium purple
-      500: '#8b5cf6',  // Main secondary - Deep purple
-      600: '#7c3aed',  // Darker purple
-      700: '#6d28d9',  // Deep purple
-      800: '#5b21b6',  // Very deep purple
-      900: '#4c1d95',  // Darkest purple
-      950: '#2e1065',  // Almost black purple
+      50: '#f9fafb',   // Very light gray
+      100: '#f3f4f6',  // Light gray
+      200: '#e5e7eb',  // Lighter gray
+      300: '#d1d5db',  // Light gray
+      400: '#9ca3af',  // Medium gray
+      500: '#6b7280',  // Gray
+      600: '#4b5563',  // Dark gray
+      700: '#374151',  // Darker gray
+      800: '#1f2937',  // Dark slate
+      900: '#1a1d29',  // Dark navy
+      950: '#13151f',  // Darkest navy (not pure black)
     },
     
     // Semantic colors - Dark theme variants
@@ -62,36 +62,36 @@ export const midnightDarkTheme: MidnightCompleteTheme = {
       700: '#1d4ed8',  // Dark info blue
     },
     
-    // Background colors - Deep dark theme
+    // Background colors - Dark navy (Sablier-inspired, not pure black)
     background: {
-      default: '#0a0a0a',    // Almost black background
-      paper: '#111111',      // Slightly lighter for cards/surfaces
-      surface: '#1a1a1a',    // Surface elements
-      elevated: '#2a2a2a',   // Elevated components (modals, etc.)
+      default: '#13151f',    // Darkest navy background (not pure black)
+      paper: '#1a1d29',      // Dark navy for cards/surfaces
+      surface: '#242835',    // Lighter surface elements
+      elevated: '#2d3140',   // Elevated components (modals, etc.)
     },
-    
-    // Text colors - ENHANCED CONTRAST for accessibility
+
+    // Text colors - High contrast on dark navy
     text: {
-      primary: '#ffffff',     // Pure white for primary text
-      secondary: '#d1d5db',   // Much lighter gray for secondary text  
-      disabled: '#9ca3af',    // Lighter gray for disabled text (still accessible)
-      inverse: '#000000',     // Pure black text (for use on light backgrounds)
+      primary: '#f8f9fa',     // Very light gray for primary text
+      secondary: '#a8adb7',   // Medium light gray for secondary text
+      disabled: '#6b7280',    // Medium gray for disabled text
+      inverse: '#13151f',     // Dark navy (for use on light backgrounds)
     },
-    
-    // Border and divider colors - ENHANCED CONTRAST
+
+    // Border and divider colors - Visible on dark navy
     border: {
-      default: '#6b7280',     // Much lighter border - clearly visible
-      light: '#4b5563',       // Medium border - still visible
-      strong: '#9ca3af',      // Very strong border - high contrast
+      default: '#363b4d',     // Medium border - visible on dark navy
+      light: '#2a2f3e',       // Subtle border
+      strong: '#4b5563',      // Strong border - high contrast
     },
-    
-    // Action colors (hover, focus, etc.) - ENHANCED CONTRAST
+
+    // Action colors (hover, focus, etc.)
     action: {
-      hover: 'rgba(255, 255, 255, 0.08)',           // More visible white hover
-      selected: 'rgba(255, 255, 255, 0.15)',        // Lighter selected state
-      disabled: 'rgba(255, 255, 255, 0.38)',        // Stronger disabled state
-      disabledBackground: 'rgba(255, 255, 255, 0.12)', // More visible disabled background
-      focus: 'rgba(255, 255, 255, 0.2)',            // Strong focus ring
+      hover: 'rgba(255, 255, 255, 0.08)',           // Subtle white hover
+      selected: 'rgba(45, 212, 191, 0.15)',         // Teal selected state
+      disabled: 'rgba(255, 255, 255, 0.38)',        // Disabled state
+      disabledBackground: 'rgba(255, 255, 255, 0.12)', // Disabled background
+      focus: 'rgba(45, 212, 191, 0.4)',             // Teal focus ring
     },
   },
   
@@ -188,40 +188,40 @@ export const midnightDarkTheme: MidnightCompleteTheme = {
   components: {
     button: {
       primary: {
-        background: '#1a1a1a',        // Dark black/charcoal (as requested)
-        backgroundHover: '#2a2a2a',   // Slightly lighter on hover
-        backgroundActive: '#0f0f0f',  // Darker on active
+        background: 'linear-gradient(135deg, #2dd4bf 0%, #0d9488 100%)', // Teal gradient
+        backgroundHover: 'linear-gradient(135deg, #5eead4 0%, #14b8a6 100%)', // Lighter teal on hover
+        backgroundActive: 'linear-gradient(135deg, #14b8a6 0%, #0f766e 100%)', // Darker teal on active
         text: '#ffffff',              // White text
-        border: '#3f3f46',            // Medium gray border
+        border: '#2dd4bf',            // Teal border
       },
       secondary: {
-        background: '#8b5cf6',        // Purple secondary
-        backgroundHover: '#7c3aed',   // Darker purple on hover  
-        backgroundActive: '#6d28d9',  // Even darker on active
-        text: '#ffffff',              // White text
-        border: '#8b5cf6',            // Same as background
+        background: '#242835',        // Dark navy secondary
+        backgroundHover: '#2d3140',   // Slightly lighter on hover
+        backgroundActive: '#1a1d29',  // Darker on active
+        text: '#f8f9fa',              // Light text
+        border: '#363b4d',            // Medium border
       },
       outlined: {
         background: 'transparent',    // Transparent background
-        backgroundHover: 'rgba(26, 26, 26, 0.04)', // Subtle hover
-        backgroundActive: 'rgba(26, 26, 26, 0.08)', // Subtle active
-        text: '#ffffff',              // White text
-        border: '#3f3f46',            // Medium gray border
+        backgroundHover: 'rgba(45, 212, 191, 0.08)', // Teal hover tint
+        backgroundActive: 'rgba(45, 212, 191, 0.15)', // Teal active tint
+        text: '#2dd4bf',              // Teal text
+        border: '#2dd4bf',            // Teal border
       },
     },
-    
+
     card: {
-      background: '#111111',          // Dark card background
-      border: '#27272a',              // Dark border
-      shadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)',
+      background: '#1a1d29',          // Dark navy card background
+      border: '#363b4d',              // Visible border on dark navy
+      shadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(45, 212, 191, 0.1)', // Multi-layer shadow with teal accent
     },
-    
+
     input: {
-      background: '#1a1a1a',          // Dark input background
-      border: '#3f3f46',              // Medium gray border
-      borderFocus: '#8b5cf6',         // Purple focus border
-      text: '#ffffff',                // White text
-      placeholder: '#71717a',         // Medium gray placeholder
+      background: '#242835',          // Slightly lighter navy for inputs
+      border: '#363b4d',              // Visible border
+      borderFocus: '#2dd4bf',         // Teal focus border
+      text: '#f8f9fa',                // Light text
+      placeholder: '#6b7280',         // Medium gray placeholder
     },
   },
 };

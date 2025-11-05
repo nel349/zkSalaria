@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
   Container,
@@ -16,75 +16,62 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
-
-/**
- * Teal/Cyan Color Palette (Modern Fintech)
- */
-const TEAL = {
-  50: '#f0fdfa',   // Very light teal tint
-  100: '#ccfbf1',  // Light teal tint
-  200: '#99f6e4',  // Lighter teal
-  300: '#5eead4',  // Light teal
-  400: '#2dd4bf',  // Medium light teal
-  500: '#14b8a6',  // Main teal (Tailwind teal-500)
-  600: '#0d9488',  // Darker teal
-  700: '#0f766e',  // Deep teal
-  800: '#115e59',  // Very dark teal
-  900: '#134e4a',  // Darkest teal
-};
-
-const CHARCOAL = {
-  50: '#f9fafb',   // Very light gray
-  100: '#f3f4f6',  // Light gray
-  200: '#e5e7eb',  // Lighter gray
-  300: '#d1d5db',  // Light gray
-  400: '#9ca3af',  // Medium gray
-  500: '#6b7280',  // Gray
-  600: '#4b5563',  // Dark gray
-  700: '#374151',  // Darker gray
-  800: '#1f2937',  // Dark slate (like Sablier)
-  900: '#1a1d29',  // Dark navy (Sablier-inspired)
-  950: '#13151f',  // Darkest navy (not pure black)
-};
+import {
+  useTheme,
+  useThemeValues,
+  createMeshGradient,
+  createGridPattern,
+  createFloatingBadge,
+  createGradientText,
+  createTextShadow,
+  createGlowEffect,
+  createPrimaryCTA,
+  createGlassMorphism,
+  createAccentShadow,
+} from '../theme';
 
 /**
  * Sample Theme Playground for zkSalaria
- * Used to test and showcase different theme variations
+ * Now uses the formalized theme system from @zkSalaria/payroll-ui/src/theme/
  * Based on Teal/Cyan × Charcoal color scheme
  *
  * Access via: /theme-playground
  */
 export const SampleThemePage: React.FC = () => {
   const navigate = useNavigate();
-  const [isDark, setIsDark] = useState(true);
+  const { mode, toggleTheme } = useTheme();
+  const formalTheme = useThemeValues();
 
   const handleGetStarted = () => {
     navigate('/connect');
   };
 
-  // Theme colors based on mode - Teal/Cyan for modern fintech
+  const isDark = mode === 'dark';
+
+  // Map formalized theme to component structure
   const theme = {
     bg: {
-      default: isDark ? '#13151f' : '#ffffff',        // Dark navy instead of black
-      paper: isDark ? '#1a1d29' : CHARCOAL[50],       // Slightly lighter navy
-      surface: isDark ? '#242835' : CHARCOAL[100],    // Lighter for better contrast
-      elevated: isDark ? '#2d3140' : CHARCOAL[200],   // Elevated elements
+      default: formalTheme.colors.background.default,
+      paper: formalTheme.colors.background.paper,
+      surface: formalTheme.colors.background.surface,
+      elevated: formalTheme.colors.background.elevated,
     },
     text: {
-      primary: isDark ? '#f8f9fa' : CHARCOAL[900],
-      secondary: isDark ? '#a8adb7' : CHARCOAL[600],
-      tertiary: isDark ? '#6b7280' : CHARCOAL[500],
-      inverse: isDark ? CHARCOAL[900] : '#ffffff',
+      primary: formalTheme.colors.text.primary,
+      secondary: formalTheme.colors.text.secondary,
+      tertiary: formalTheme.colors.text.disabled,
+      inverse: formalTheme.colors.text.inverse,
     },
-    border: isDark ? '#363b4d' : CHARCOAL[300],       // Lighter borders for visibility
-    borderLight: isDark ? '#2a2f3e' : CHARCOAL[200],
+    border: formalTheme.colors.border.default,
+    borderLight: formalTheme.colors.border.light,
     accent: {
-      primary: isDark ? TEAL[400] : TEAL[600],     // Bright teal for dark mode
-      light: isDark ? TEAL[300] : TEAL[500],
-      lighter: isDark ? TEAL[200] : TEAL[400],
-      dark: isDark ? TEAL[500] : TEAL[700],
-      darker: isDark ? TEAL[600] : TEAL[800],
+      primary: isDark ? formalTheme.colors.primary[400] : formalTheme.colors.primary[600],
+      light: isDark ? formalTheme.colors.primary[300] : formalTheme.colors.primary[500],
+      lighter: isDark ? formalTheme.colors.primary[200] : formalTheme.colors.primary[400],
+      dark: isDark ? formalTheme.colors.primary[500] : formalTheme.colors.primary[700],
+      darker: isDark ? formalTheme.colors.primary[600] : formalTheme.colors.primary[800],
     },
+    charcoal: formalTheme.colors.secondary,
   };
 
   return (
@@ -101,50 +88,10 @@ export const SampleThemePage: React.FC = () => {
       }}
     >
       {/* Animated Mesh Gradient Background - Sablier style */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 0,
-          opacity: isDark ? 0.3 : 0.25,
-          background: isDark
-            ? `radial-gradient(ellipse at 20% 20%, ${theme.accent.primary}25 0%, transparent 50%),
-               radial-gradient(ellipse at 80% 80%, ${theme.accent.dark}20 0%, transparent 50%),
-               radial-gradient(ellipse at 50% 100%, #2d314060 0%, transparent 50%)`
-            : `radial-gradient(ellipse at 20% 20%, ${theme.accent.lighter}20 0%, transparent 50%),
-               radial-gradient(ellipse at 80% 80%, ${theme.accent.light}15 0%, transparent 50%),
-               radial-gradient(ellipse at 50% 50%, ${CHARCOAL[200]}30 0%, transparent 50%)`,
-          filter: 'blur(100px)',
-          animation: 'meshGradient 20s ease infinite',
-          '@keyframes meshGradient': {
-            '0%, 100%': { transform: 'scale(1) rotate(0deg)' },
-            '50%': { transform: 'scale(1.05) rotate(3deg)' },
-          },
-        }}
-      />
+      <Box sx={createMeshGradient(formalTheme, mode)} />
 
       {/* Subtle Grid Pattern - Sablier style */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 1,
-          opacity: isDark ? 0.02 : 0.015,
-          backgroundImage: isDark
-            ? `linear-gradient(${theme.border} 1px, transparent 1px),
-               linear-gradient(90deg, ${theme.border} 1px, transparent 1px)`
-            : `linear-gradient(${CHARCOAL[200]} 1px, transparent 1px),
-               linear-gradient(90deg, ${CHARCOAL[200]} 1px, transparent 1px)`,
-          backgroundSize: '50px 50px',
-          pointerEvents: 'none',
-        }}
-      />
+      <Box sx={createGridPattern(formalTheme, mode)} />
 
       {/* Theme Toggle */}
       <Box sx={{ position: 'fixed', top: 20, right: 20, zIndex: 1000 }}>
@@ -161,7 +108,7 @@ export const SampleThemePage: React.FC = () => {
             }}
           />
           <IconButton
-            onClick={() => setIsDark(!isDark)}
+            onClick={toggleTheme}
             sx={{
               bgcolor: isDark ? `${theme.bg.surface}cc` : `${theme.bg.paper}cc`,
               backdropFilter: 'blur(10px)',
@@ -185,23 +132,7 @@ export const SampleThemePage: React.FC = () => {
           {/* Hero Text */}
           <Stack spacing={4} maxWidth="md">
             {/* Floating Badge */}
-            <Box
-              sx={{
-                display: 'inline-flex',
-                alignSelf: 'center',
-                px: 3,
-                py: 1,
-                borderRadius: '50px',
-                bgcolor: isDark ? `${theme.accent.primary}15` : `${theme.accent.primary}10`,
-                border: `1px solid ${theme.accent.primary}40`,
-                backdropFilter: 'blur(10px)',
-                animation: 'float 3s ease-in-out infinite',
-                '@keyframes float': {
-                  '0%, 100%': { transform: 'translateY(0px)' },
-                  '50%': { transform: 'translateY(-10px)' },
-                },
-              }}
-            >
+            <Box sx={createFloatingBadge(formalTheme, mode)}>
               <Typography
                 variant="caption"
                 sx={{
@@ -222,18 +153,9 @@ export const SampleThemePage: React.FC = () => {
               component="h1"
               fontWeight="extrabold"
               sx={{
+                ...createGradientText(formalTheme, mode),
                 fontSize: { xs: '3rem', md: '4.5rem' },
-                background: `linear-gradient(135deg, ${theme.accent.light} 0%, ${theme.accent.primary} 50%, ${theme.accent.darker} 100%)`,
-                backgroundSize: '200% 200%',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                animation: 'gradientShift 8s ease infinite',
-                '@keyframes gradientShift': {
-                  '0%, 100%': { backgroundPosition: '0% 50%' },
-                  '50%': { backgroundPosition: '100% 50%' },
-                },
-                textShadow: `0 0 80px ${theme.accent.primary}40`,
+                textShadow: createTextShadow(formalTheme, mode, 'md'),
                 letterSpacing: '-0.02em',
               }}
             >
@@ -268,46 +190,12 @@ export const SampleThemePage: React.FC = () => {
           {/* CTA Button with Glow */}
           <Box sx={{ position: 'relative' }}>
             {/* Glow effect */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '120%',
-                height: '120%',
-                background: `radial-gradient(circle, ${theme.accent.primary}60, transparent 70%)`,
-                filter: 'blur(20px)',
-                opacity: 0.6,
-                animation: 'pulse 2s ease-in-out infinite',
-                '@keyframes pulse': {
-                  '0%, 100%': { opacity: 0.6, transform: 'translate(-50%, -50%) scale(1)' },
-                  '50%': { opacity: 0.8, transform: 'translate(-50%, -50%) scale(1.1)' },
-                },
-              }}
-            />
+            <Box sx={createGlowEffect(formalTheme, mode)} />
             <Button
               variant="contained"
               size="large"
               onClick={handleGetStarted}
-              sx={{
-                position: 'relative',
-                px: 8,
-                py: 2.5,
-                fontSize: '1.2rem',
-                fontWeight: 'bold',
-                borderRadius: '50px',
-                background: `linear-gradient(135deg, ${theme.accent.primary} 0%, ${theme.accent.dark} 100%)`,
-                color: 'white',
-                boxShadow: `0 10px 40px ${theme.accent.primary}60, 0 0 0 1px ${theme.accent.primary}40`,
-                border: `1px solid ${theme.accent.light}60`,
-                '&:hover': {
-                  background: `linear-gradient(135deg, ${theme.accent.lighter} 0%, ${theme.accent.primary} 100%)`,
-                  transform: 'translateY(-4px) scale(1.02)',
-                  boxShadow: `0 20px 60px ${theme.accent.primary}80, 0 0 20px ${theme.accent.primary}40`,
-                },
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
+              sx={createPrimaryCTA(formalTheme, mode)}
             >
               Open App →
             </Button>
@@ -316,16 +204,11 @@ export const SampleThemePage: React.FC = () => {
           {/* Color Palette Showcase */}
           <Box
             sx={{
+              ...createGlassMorphism(formalTheme, mode),
               width: '100%',
               mt: 8,
               p: 6,
               borderRadius: 3,
-              bgcolor: isDark ? theme.bg.paper : `${theme.bg.paper}cc`,
-              backdropFilter: 'blur(20px)',
-              border: `1px solid ${theme.border}`,
-              boxShadow: isDark
-                ? `0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px ${theme.borderLight}`
-                : `0 4px 24px rgba(0, 0, 0, 0.06), 0 0 0 1px ${theme.border}`,
             }}
           >
             <Typography
@@ -368,7 +251,7 @@ export const SampleThemePage: React.FC = () => {
                 {/* Charcoal */}
                 <Button
                   variant="contained"
-                  sx={{ bgcolor: CHARCOAL[900], color: 'white', '&:hover': { bgcolor: CHARCOAL[800] } }}
+                  sx={{ bgcolor: theme.charcoal[900], color: 'white', '&:hover': { bgcolor: theme.charcoal[800] } }}
                 >
                   Generate ZK Proof
                 </Button>
@@ -414,7 +297,7 @@ export const SampleThemePage: React.FC = () => {
                     border: 'none',
                     position: 'relative',
                     overflow: 'hidden',
-                    boxShadow: `0 8px 32px ${theme.accent.primary}50, 0 0 0 1px ${theme.accent.primary}30`,
+                    boxShadow: createAccentShadow(formalTheme, mode, 'md'),
                     '&::before': {
                       content: '""',
                       position: 'absolute',
@@ -438,19 +321,26 @@ export const SampleThemePage: React.FC = () => {
                   </CardContent>
                 </Card>
 
-                {/* Dark Navy - Secondary */}
+                {/* Dark Navy/Light Gray - Secondary */}
                 <Card
                   sx={{
                     flex: 1,
-                    background: `linear-gradient(135deg, #1a1d29 0%, #20232e 100%)`,
-                    color: 'white',
-                    border: 'none',
+                    background: isDark
+                      ? `linear-gradient(135deg, ${theme.bg.paper} 0%, ${theme.bg.surface} 100%)`
+                      : `linear-gradient(135deg, ${theme.charcoal[100]} 0%, ${theme.charcoal[200]} 100%)`,
+                    color: isDark ? 'white' : theme.charcoal[900],
+                    border: isDark ? `2px solid ${theme.border}` : 'none',
                     position: 'relative',
                     overflow: 'hidden',
+                    boxShadow: isDark
+                      ? `0 4px 16px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.1)`
+                      : `0 4px 16px rgba(0, 0, 0, 0.1)`,
                   }}
                 >
                   <CardContent>
-                    <Typography variant="h6" fontWeight="bold">Dark Navy (#1a1d29)</Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {isDark ? `Dark Navy (${theme.bg.paper})` : `Light Gray (${theme.charcoal[100]})`}
+                    </Typography>
                     <Typography variant="body2" sx={{ opacity: 0.9 }}>Backgrounds • Cards • Depth</Typography>
                   </CardContent>
                 </Card>
@@ -464,7 +354,7 @@ export const SampleThemePage: React.FC = () => {
                     border: 'none',
                     position: 'relative',
                     overflow: 'hidden',
-                    boxShadow: `0 8px 32px ${theme.accent.lighter}40`,
+                    boxShadow: createAccentShadow(formalTheme, mode, 'md'),
                   }}
                 >
                   <CardContent>
@@ -490,7 +380,7 @@ export const SampleThemePage: React.FC = () => {
                 <Box sx={{ px: 3, py: 1.5, bgcolor: '#f59e0b', color: 'white', borderRadius: 1 }}>
                   ⚠ Pending Approval
                 </Box>
-                <Box sx={{ px: 3, py: 1.5, bgcolor: CHARCOAL[900], color: 'white', borderRadius: 1 }}>
+                <Box sx={{ px: 3, py: 1.5, bgcolor: theme.charcoal[900], color: 'white', borderRadius: 1 }}>
                   🔒 Encrypted
                 </Box>
               </Stack>
@@ -607,9 +497,9 @@ export const SampleThemePage: React.FC = () => {
                         sx={{
                           width: 10,
                           height: 10,
-                          bgcolor: CHARCOAL[600],
+                          bgcolor: theme.charcoal[600],
                           borderRadius: '50%',
-                          border: `2px solid ${CHARCOAL[400]}`,
+                          border: `2px solid ${theme.charcoal[400]}`,
                         }}
                       />
                       <Typography variant="caption" fontWeight="bold" color={theme.text.secondary}>
@@ -628,11 +518,11 @@ export const SampleThemePage: React.FC = () => {
                       size="small"
                       sx={{
                         mt: 2,
-                        background: `linear-gradient(135deg, ${CHARCOAL[900]}, ${CHARCOAL[800]})`,
+                        background: `linear-gradient(135deg, ${theme.charcoal[900]}, ${theme.charcoal[800]})`,
                         color: 'white',
-                        fontWeight: 'bold',
+                fontWeight: 'bold',
                         '&:hover': {
-                          background: `linear-gradient(135deg, ${CHARCOAL[800]}, ${CHARCOAL[700]})`,
+                          background: `linear-gradient(135deg, ${theme.charcoal[800]}, ${theme.charcoal[700]})`,
                           transform: 'scale(1.02)',
                         },
                         transition: 'all 0.2s ease',
