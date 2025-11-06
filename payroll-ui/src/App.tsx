@@ -3,37 +3,42 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LandingPage, SampleThemePage, ConnectWalletPage, DashboardPage } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
 
 /**
  * Main App component with routing configuration
+ * Phase 1.2: Added PayrollWalletProvider for wallet connection
+ *
  * Follows best practice:
  * - Centralized routing in one place
  * - Clean separation of concerns
- * - Minimal setup for now (providers to be added later)
+ * - Wallet context wraps the entire app for global access
  */
 export const App: React.FC = () => {
   const cfg = useRuntimeConfiguration();
   setNetworkId((cfg.NETWORK_ID as NetworkId) ?? NetworkId.Undeployed);
 
   return (
-    <BrowserRouter basename="/">
-      <Routes>
-        {/* Landing page */}
-        <Route path="/" element={<LandingPage />} />
+    <PayrollWalletProvider>
+      <BrowserRouter basename="/">
+        <Routes>
+          {/* Landing page */}
+          <Route path="/" element={<LandingPage />} />
 
-        {/* Theme Playground */}
-        <Route path="/theme-playground" element={<SampleThemePage />} />
+          {/* Theme Playground */}
+          <Route path="/theme-playground" element={<SampleThemePage />} />
 
-        {/* Wallet connection */}
-        <Route path="/connect" element={<ConnectWalletPage />} />
+          {/* Wallet connection */}
+          <Route path="/connect" element={<ConnectWalletPage />} />
 
-        {/* Dashboard (company or employee) */}
-        <Route path="/dashboard" element={<DashboardPage />} />
+          {/* Dashboard (company or employee) */}
+          <Route path="/dashboard" element={<DashboardPage />} />
 
-        {/* Catch all - redirect to home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Catch all - redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </PayrollWalletProvider>
   );
 };
 
