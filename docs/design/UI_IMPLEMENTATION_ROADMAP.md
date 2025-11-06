@@ -100,25 +100,37 @@ This document provides a **complete implementation roadmap** for the zkSalaria U
   - ✅ Role detection service
   - ✅ Routing logic (redirect to correct page)
 
-#### 1.4 Company Onboarding Wizard (`/onboard/company`)
-- **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Pages 3-5)
-- **Screens:**
-  - Step 1: Company registration form
-  - Step 2: Fund payroll account
-  - Step 3: Add first employee
-  - Step 4: Setup recurring payment (optional)
-- **Components:**
-  - Multi-step wizard
-  - Form validation
-  - Success modals
-  - Progress indicator
-- **Backend API:**
-  - `PayrollAPI.deploy()`
-  - `depositCompanyFunds()`
-  - `addEmployee()`
-  - `createRecurringPayment()` (optional)
-- **Complexity:** 🔴 High (3 days)
-- **Critical:** ✅ MVP blocker
+#### 1.4 Company Onboarding Wizard (`/onboarding/company`) ✅ **COMPLETED**
+- **File Reference:** `AUTH_ONBOARDING_FLOW.md` (Pages 7, 7b, 7c)
+- **Status:** ✅ Shipped November 5, 2025
+- **Implementation:**
+  - Company registration form with validation
+  - Contract deployment (mock ready for integration)
+  - Quick start wizard with 3 optional steps
+  - Multi-step progress indicator (Stepper)
+  - Skip functionality for all optional steps
+  - Progress summary with completed items
+- **Components Built:**
+  - CompanyOnboardingPage.tsx (registration form)
+  - CompanyQuickStartPage.tsx (3-step wizard)
+  - Updated RoleSelectorPage to navigate to company onboarding
+  - Updated App.tsx with onboarding routes
+- **Wizard Steps:**
+  - Step 1: Fund payroll account (optional, can skip)
+  - Step 2: Add first employee (optional, can skip)
+  - Step 3: Setup recurring payment (optional, requires employee)
+  - All steps skippable → navigate to dashboard
+- **Form Validation:**
+  - Company name: Required, 2-100 characters
+  - Email: Required, valid format
+  - Terms: Must be checked
+  - Real-time error messages
+- **Backend API:** Mock implementation ready for:
+  - `PayrollAPI.deploy()` - Company creation
+  - `depositCompanyFunds()` - Account funding
+  - `addEmployee()` - Employee onboarding
+  - `createRecurringPayment()` - Recurring setup
+- **Data Persistence:** localStorage (temporary, ready for state management)
 
 #### 1.5 Employee Welcome Page (`/welcome`)
 - **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Page 6)

@@ -17,15 +17,13 @@ export const RoleSelectorPage: React.FC = () => {
 
   const handleCompanySelect = () => {
     console.log('[RoleSelector] User selected: Company');
-    // TODO: Navigate to company onboarding wizard (Phase 1.4)
-    alert('Company onboarding wizard - Coming in Phase 1.4!');
-    // navigate('/onboarding/company');
+    navigate('/onboarding/company');
   };
 
   const handleEmployeeSelect = () => {
     console.log('[RoleSelector] User selected: Employee');
-    // TODO: Navigate to employee welcome page (Phase 1.4)
-    alert('Employee welcome page - Coming in Phase 1.4!');
+    // TODO: Navigate to employee welcome page (Phase 1.5)
+    alert('Employee welcome page - Coming in Phase 1.5!');
     // navigate('/welcome');
   };
 

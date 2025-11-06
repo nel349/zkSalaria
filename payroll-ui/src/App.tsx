@@ -1,19 +1,30 @@
 import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { LandingPage, SampleThemePage, ConnectWalletPage, RoleDetectionPage, RoleSelectorPage, DashboardPage } from './pages';
+import {
+  LandingPage,
+  SampleThemePage,
+  ConnectWalletPage,
+  RoleDetectionPage,
+  RoleSelectorPage,
+  CompanyOnboardingPage,
+  CompanyQuickStartPage,
+  DashboardPage,
+} from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
 
 /**
  * Main App component with routing configuration
- * Phase 1.3: Added role detection flow
+ * Phase 1.4: Added company onboarding wizard
  *
  * Routing Flow:
  * / → Landing Page
  * /connect → Connect Wallet
  * /loading → Network Validation & Role Detection
  * /onboarding/role → Role Selector (new users)
+ * /onboarding/company → Company Registration Form
+ * /onboarding/company/quickstart → Quick Start Wizard (3 steps)
  * /dashboard → Dashboard (company or employee based on role)
  *
  * Follows best practice:
@@ -43,6 +54,10 @@ export const App: React.FC = () => {
 
           {/* Role selector (new users) */}
           <Route path="/onboarding/role" element={<RoleSelectorPage />} />
+
+          {/* Company onboarding */}
+          <Route path="/onboarding/company" element={<CompanyOnboardingPage />} />
+          <Route path="/onboarding/company/quickstart" element={<CompanyQuickStartPage />} />
 
           {/* Dashboard (company or employee) */}
           <Route path="/dashboard" element={<DashboardPage />} />
