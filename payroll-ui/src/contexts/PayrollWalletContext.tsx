@@ -16,6 +16,7 @@ import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
 import { Transaction, type CoinInfo, type TransactionId } from '@midnight-ntwrk/ledger';
 import { createBalancedTx, type BalancedTransaction, type UnbalancedTransaction } from '@midnight-ntwrk/midnight-js-types';
 import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { useRuntimeConfiguration } from '../config/RuntimeConfiguration';
 
 type AccountId = string;
 
@@ -39,13 +40,6 @@ export const usePayrollWallet = (): PayrollWalletState => {
   return context;
 };
 
-// Configuration - these should come from env variables in production
-const config = {
-  INDEXER_URI: import.meta.env.VITE_INDEXER_URI || 'https://indexer.testnet.midnight.network',
-  INDEXER_WS_URI: import.meta.env.VITE_INDEXER_WS_URI || 'wss://indexer.testnet.midnight.network',
-  PROOF_SERVER_URL: import.meta.env.VITE_PROOF_SERVER_URL || 'http://127.0.0.1:6300',
-};
-
 // Proof client using Midnight SDK
 const proofClient = (uri: string): ProofProvider<PayrollCircuitKeys> => {
   console.log(`[ProofClient] Initializing proof provider at ${uri}`);
@@ -53,6 +47,8 @@ const proofClient = (uri: string): ProofProvider<PayrollCircuitKeys> => {
 };
 
 export const PayrollWalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const config = useRuntimeConfiguration();
+
   // Providers (readonly baseline; connect Lace later to replace wallet/midnight providers)
   const privateStateProvider: PrivateStateProvider<AccountId, PayrollPrivateState> = useMemo(
     () => levelPrivateStateProvider({ privateStateStoreName: 'payroll-private-state' }),
@@ -89,7 +85,7 @@ export const PayrollWalletProvider: React.FC<{ children: React.ReactNode }> = ({
     // Priority 3: Fallback to localhost
     console.log(`[ProofProvider] Using localhost fallback proof server`);
     return proofClient('http://127.0.0.1:6300');
-  }, [walletAPI?.uris?.proverServerUri]);
+  }, [walletAPI?.uris?.proverServerUri, config.PROOF_SERVER_URL]);
 
   const [walletProvider, setWalletProvider] = useState<WalletProvider>({
     coinPublicKey: '',
@@ -112,10 +108,11 @@ export const PayrollWalletProvider: React.FC<{ children: React.ReactNode }> = ({
 
         // Store wallet API with URIs for proof provider
         setWalletAPI({ wallet, uris });
-        console.log(`[WalletAPI] Connected with URIs:`, uris);
 
-        // Set wallet address (short format for display)
-        const address = state.coinPublicKey;
+        // Use the actual wallet address (not coinPublicKey)
+        // The 'address' field is the full Midnight shielded address (mn_shield-addr_*)
+        // The 'coinPublicKey' is a derived key component (mn_shield-cpk_*)
+        const address = (state as any).address || state.coinPublicKey;
         setWalletAddress(address);
 
         setWalletProvider({
@@ -128,7 +125,7 @@ export const PayrollWalletProvider: React.FC<{ children: React.ReactNode }> = ({
                 newCoins,
               )
               .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getZswapNetworkId()), getLedgerNetworkId()))
-              .then(createBalancedTx);
+              .then((ledgerTx) => createBalancedTx(ledgerTx));
           },
         });
 

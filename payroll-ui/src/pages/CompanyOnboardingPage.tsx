@@ -17,6 +17,17 @@ import { useNavigate } from 'react-router-dom';
 import BusinessIcon from '@mui/icons-material/Business';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
+import { PayrollAPI } from '@zksalaria/payroll-api';
+import pino from 'pino';
+
+// Create logger for company onboarding
+const logger = pino({
+  name: 'companyOnboarding',
+  level: 'info',
+  browser: {
+    asObject: false,
+  },
+});
 
 interface CompanyFormData {
   companyName: string;
@@ -96,24 +107,36 @@ export const CompanyOnboardingPage: React.FC = () => {
       return;
     }
 
+    // Prevent double submission
+    if (isSubmitting) {
+      console.warn('[CompanyOnboarding] Already submitting, ignoring duplicate request');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      if (!walletAddress) {
+        throw new Error('Wallet address is required');
+      }
+
       console.log('[CompanyOnboarding] Deploying payroll contract...');
       console.log('Form data:', formData);
       console.log('Wallet address:', walletAddress);
 
-      // TODO: Deploy actual contract
-      // const result = await PayrollAPI.deploy(
-      //   providers,
-      //   walletAddress,
-      //   formData.companyName
-      // );
 
-      // Mock deployment for now
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Deploy the payroll contract
+      const contractAddress = await PayrollAPI.deploy(
+        providers,
+        walletAddress,
+        formData.companyName,
+        logger
+      );
 
-      console.log('[CompanyOnboarding] Contract deployed successfully');
+      console.log('[CompanyOnboarding] Contract deployed successfully at:', contractAddress);
+
+      // Save contract address for future operations
+      localStorage.setItem('payroll_contract_address', contractAddress);
 
       // Save company data to localStorage (temporary until we have proper state management)
       localStorage.setItem('user_role', 'company');
@@ -125,6 +148,7 @@ export const CompanyOnboardingPage: React.FC = () => {
           size: formData.companySize,
           email: formData.adminEmail,
           walletAddress,
+          contractAddress,
         })
       );
 
@@ -132,7 +156,20 @@ export const CompanyOnboardingPage: React.FC = () => {
       navigate('/onboarding/company/quickstart');
     } catch (err) {
       console.error('[CompanyOnboarding] Error deploying contract:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create company');
+
+      // Check for insufficient balance error
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create company';
+      if (errorMessage.includes('Insufficient balance')) {
+        setError(
+          'Insufficient DUST tokens. Please fund your Midnight wallet:\n' +
+          '1. Open Lace wallet and check your Midnight balance\n' +
+          '2. Use the testnet faucet to get DUST tokens\n' +
+          '3. Wait for the transaction to confirm\n' +
+          '4. Try deploying again'
+        );
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -21,6 +21,17 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import EmailIcon from '@mui/icons-material/Email';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
+import { PayrollAPI } from '@zksalaria/payroll-api';
+import pino from 'pino';
+
+// Create logger for employee onboarding
+const logger = pino({
+  name: 'employeeOnboarding',
+  level: 'info',
+  browser: {
+    asObject: false,
+  },
+});
 
 type EmployeeStatus = 'checking' | 'added' | 'pending';
 
@@ -58,29 +69,52 @@ export const EmployeeOnboardingPage: React.FC = () => {
         setStatus('checking');
         console.log('[EmployeeOnboarding] Checking employee status...');
 
-        // TODO: Query smart contract
-        // const employeeInfo = await getEmployeeInfo(walletAddress, providers);
+        // Check for stored contract address
+        const storedContractAddress = localStorage.getItem('payroll_contract_address');
 
-        // Mock implementation - simulate checking
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (!storedContractAddress) {
+          // No contract address stored - employee hasn't been added yet
+          console.log('[EmployeeOnboarding] No contract address found - pending state');
+          setStatus('pending');
+          return;
+        }
 
-        // Mock: Check localStorage for demo purposes
-        // In production, this would query the actual smart contract
-        const mockEmployeeAdded = localStorage.getItem('employee_added') === 'true';
+        console.log('[EmployeeOnboarding] Connecting to contract:', storedContractAddress);
 
-        if (mockEmployeeAdded) {
+        // Connect to the contract
+        const api = await PayrollAPI.connect(
+          providers,
+          storedContractAddress,
+          walletAddress,
+          logger
+        );
+
+        // Query employee info
+        const employeeInfo = await api.getEmployeeInfo(walletAddress);
+
+        if (employeeInfo.exists) {
+          console.log('[EmployeeOnboarding] Employee found in contract');
+
           // Employee has been added by a company
+          // Get company info to display company name
+          const companyData = JSON.parse(localStorage.getItem('company_data') || '{}');
+
+          // Get payment history to calculate balance
+          const paymentHistory = await api.getEmployeePaymentHistory(walletAddress);
+          const totalPayments = paymentHistory.length;
+
           setStatus('added');
           setEmployeeData({
-            companyName: 'Acme Corporation',
-            role: 'Software Engineer',
-            salary: '5,000',
-            salaryFrequency: 'Monthly',
-            balance: '••••••', // Encrypted
+            companyName: companyData.name || 'Unknown Company',
+            role: 'Employee', // Can be enhanced to store role in contract
+            salary: '---', // Encrypted - will show as encrypted
+            salaryFrequency: 'Monthly', // Can be enhanced to store in contract
+            balance: '••••••', // Encrypted - use decrypt button to show
           });
           localStorage.setItem('user_role', 'employee');
         } else {
-          // Employee not yet added
+          // Employee not yet added to this contract
+          console.log('[EmployeeOnboarding] Employee not found in contract - pending state');
           setStatus('pending');
         }
       } catch (err) {

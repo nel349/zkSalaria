@@ -1,4 +1,4 @@
-// Theme System Types for Midnight Pay UI
+// Theme System Types for Midnight Payroll UI
 // Comprehensive type definitions for theme configuration
 
 export interface MidnightColors {

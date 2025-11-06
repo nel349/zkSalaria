@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -18,6 +18,17 @@ import { useNavigate } from 'react-router-dom';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
+import { PayrollAPI, RecurringPaymentFrequency, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import pino from 'pino';
+
+// Create logger for quick start wizard
+const logger = pino({
+  name: 'quickStartWizard',
+  level: 'info',
+  browser: {
+    asObject: false,
+  },
+});
 
 interface QuickStartProgress {
   funded: boolean;
@@ -41,6 +52,8 @@ export const CompanyQuickStartPage: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [api, setApi] = useState<DeployedPayrollAPI | null>(null);
+  const [contractAddress, setContractAddress] = useState<string | null>(null);
 
   // Step 1: Fund Account
   const [fundAmount, setFundAmount] = useState('10000');
@@ -66,22 +79,61 @@ export const CompanyQuickStartPage: React.FC = () => {
 
   const steps = ['Fund Account', 'Add First Employee', 'Setup Recurring Payment'];
 
+  // Connect to the deployed contract on mount
+  useEffect(() => {
+    const connectToContract = async () => {
+      try {
+        const storedContractAddress = localStorage.getItem('payroll_contract_address');
+        if (!storedContractAddress) {
+          setError('No contract address found. Please complete company onboarding first.');
+          return;
+        }
+
+        if (!walletAddress) {
+          setError('Wallet not connected');
+          return;
+        }
+
+        setContractAddress(storedContractAddress);
+        console.log('[QuickStart] Connecting to contract:', storedContractAddress);
+
+        const connectedApi = await PayrollAPI.connect(
+          providers,
+          storedContractAddress,
+          walletAddress,
+          logger
+        );
+
+        setApi(connectedApi);
+        console.log('[QuickStart] Successfully connected to contract');
+      } catch (err) {
+        console.error('[QuickStart] Error connecting to contract:', err);
+        setError('Failed to connect to payroll contract');
+      }
+    };
+
+    connectToContract();
+  }, [walletAddress, providers]);
+
   const handleFundAccount = async () => {
     setIsProcessing(true);
     setError(null);
 
     try {
+      if (!api || !walletAddress) {
+        throw new Error('API not connected or wallet address missing');
+      }
+
       console.log('[QuickStart] Funding account:', fundAmount, token);
 
-      // TODO: Actual funding logic
-      // await depositCompanyFunds(walletAddress, parseFloat(fundAmount));
+      // Deposit company funds using PayrollAPI
+      await api.depositCompanyFunds(walletAddress, fundAmount);
 
-      // Mock delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
+      console.log('[QuickStart] Account funded successfully');
       setProgress({ ...progress, funded: true, fundedAmount: parseFloat(fundAmount) });
       setActiveStep(1);
     } catch (err) {
+      console.error('[QuickStart] Error funding account:', err);
       setError(err instanceof Error ? err.message : 'Failed to fund account');
     } finally {
       setIsProcessing(false);
@@ -97,17 +149,28 @@ export const CompanyQuickStartPage: React.FC = () => {
     setError(null);
 
     try {
+      if (!api || !walletAddress) {
+        throw new Error('API not connected or wallet address missing');
+      }
+
+      if (!employeeWallet.trim()) {
+        throw new Error('Employee wallet address is required');
+      }
+
       console.log('[QuickStart] Adding employee:', employeeName);
 
-      // TODO: Actual add employee logic
-      // await addEmployee(walletAddress, employeeWallet);
+      // Add employee using PayrollAPI
+      await api.addEmployee(walletAddress, employeeWallet);
 
-      // Mock delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
+      console.log('[QuickStart] Employee added successfully');
       setProgress({ ...progress, employeeAdded: true, employeeName });
+
+      // Store employee wallet for recurring payment setup in next step
+      localStorage.setItem('quickstart_employee_wallet', employeeWallet);
+
       setActiveStep(2);
     } catch (err) {
+      console.error('[QuickStart] Error adding employee:', err);
       setError(err instanceof Error ? err.message : 'Failed to add employee');
     } finally {
       setIsProcessing(false);
@@ -123,20 +186,58 @@ export const CompanyQuickStartPage: React.FC = () => {
     setError(null);
 
     try {
+      if (!api || !walletAddress) {
+        throw new Error('API not connected or wallet address missing');
+      }
+
+      // Get employee wallet from previous step or form input
+      const employeeWalletAddr = employeeWallet || localStorage.getItem('quickstart_employee_wallet');
+      if (!employeeWalletAddr) {
+        throw new Error('No employee added. Please add an employee first.');
+      }
+
+      if (!baseSalary || parseFloat(baseSalary) <= 0) {
+        throw new Error('Base salary is required');
+      }
+
       console.log('[QuickStart] Setting up recurring payment');
 
-      // TODO: Actual recurring payment logic
-      // await createRecurringPayment(...);
+      // Map frequency string to RecurringPaymentFrequency enum
+      let frequency: bigint;
+      switch (recurringFrequency) {
+        case 'Weekly':
+          frequency = RecurringPaymentFrequency.WEEKLY;
+          break;
+        case 'Bi-weekly':
+          frequency = RecurringPaymentFrequency.BIWEEKLY;
+          break;
+        case 'Monthly':
+        default:
+          frequency = RecurringPaymentFrequency.MONTHLY;
+          break;
+      }
 
-      // Mock delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Create recurring payment using PayrollAPI
+      const start = startDate ? new Date(startDate) : new Date();
+      await api.createRecurringPayment(
+        walletAddress,
+        employeeWalletAddr,
+        baseSalary,
+        frequency,
+        start,
+        null, // no end date
+        frequency === RecurringPaymentFrequency.WEEKLY ? 5 : undefined // Friday for weekly
+      );
 
+      console.log('[QuickStart] Recurring payment setup successfully');
       setProgress({ ...progress, recurringSetup: true });
 
       // Wizard complete, navigate to dashboard
       localStorage.setItem('quickstart_completed', 'true');
+      localStorage.removeItem('quickstart_employee_wallet');
       navigate('/dashboard');
     } catch (err) {
+      console.error('[QuickStart] Error setting up recurring payment:', err);
       setError(err instanceof Error ? err.message : 'Failed to setup recurring payment');
     } finally {
       setIsProcessing(false);

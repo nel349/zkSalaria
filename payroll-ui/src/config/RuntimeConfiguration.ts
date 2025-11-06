@@ -39,6 +39,8 @@ export const RuntimeConfigurationProvider: React.FC<{ children: React.ReactNode 
     })();
   }, []);
 
+  console.log("Current network configs: ", cfg)
+
   return React.createElement(RuntimeConfigurationContext.Provider, { value: cfg, children });
 };
 

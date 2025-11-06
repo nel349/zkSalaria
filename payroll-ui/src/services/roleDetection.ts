@@ -1,4 +1,5 @@
-import type { PayrollProviders } from '@zksalaria/payroll-api';
+import { PayrollAPI, type PayrollProviders, type CompanyInfo, type EmployeeInfo } from '@zksalaria/payroll-api';
+import pino from 'pino';
 
 export type UserRole = 'new' | 'company' | 'employee' | 'both';
 
@@ -6,12 +7,27 @@ export interface RoleDetectionResult {
   role: UserRole;
   isCompany: boolean;
   isEmployee: boolean;
-  companyData?: any;
-  employeeData?: any;
+  companyData?: CompanyInfo;
+  employeeData?: EmployeeInfo;
 }
+
+// Create pino logger for role detection
+const logger = pino({
+  name: 'roleDetection',
+  level: 'info',
+  browser: {
+    asObject: false,
+  },
+});
 
 /**
  * Detect user role by querying the Payroll smart contract
+ *
+ * Strategy:
+ * 1. Check localStorage for stored contract address
+ * 2. If found, connect to contract and query role
+ * 3. If not found, treat as new user (no contract deployed/added yet)
+ *
  * @param providers - Payroll API providers
  * @param walletAddress - User's wallet address
  * @returns Role detection result
@@ -23,22 +39,36 @@ export const detectUserRole = async (
   console.log(`[RoleDetection] Detecting role for address: ${walletAddress}`);
 
   try {
-    // TODO: Replace with actual PayrollAPI calls once contract is deployed
-    // For now, we'll return a mock result
+    // Check for stored contract address
+    const storedContractAddress = localStorage.getItem('payroll_contract_address');
 
-    // Query company data
-    // const companyData = await contract.getCompany(walletAddress);
+    if (!storedContractAddress) {
+      console.log('[RoleDetection] No contract address found - treating as new user');
+      return {
+        role: 'new',
+        isCompany: false,
+        isEmployee: false,
+      };
+    }
 
-    // Query employee data
-    // const employeeData = await contract.getEmployee(walletAddress);
+    console.log(`[RoleDetection] Found contract address: ${storedContractAddress}`);
 
-    // Mock implementation for development
-    // In production, this will query the actual smart contract
-    const mockCompanyData = null; // await getCompanyInfo(walletAddress, providers)
-    const mockEmployeeData = null; // await getEmployeeInfo(walletAddress, providers)
+    // Connect to the stored contract
+    const api = await PayrollAPI.connect(
+      providers,
+      storedContractAddress,
+      walletAddress,
+      logger
+    );
 
-    const isCompany = mockCompanyData !== null;
-    const isEmployee = mockEmployeeData !== null;
+    // Query both company and employee data
+    const [companyData, employeeData] = await Promise.all([
+      api.getCompanyInfo(walletAddress).catch(() => null),
+      api.getEmployeeInfo(walletAddress).catch(() => null),
+    ]);
+
+    const isCompany = companyData?.exists ?? false;
+    const isEmployee = employeeData?.exists ?? false;
 
     let role: UserRole;
     if (isCompany && isEmployee) {
@@ -48,17 +78,18 @@ export const detectUserRole = async (
     } else if (isEmployee) {
       role = 'employee';
     } else {
+      // Contract exists but user has no role in it - treat as new
       role = 'new';
     }
 
-    console.log(`[RoleDetection] Role detected: ${role}`);
+    console.log(`[RoleDetection] Role detected: ${role} (company: ${isCompany}, employee: ${isEmployee})`);
 
     return {
       role,
       isCompany,
       isEmployee,
-      companyData: mockCompanyData,
-      employeeData: mockEmployeeData,
+      companyData: companyData ?? undefined,
+      employeeData: employeeData ?? undefined,
     };
   } catch (error) {
     console.error('[RoleDetection] Error detecting role:', error);
@@ -69,24 +100,4 @@ export const detectUserRole = async (
       isEmployee: false,
     };
   }
-};
-
-/**
- * Get company information from the contract
- * TODO: Implement actual contract query
- */
-const getCompanyInfo = async (_address: string, _providers: PayrollProviders): Promise<any> => {
-  // Mock implementation
-  // In production: query contract state for company data
-  return null;
-};
-
-/**
- * Get employee information from the contract
- * TODO: Implement actual contract query
- */
-const getEmployeeInfo = async (_address: string, _providers: PayrollProviders): Promise<any> => {
-  // Mock implementation
-  // In production: query contract state for employee data
-  return null;
 };

@@ -207,7 +207,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     logger.info({ deployPayrollContract: { companyId, companyName } });
 
     // Retry logic for transient failures
-    const maxAttempts = 5;
+    const maxAttempts = 2; // Reduced from 5 - local deployments shouldn't need many retries
     let lastError: unknown;
     let deployedPayrollContract: DeployedPayrollContract | undefined;
 
