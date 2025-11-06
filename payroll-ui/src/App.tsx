@@ -8,6 +8,7 @@ import {
   RoleSelectorPage,
   CompanyOnboardingPage,
   CompanyQuickStartPage,
+  EmployeeOnboardingPage,
   DashboardPage,
 } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
@@ -16,7 +17,7 @@ import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
 
 /**
  * Main App component with routing configuration
- * Phase 1.4: Added company onboarding wizard
+ * Phase 1.5: Added employee onboarding
  *
  * Routing Flow:
  * / → Landing Page
@@ -25,6 +26,7 @@ import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
  * /onboarding/role → Role Selector (new users)
  * /onboarding/company → Company Registration Form
  * /onboarding/company/quickstart → Quick Start Wizard (3 steps)
+ * /onboarding/employee → Employee Onboarding (added or pending)
  * /dashboard → Dashboard (company or employee based on role)
  *
  * Follows best practice:
@@ -58,6 +60,9 @@ export const App: React.FC = () => {
           {/* Company onboarding */}
           <Route path="/onboarding/company" element={<CompanyOnboardingPage />} />
           <Route path="/onboarding/company/quickstart" element={<CompanyQuickStartPage />} />
+
+          {/* Employee onboarding */}
+          <Route path="/onboarding/employee" element={<EmployeeOnboardingPage />} />
 
           {/* Dashboard (company or employee) */}
           <Route path="/dashboard" element={<DashboardPage />} />

@@ -10,4 +10,5 @@ export { RoleDetectionPage } from './RoleDetectionPage';
 export { RoleSelectorPage } from './RoleSelectorPage';
 export { CompanyOnboardingPage } from './CompanyOnboardingPage';
 export { CompanyQuickStartPage } from './CompanyQuickStartPage';
+export { EmployeeOnboardingPage } from './EmployeeOnboardingPage';
 export { DashboardPage } from './DashboardPage';

@@ -22,9 +22,7 @@ export const RoleSelectorPage: React.FC = () => {
 
   const handleEmployeeSelect = () => {
     console.log('[RoleSelector] User selected: Employee');
-    // TODO: Navigate to employee welcome page (Phase 1.5)
-    alert('Employee welcome page - Coming in Phase 1.5!');
-    // navigate('/welcome');
+    navigate('/onboarding/employee');
   };
 
   return (

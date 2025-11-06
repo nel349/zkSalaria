@@ -132,15 +132,35 @@ This document provides a **complete implementation roadmap** for the zkSalaria U
   - `createRecurringPayment()` - Recurring setup
 - **Data Persistence:** localStorage (temporary, ready for state management)
 
-#### 1.5 Employee Welcome Page (`/welcome`)
-- **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Page 6)
-- **Components:**
-  - Welcome message
-  - Balance display (encrypted)
-  - Decrypt button
-  - Quick actions (Withdraw, Generate Proof)
-- **Backend API:** `getEmployeeInfo()`, `getEmployeePaymentHistory()`
-- **Complexity:** 🟡 Medium (1 day)
+#### 1.5 Employee Onboarding Page (`/onboarding/employee`) ✅ **COMPLETED**
+- **File Reference:** `AUTH_ONBOARDING_FLOW.md` (Page 10)
+- **Status:** ✅ Shipped November 5, 2025
+- **Implementation:**
+  - Two-state checking system (checking → added/pending)
+  - State 1 (Added): Welcome screen with company info, encrypted balance with decrypt toggle
+  - State 2 (Pending): "Not Yet Added" screen with wallet address copy and email employer functionality
+  - Mock implementation ready for smart contract integration
+  - Theme-aware UI with glass morphism
+- **Components Built:**
+  - EmployeeOnboardingPage.tsx with both states
+  - Updated RoleSelectorPage to navigate to employee onboarding
+  - Updated App.tsx with /onboarding/employee route
+- **Features:**
+  - **State 1: Employee Added (by company)**
+    - Success icon and welcome message
+    - Company name display
+    - Role and salary information
+    - Encrypted balance display with decrypt/encrypt toggle button
+    - Info alert about encrypted on-chain balance
+    - "Go to Dashboard" button
+  - **State 2: Employee Pending (not added yet)**
+    - Clock icon and "Not Yet Added" message
+    - Wallet address display with copy button
+    - "Copy Address" and "Email Employer" buttons
+    - Instructions for sharing address with employer
+    - Help text about company requirement
+- **Backend API:** `getEmployeeInfo()` - Mock implementation ready for integration
+- **Note:** Employees cannot self-register. They must be added by a company first.
 
 ### Phase 1 Deliverables
 - ✅ Landing page with branding
@@ -148,6 +168,31 @@ This document provides a **complete implementation roadmap** for the zkSalaria U
 - ✅ Role-based routing
 - ✅ Company onboarding wizard (4 steps)
 - ✅ Employee welcome screen
+
+**UI Status:** ✅ Complete (all screens built)
+**API Status:** ⚠️ **INTEGRATION PENDING** (mock implementations ready)
+
+### Phase 1 API Integration Tasks (Pending)
+
+The following API integrations need to be completed:
+
+#### 1.3 Role Detection (`roleDetection.ts`)
+- Replace mock with `api.getCompanyInfo(walletAddress)` and `api.getEmployeeInfo(walletAddress)`
+- Determine role based on exists flags
+
+#### 1.4 Company Onboarding (`CompanyOnboardingPage.tsx`)
+- Replace mock with `PayrollAPI.deploy(providers, companyId, companyName, logger)`
+- Store returned `contractAddress` for future operations
+
+#### 1.4 Quick Start Wizard (`CompanyQuickStartPage.tsx`)
+- **Step 1 (Fund):** Replace mock with `api.depositCompanyFunds(companyId, amount)`
+- **Step 2 (Add Employee):** Replace mock with `api.addEmployee(companyId, employeeId)`
+- **Step 3 (Recurring):** Replace mock with `api.createRecurringPayment(companyId, employeeId, amount, frequency, startDate, endDate, dayOfWeek)`
+
+#### 1.5 Employee Onboarding (`EmployeeOnboardingPage.tsx`)
+- Replace mock localStorage check with `api.getEmployeeInfo(walletAddress)`
+- Use `employeeInfo.exists` to determine added/pending state
+- Use `api.getEmployeePaymentHistory(employeeId)` to get balance (if needed)
 
 **Total Effort:** 1 week (2 developers in parallel)
 
