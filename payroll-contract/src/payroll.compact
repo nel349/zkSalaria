@@ -25,12 +25,9 @@ export ledger employee_accounts: Map<Bytes<32>, Bytes<32>>;  // employee_id -> h
 export ledger encrypted_employee_balances: Map<Bytes<32>, Bytes<32>>; // employee_id -> encrypted_balance
 export ledger value_decryption_map: Map<Bytes<32>, Uint<64>>;        // encrypted_value -> plaintext_value (balances, payment amounts, etc.)
 
-// Token system state (PUBLIC)
-export ledger nonce: Bytes<32>;
-export ledger token_counter: Counter;
-export ledger total_supply: Uint<64>;                         // Total tokens in this company's contract (treasury)
-export ledger allocated_to_employees: Uint<64>;                // Tokens allocated to employee balances (outstanding claims)
-export ledger token_reserve: QualifiedCoinInfo;                // This company's token reserve
+// Balance tracking state (PUBLIC)
+export ledger total_supply: Uint<64>;                         // Total balance in this company's treasury
+export ledger allocated_to_employees: Uint<64>;                // Balance allocated to employee accounts (outstanding claims)
 
 // Counters for metrics
 export ledger total_employees: Counter;
@@ -70,12 +67,10 @@ export ledger used_attestations: Map<Bytes<32>, Uint<1>>;       // attestation_h
 export ledger income_proofs: Map<Bytes<32>, PC_IncomeProof>;    // employee_id -> income_proof
 
 constructor(
-  initNonce: Bytes<32>,
   companyId: Bytes<32>,
   companyName: Bytes<64>,
   initialTimestamp: Uint<32>  // Unix timestamp in seconds (e.g., Math.floor(Date.now() / 1000))
 ) {
-  nonce = disclose(initNonce);
   company_id = disclose(companyId);
   company_name = disclose(companyName);
   current_timestamp = disclose(initialTimestamp);
@@ -109,28 +104,6 @@ pure circuit generate_balance_key(participant_id: Bytes<32>): Bytes<32> {
 }
 
 // ========================================
-// TOKEN OPERATIONS (Testing/Bootstrap)
-// ========================================
-
-// Mint tokens for testing (will be replaced with real token deposits later)
-export circuit mint_tokens(amount: Uint<64>): [] {
-  assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
-
-  token_counter.increment(1);
-  const newNonce = evolveNonce(token_counter, nonce);
-
-  mintToken(
-    pad(32, "zksalaria_payroll_token"),
-    disclose(amount),
-    newNonce,
-    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
-  );
-
-  total_supply = (total_supply + disclose(amount)) as Uint<64>;
-  nonce = newNonce;
-}
-
-// ========================================
 // COMPANY OPERATIONS
 // ========================================
 // NOTE: No registration needed - company created in constructor
@@ -142,34 +115,9 @@ export circuit deposit_company_funds(
 ): [] {
   assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
 
-  // Evolve nonce for unique token operation
-  token_counter.increment(1);
-  const newNonce = evolveNonce(token_counter, nonce);
-
-  // Mint payroll tokens and send to contract (real token creation)
-  const minted_coin = mintToken(
-    pad(32, "zksalaria_payroll_token"),
-    disclose(amount),  // Uint<64> - CoinInfo.value is actually Uint<128> but mintToken parameter is Uint<64>
-    newNonce,
-    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())  // Send to contract itself
-  );
-
-  // Receive the minted coin into contract
-  receive(disclose(minted_coin));
-
-  // Merge with existing reserve or create new reserve
-  if (total_supply > 0 as Uint<64>) {
-    // Merge new coin with existing reserve
-    const merged_coin = mergeCoinImmediate(token_reserve, disclose(minted_coin));
-    token_reserve.writeCoin(merged_coin, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
-  } else {
-    // First deposit - create new reserve
-    token_reserve.writeCoin(disclose(minted_coin), right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
-  }
-
-  // Update total supply (company balance = token_reserve value)
+  // Simply update total supply (balance tracking in ledger state - following bank.compact pattern)
+  // No need for mintToken() - we're tracking balances, not creating UTXO coins
   total_supply = (total_supply + disclose(amount)) as Uint<64>;
-  nonce = newNonce;
 }
 
 // ========================================
@@ -212,8 +160,9 @@ export circuit add_employee(
   employment_records.insert(employment_record_id, employment_record);
 }
 
-// Employee withdraws earned salary (burns payroll tokens)
+// Employee withdraws earned salary (balance tracking - no actual token transfer)
 // NOTE: Balance now ENCRYPTED on ledger (bank contract pattern)
+// NOTE: In balance tracking model, withdrawal just updates ledger balances
 export circuit withdraw_employee_salary(
   employee_id: Bytes<32>,
   amount: Uint<64>
@@ -247,27 +196,12 @@ export circuit withdraw_employee_salary(
   // Update balance mapping for decryption
   value_decryption_map.insert(new_encrypted, new_balance);
 
-  // Send payroll tokens from contract reserve to employee (REAL token transfer)
-  assert(total_supply >= disclose(amount), "Insufficient token reserve");
-
-  // Send tokens to employee (ownPublicKey = caller = employee)
-  const send_result = send(
-    token_reserve,
-    left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey()),
-    disclose(amount) as Uint<128>
-  );
-
-  // Update reserve with change
-  if (send_result.change.is_some) {
-    token_reserve.writeCoin(send_result.change.value, right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));
-  }
-  // Note: If no change, reserve is fully spent but will be replenished on next deposit
-
-  // Free up allocation (tokens no longer owed to employees)
+  // Free up allocation (balance no longer owed to employee)
   assert(allocated_to_employees >= disclose(amount), "Accounting error: withdrawal exceeds allocation");
   allocated_to_employees = (allocated_to_employees - disclose(amount)) as Uint<64>;
 
-  // Decrease total supply (public - aggregate metric)
+  // Decrease total supply (company treasury balance decreases)
+  assert(total_supply >= disclose(amount), "Accounting error: withdrawal exceeds supply");
   total_supply = (total_supply - disclose(amount)) as Uint<64>;
 }
 

@@ -36,8 +36,7 @@ export class PayrollMultiPartyTestSetup {
 
   constructor(
     companyId: string,
-    companyName: string,
-    initNonce: string = '0'.repeat(64)
+    companyName: string
   ) {
     this.companyId = companyId;
     this.companyName = companyName;
@@ -47,15 +46,15 @@ export class PayrollMultiPartyTestSetup {
     const initialPrivateState = createPayrollPrivateState();
 
     // Convert parameters for constructor
-    const nonceBytes = hexToBytes32(initNonce);
     const companyIdBytes = stringToBytes32(companyId);
     const companyNameBytes = stringToBytes64(companyName);
     const initialTimestamp = BigInt(Math.floor(Date.now() / 1000));
 
-    // Get initial shared contract state
+    // Get initial shared contract state (no nonce needed in balance tracking model)
+    // Use dummy coinPublicKey for constructor context (not used in balance tracking)
+    const dummyCoinPublicKey = '0'.repeat(64); // 32 bytes as hex string
     const { currentContractState, currentZswapLocalState } = this.contract.initialState(
-      constructorContext(initialPrivateState, initNonce),
-      nonceBytes,
+      constructorContext(initialPrivateState, dummyCoinPublicKey),
       companyIdBytes,
       companyNameBytes,
       initialTimestamp
@@ -470,9 +469,9 @@ export class PayrollMultiPartyTestSetup {
     return balanceMappings.lookup(encryptedBalance) as bigint;
   }
 
-  // Helper: Get company balance (token reserve = company balance)
+  // Helper: Get company balance (total_supply = company treasury balance in balance tracking model)
   getActualCompanyBalance(): bigint {
-    return this.getTokenReserveBalance();
+    return this.getTotalSupply();
   }
 
   getAllocatedToEmployees(): bigint {
@@ -541,13 +540,6 @@ export class PayrollMultiPartyTestSetup {
 
     console.error(`❌ Payment ID found but payment not in main map`);
     return null;
-  }
-
-  // Helper: Get token reserve balance (actual tokens in reserve)
-  getTokenReserveBalance(): bigint {
-    const ledgerState = this.getLedgerState();
-    // QualifiedCoinInfo has a 'value' field with the token amount
-    return ledgerState.token_reserve.value;
   }
 
   // Helper: Get expected company balance (tracked through transaction flow)

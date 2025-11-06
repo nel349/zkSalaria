@@ -36,7 +36,6 @@ export interface CircuitResults<T, R> {
 
 // Explicit circuit call types (workaround for empty witnesses type inference issue)
 export interface PayrollCircuitCalls {
-  mint_tokens(amount: bigint): Promise<void>;
   deposit_company_funds(amount: bigint): Promise<void>;
   add_employee(employeeId: Uint8Array): Promise<void>;
   withdraw_employee_salary(employeeId: Uint8Array, amount: bigint): Promise<void>;
@@ -85,7 +84,6 @@ export type PayrollCircuitKeys =
   | 'add_employee'
   | 'pay_employee'
   | 'withdraw_employee_salary'
-  | 'mint_tokens'
   | 'update_timestamp'
   | 'create_recurring_payment'
   | 'pause_recurring_payment'
@@ -108,7 +106,7 @@ export type PayrollProviders = MidnightProviders<PayrollCircuitKeys, AccountId, 
 export type DeployedPayrollContract = FoundContract<PayrollContract>;
 
 export type PayrollTransaction = {
-  type: 'register_company' | 'add_employee' | 'deposit' | 'withdraw' | 'pay_salary' | 'mint_tokens';
+  type: 'register_company' | 'add_employee' | 'deposit' | 'withdraw' | 'pay_salary';
   amount?: bigint;
   timestamp: Date;
   companyId?: string;
@@ -117,7 +115,7 @@ export type PayrollTransaction = {
 };
 
 export type DetailedPayrollTransaction = {
-  readonly type: 'register_company' | 'add_employee' | 'deposit' | 'withdraw' | 'pay_salary' | 'mint_tokens';
+  readonly type: 'register_company' | 'add_employee' | 'deposit' | 'withdraw' | 'pay_salary';
   readonly amount?: bigint;
   readonly timestamp: Date;
   readonly companyId?: string;

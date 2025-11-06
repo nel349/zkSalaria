@@ -64,7 +64,6 @@ export const CompanyQuickStartPage: React.FC = () => {
   const [employeeName, setEmployeeName] = useState('');
   const [employeeWallet, setEmployeeWallet] = useState('');
   const [baseSalary, setBaseSalary] = useState('');
-  const [salaryFrequency, setSalaryFrequency] = useState('Monthly');
   const [employeeRole, setEmployeeRole] = useState('');
 
   // Step 3: Recurring Payment
@@ -136,7 +135,7 @@ export const CompanyQuickStartPage: React.FC = () => {
 
       console.log('[QuickStart] Funding account:', fundAmount, token);
 
-      // Deposit company funds using PayrollAPI
+      // Deposit company funds using PayrollAPI (mints tokens internally)
       await api.depositCompanyFunds(walletAddress, fundAmount);
 
       console.log('[QuickStart] Account funded successfully');
@@ -144,7 +143,14 @@ export const CompanyQuickStartPage: React.FC = () => {
       setActiveStep(1);
     } catch (err) {
       console.error('[QuickStart] Error funding account:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fund account');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fund account';
+
+      // Check for insufficient DUST error
+      if (errorMessage.includes('Insufficient balance')) {
+        setError('Insufficient DUST tokens to pay transaction fees. Please fund your wallet from the faucet.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -430,18 +436,6 @@ export const CompanyQuickStartPage: React.FC = () => {
                     onChange={(e) => setBaseSalary(e.target.value)}
                     disabled={isProcessing}
                   />
-                  <TextField
-                    select
-                    label="Frequency"
-                    value={salaryFrequency}
-                    onChange={(e) => setSalaryFrequency(e.target.value)}
-                    disabled={isProcessing}
-                    sx={{ minWidth: 150 }}
-                  >
-                    <MenuItem value="Weekly">Weekly</MenuItem>
-                    <MenuItem value="Bi-weekly">Bi-weekly</MenuItem>
-                    <MenuItem value="Monthly">Monthly</MenuItem>
-                  </TextField>
                 </Stack>
 
                 <TextField
@@ -504,7 +498,7 @@ export const CompanyQuickStartPage: React.FC = () => {
                       <Typography variant="body2">
                         Employee: {progress.employeeName}
                         <br />
-                        Amount: ${baseSalary} per {salaryFrequency.toLowerCase()}
+                        Base Salary: ${baseSalary}
                       </Typography>
                     </Alert>
 

@@ -59,7 +59,7 @@ export interface DeployedPayrollAPI {
 
   // System operations
   updateTimestamp(newTimestamp: number): Promise<void>;
-  mintTokens(amount: string): Promise<void>;
+  // mintTokens(amount: string): Promise<void>;
 
   // Recurring payment operations
   createRecurringPayment(
@@ -211,8 +211,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     let lastError: unknown;
     let deployedPayrollContract: DeployedPayrollContract | undefined;
 
-    // Constructor parameters: initNonce, companyId, companyName, initialTimestamp
-    const initNonce = utils.randomBytes(32);
+    // Constructor parameters: companyId, companyName, initialTimestamp (no nonce in balance tracking model)
     const companyIdBytes = utils.stringToBytes32(companyId);
     const companyNameBytes = utils.stringToBytes64(companyName);
     const initialTimestamp = BigInt(Math.floor(Date.now() / 1000));
@@ -223,7 +222,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
           contract: payrollContract,
           privateStateId: `payroll-${companyId}` as AccountId,
           initialPrivateState: createPayrollPrivateState(),
-          args: [initNonce, companyIdBytes, companyNameBytes, initialTimestamp],
+          args: [companyIdBytes, companyNameBytes, initialTimestamp],
         });
         break;
       } catch (err) {
@@ -459,19 +458,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
     await this.circuits.update_timestamp(BigInt(newTimestamp));
   }
 
-  async mintTokens(amount: string): Promise<void> {
-    this.logger?.info({ mintTokens: { amount } });
-    this.transactions$.next({
-      transaction: {
-        type: 'mint_tokens',
-        amount: utils.parseAmount(amount),
-        timestamp: new Date(),
-      },
-      cancelledTransaction: undefined,
-    });
-
-    await this.circuits.mint_tokens(utils.parseAmount(amount));
-  }
+  // NOTE: mint_tokens circuit removed in balance tracking model
+  // Use depositCompanyFunds() instead to add funds to company treasury
 
   // ========================================
   // RECURRING PAYMENT OPERATIONS

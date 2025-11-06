@@ -735,7 +735,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       // Setup - Each action executed by different participant
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(depositAmount);
-      const reserveAfterDeposit = payroll.getTokenReserveBalance();
+      const totalSupplyAfterDeposit = payroll.getTotalSupply();
       payroll.payEmployee(employeeId, salaryAmount);
 
       // Act - Employee withdraws (employee participant's private state)
@@ -743,7 +743,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
 
       // Assert - Verify both balances updated correctly
       expect(payroll.getActualEmployeeBalance(employeeId)).toBe(salaryAmount - withdrawAmount);
-      expect(payroll.getTokenReserveBalance()).toBe(reserveAfterDeposit - withdrawAmount);
+      expect(payroll.getTotalSupply()).toBe(totalSupplyAfterDeposit - withdrawAmount);
 
       console.log('✅ Multi-party: Withdrawal reduces both encrypted balance and token reserve!');
     });
