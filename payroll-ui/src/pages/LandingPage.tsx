@@ -109,8 +109,8 @@ export const LandingPage: React.FC = () => {
         position: 'relative',
       }}
     >
-      {/* Splash Screen (Dark Mode Only) */}
-      {mode === 'dark' && showSplash && (
+      {/* Splash Screen (Both Modes) */}
+      {showSplash && (
         <Box
           sx={{
             position: 'fixed',
@@ -161,7 +161,10 @@ export const LandingPage: React.FC = () => {
                 display: 'block',
               }}
             >
-              <source src="/assets/grok-lock-fluid-b1.mp4" type="video/mp4" />
+              <source
+                src={mode === 'dark' ? '/assets/grok-lock-fluid-b1.mp4' : '/assets/grok-lock-fluid-white.mp4'}
+                type="video/mp4"
+              />
             </Box>
           </Box>
         </Box>
@@ -225,8 +228,8 @@ export const LandingPage: React.FC = () => {
         </Box>
       )}
 
-      {/* Background layer for light mode */}
-      {mode === 'light' && (
+      {/* Video Background (Light Mode Only) */}
+      {mode === 'light' && !showSplash && (
         <Box
           sx={{
             position: 'fixed',
@@ -235,9 +238,52 @@ export const LandingPage: React.FC = () => {
             width: '100%',
             height: '100%',
             zIndex: 0,
+            overflow: 'hidden',
             bgcolor: theme.colors.background.default,
           }}
-        />
+        >
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 'auto',
+              height: 'auto',
+              maxWidth: '800px',
+              maxHeight: '600px',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: `radial-gradient(ellipse at center, transparent 30%, ${theme.colors.background.default} 100%)`,
+                pointerEvents: 'none',
+              },
+            }}
+          >
+            <Box
+              component="video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              sx={{
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '800px',
+                maxHeight: '600px',
+                opacity: videoOpacity,
+                transition: 'opacity 0.3s ease',
+                display: 'block',
+              }}
+            >
+              <source src="/assets/grok-lock-fluid-white.mp4" type="video/mp4" />
+            </Box>
+          </Box>
+        </Box>
       )}
 
       {/* Animated Mesh Gradient Background */}
@@ -382,7 +428,7 @@ export const LandingPage: React.FC = () => {
               maxWidth: '720px',
             }}
           >
-            Pay employees with encrypted balances and verify income with ZKML proofs—no salary data revealed, fully compliant.
+            Pay employees with encrypted balances and verify income with Zero-Knowledge Machine Learning (ZKML) proofs—no salary data revealed, fully compliant.
           </Typography>
 
           {/* CTA Buttons */}
@@ -424,24 +470,7 @@ export const LandingPage: React.FC = () => {
           </Stack>
 
           {/* Stats */}
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={4}
-            sx={{ mt: 8 }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <LockIcon sx={{ color: theme.colors.success[500], fontSize: 20 }} />
-              <Typography variant="body2" color={theme.colors.text.secondary}>
-                552,800+ Private Payments
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <GroupIcon sx={{ color: theme.colors.success[500], fontSize: 20 }} />
-              <Typography variant="body2" color={theme.colors.text.secondary}>
-                297,500+ Verified Employees
-              </Typography>
-            </Stack>
-          </Stack>
+
 
           {/* Footer Note - Built on Midnight */}
           <Stack
