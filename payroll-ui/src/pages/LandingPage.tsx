@@ -485,8 +485,8 @@ export const LandingPage: React.FC = () => {
         {/* Section 3: Features */}
         <FeaturesSection />
 
-        {/* Section 4: Developer */}
-        <DeveloperSection />
+        {/* Section 4: Developer
+        <DeveloperSection /> */}
 
         {/* Section 5: Metrics */}
         <MetricsSection />

@@ -16,9 +16,9 @@ export const MetricsSection: React.FC = () => {
   const { mode } = useTheme();
 
   const metrics: Metric[] = [
-    { value: '$12.5M', label: 'Total Paid' },
-    { value: '552,800+', label: 'Payments' },
-    { value: '297,500+', label: 'Employees' },
+    { value: '$0M', label: 'Total Paid' },
+    { value: '1+', label: 'Payments' },
+    { value: '1+', label: 'Employees' },
     { value: '99.9%', label: 'Uptime' },
   ];
 
