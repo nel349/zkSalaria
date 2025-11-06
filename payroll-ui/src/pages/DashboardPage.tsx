@@ -2,6 +2,9 @@ import React from 'react';
 import { Box, Container, Typography, Button, Stack, Paper } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import BusinessIcon from '@mui/icons-material/Business';
+import AddIcon from '@mui/icons-material/Add';
+import { listCompanies, getCurrentCompany } from '../utils/CompaniesLocalState';
 
 /**
  * Dashboard page (placeholder)
@@ -10,6 +13,9 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
  */
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const companies = listCompanies();
+  const currentCompany = getCurrentCompany();
+  const hasMultipleCompanies = companies.length > 1;
 
   return (
     <Box
@@ -46,13 +52,35 @@ export const DashboardPage: React.FC = () => {
               You've successfully connected your wallet! The dashboard implementation is in progress.
             </Typography>
 
-            <Button
-              variant="outlined"
-              onClick={() => navigate('/')}
-              sx={{ px: 4, py: 1.5 }}
-            >
-              Back to Home
-            </Button>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              {hasMultipleCompanies && (
+                <Button
+                  variant="outlined"
+                  startIcon={<BusinessIcon />}
+                  onClick={() => navigate('/companies')}
+                  sx={{ px: 4, py: 1.5 }}
+                >
+                  Switch Company
+                </Button>
+              )}
+
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/onboarding/company')}
+                sx={{ px: 4, py: 1.5 }}
+              >
+                Create New Company
+              </Button>
+
+              <Button
+                variant="outlined"
+                onClick={() => navigate('/')}
+                sx={{ px: 4, py: 1.5 }}
+              >
+                Back to Home
+              </Button>
+            </Stack>
           </Stack>
         </Paper>
       </Container>

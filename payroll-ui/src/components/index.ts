@@ -9,3 +9,6 @@ export { FeatureCard } from './FeatureCard';
 export type { FeatureCardProps } from './FeatureCard';
 
 export { ThemeToggle } from './ThemeToggle';
+
+export { CompanyCard } from './CompanyCard';
+export type { CompanyCardProps } from './CompanyCard';

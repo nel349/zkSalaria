@@ -18,6 +18,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
 import { PayrollAPI } from '@zksalaria/payroll-api';
+import { saveCompany, setCurrentCompany } from '../utils/CompaniesLocalState';
 import pino from 'pino';
 
 // Create logger for company onboarding
@@ -135,22 +136,22 @@ export const CompanyOnboardingPage: React.FC = () => {
 
       console.log('[CompanyOnboarding] Contract deployed successfully at:', contractAddress);
 
-      // Save contract address for future operations
-      localStorage.setItem('payroll_contract_address', contractAddress);
+      // Save company to localStorage (supports multiple companies)
+      saveCompany({
+        contractAddress,
+        name: formData.companyName,
+        industry: formData.industry,
+        size: formData.companySize,
+        email: formData.adminEmail,
+        walletAddress,
+        createdAt: new Date().toISOString(),
+        lastUsedAt: new Date().toISOString(),
+      });
 
-      // Save company data to localStorage (temporary until we have proper state management)
+      // Set as current company in session
+      setCurrentCompany(contractAddress);
+
       localStorage.setItem('user_role', 'company');
-      localStorage.setItem(
-        'company_data',
-        JSON.stringify({
-          name: formData.companyName,
-          industry: formData.industry,
-          size: formData.companySize,
-          email: formData.adminEmail,
-          walletAddress,
-          contractAddress,
-        })
-      );
 
       // Navigate to quick start wizard
       navigate('/onboarding/company/quickstart');

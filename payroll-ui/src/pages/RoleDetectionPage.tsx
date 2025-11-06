@@ -7,6 +7,7 @@ import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useNetworkValidation } from '../hooks/useNetworkValidation';
 import { detectUserRole, type UserRole } from '../services/roleDetection';
 import { useTheme, useThemeValues } from '../theme';
+import { listCompanies, migrateLegacyCompany } from '../utils/CompaniesLocalState';
 
 /**
  * Role Detection Page - Phase 1.3
@@ -61,6 +62,9 @@ export const RoleDetectionPage: React.FC = () => {
         console.log('[RoleDetection] Network validated, detecting role...');
         setDetectionStatus('checking');
 
+        // Migrate legacy company data
+        migrateLegacyCompany();
+
         // Query smart contract for role
         const result = await detectUserRole(providers, walletAddress);
         setDetectedRole(result.role);
@@ -71,6 +75,10 @@ export const RoleDetectionPage: React.FC = () => {
         // Small delay for UX (let user see the success state)
         await new Promise((resolve) => setTimeout(resolve, 800));
 
+        // Check for multiple companies
+        const companies = listCompanies();
+        const hasMultipleCompanies = companies.length > 1;
+
         // Redirect based on role
         switch (result.role) {
           case 'new':
@@ -80,10 +88,16 @@ export const RoleDetectionPage: React.FC = () => {
             break;
 
           case 'company':
-            // Company only → Company dashboard
-            console.log('[RoleDetection] Redirecting to company dashboard');
-            localStorage.setItem('user_role', 'company');
-            navigate('/dashboard');
+            // Company only → Check if multiple companies exist
+            if (hasMultipleCompanies) {
+              console.log('[RoleDetection] Multiple companies detected, redirecting to company selector');
+              localStorage.setItem('user_role', 'company');
+              navigate('/companies');
+            } else {
+              console.log('[RoleDetection] Single company, redirecting to company dashboard');
+              localStorage.setItem('user_role', 'company');
+              navigate('/dashboard');
+            }
             break;
 
           case 'employee':

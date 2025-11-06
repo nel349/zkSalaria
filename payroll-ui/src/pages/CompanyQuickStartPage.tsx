@@ -19,6 +19,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
 import { PayrollAPI, RecurringPaymentFrequency, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import { getCurrentCompany, getMostRecentCompany, migrateLegacyCompany } from '../utils/CompaniesLocalState';
 import pino from 'pino';
 
 // Create logger for quick start wizard
@@ -83,7 +84,16 @@ export const CompanyQuickStartPage: React.FC = () => {
   useEffect(() => {
     const connectToContract = async () => {
       try {
-        const storedContractAddress = localStorage.getItem('payroll_contract_address');
+        // Migrate legacy company data if exists
+        migrateLegacyCompany();
+
+        // Get current company from session (or most recent)
+        let storedContractAddress = getCurrentCompany();
+        if (!storedContractAddress) {
+          const recentCompany = getMostRecentCompany();
+          storedContractAddress = recentCompany?.contractAddress || null;
+        }
+
         if (!storedContractAddress) {
           setError('No contract address found. Please complete company onboarding first.');
           return;

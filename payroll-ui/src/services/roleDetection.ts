@@ -1,4 +1,5 @@
 import { PayrollAPI, type PayrollProviders, type CompanyInfo, type EmployeeInfo } from '@zksalaria/payroll-api';
+import { listCompanies, getCurrentCompany } from '../utils/CompaniesLocalState';
 import pino from 'pino';
 
 export type UserRole = 'new' | 'company' | 'employee' | 'both';
@@ -39,11 +40,11 @@ export const detectUserRole = async (
   console.log(`[RoleDetection] Detecting role for address: ${walletAddress}`);
 
   try {
-    // Check for stored contract address
-    const storedContractAddress = localStorage.getItem('payroll_contract_address');
+    // Get all companies from new storage
+    const companies = listCompanies();
 
-    if (!storedContractAddress) {
-      console.log('[RoleDetection] No contract address found - treating as new user');
+    if (companies.length === 0) {
+      console.log('[RoleDetection] No companies found - treating as new user');
       return {
         role: 'new',
         isCompany: false,
@@ -51,45 +52,63 @@ export const detectUserRole = async (
       };
     }
 
-    console.log(`[RoleDetection] Found contract address: ${storedContractAddress}`);
+    console.log(`[RoleDetection] Found ${companies.length} companies, checking roles...`);
 
-    // Connect to the stored contract
-    const api = await PayrollAPI.connect(
-      providers,
-      storedContractAddress,
-      walletAddress,
-      logger
-    );
+    // Check role across ALL companies (user might be company admin in one, employee in another)
+    let isCompanyInAny = false;
+    let isEmployeeInAny = false;
+    let lastCompanyData: CompanyInfo | null = null;
+    let lastEmployeeData: EmployeeInfo | null = null;
 
-    // Query both company and employee data
-    const [companyData, employeeData] = await Promise.all([
-      api.getCompanyInfo(walletAddress).catch(() => null),
-      api.getEmployeeInfo(walletAddress).catch(() => null),
-    ]);
+    for (const company of companies) {
+      try {
+        console.log(`[RoleDetection] Checking contract: ${company.contractAddress}`);
+        const api = await PayrollAPI.connect(
+          providers,
+          company.contractAddress,
+          walletAddress,
+          logger
+        );
 
-    const isCompany = companyData?.exists ?? false;
-    const isEmployee = employeeData?.exists ?? false;
+        const [companyData, employeeData] = await Promise.all([
+          api.getCompanyInfo(walletAddress).catch(() => null),
+          api.getEmployeeInfo(walletAddress).catch(() => null),
+        ]);
+
+        if (companyData?.exists) {
+          isCompanyInAny = true;
+          lastCompanyData = companyData;
+        }
+        if (employeeData?.exists) {
+          isEmployeeInAny = true;
+          lastEmployeeData = employeeData;
+        }
+      } catch (err) {
+        console.warn(`[RoleDetection] Failed to check contract ${company.contractAddress}:`, err);
+        // Continue checking other contracts
+      }
+    }
 
     let role: UserRole;
-    if (isCompany && isEmployee) {
+    if (isCompanyInAny && isEmployeeInAny) {
       role = 'both';
-    } else if (isCompany) {
+    } else if (isCompanyInAny) {
       role = 'company';
-    } else if (isEmployee) {
+    } else if (isEmployeeInAny) {
       role = 'employee';
     } else {
-      // Contract exists but user has no role in it - treat as new
+      // Companies exist but user has no role in any - treat as new
       role = 'new';
     }
 
-    console.log(`[RoleDetection] Role detected: ${role} (company: ${isCompany}, employee: ${isEmployee})`);
+    console.log(`[RoleDetection] Role detected: ${role} (company: ${isCompanyInAny}, employee: ${isEmployeeInAny})`);
 
     return {
       role,
-      isCompany,
-      isEmployee,
-      companyData: companyData ?? undefined,
-      employeeData: employeeData ?? undefined,
+      isCompany: isCompanyInAny,
+      isEmployee: isEmployeeInAny,
+      companyData: lastCompanyData ?? undefined,
+      employeeData: lastEmployeeData ?? undefined,
     };
   } catch (error) {
     console.error('[RoleDetection] Error detecting role:', error);
