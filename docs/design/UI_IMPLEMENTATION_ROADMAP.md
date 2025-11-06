@@ -36,34 +36,69 @@ This document provides a **complete implementation roadmap** for the zkSalaria U
 
 ### Screens to Build
 
-#### 1.1 Landing Page (`/`)
+#### 1.1 Landing Page (`/`) ✅ **COMPLETED**
 - **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Page 1)
-- **Components:**
-  - Hero section with 3D illustrations
-  - Feature cards (Private Payroll, ZK Verification, Compliance)
-  - "Open App" CTA button
-  - Footer with links
+- **Status:** ✅ Shipped November 5, 2025
+- **Implementation:**
+  - Hero section with typing animation and video backgrounds (dark/light modes)
+  - Use Cases section (4 cards)
+  - Features section (accordion with visual content)
+  - Metrics section with gradient text
+  - CTA section and Footer
+  - Theme system fully integrated
+- **Components Built:**
+  - LandingPage.tsx
+  - UseCasesSection.tsx
+  - FeaturesSection.tsx
+  - MetricsSection.tsx
+  - CTASection.tsx
+  - Footer.tsx
+  - ThemeToggle.tsx
 - **Backend:** None (static page)
-- **Complexity:** 🟢 Low (1 day)
 
-#### 1.2 Connect Wallet Page (`/connect`)
+#### 1.2 Connect Wallet Page (`/connect`) ✅ **COMPLETED**
 - **File Reference:** `AUTHENTICATION_ONBOARDING_WIREFRAMES.md` (Page 2)
-- **Components:**
-  - Wallet connection modal
-  - Network selector (Midnight testnet/mainnet)
-  - Error states (wallet not found, wrong network)
-- **Backend:** Midnight Wallet SDK integration
-- **Complexity:** 🟡 Medium (2 days)
-- **Critical:** ✅ Blocking for all other pages
+- **Status:** ✅ Shipped November 5, 2025
+- **Implementation:**
+  - Wallet detection (Midnight Lace installed check)
+  - Connection flow with loading states
+  - Error handling (not installed, timeout, rejected)
+  - Auto-reconnect on page reload (localStorage persistence)
+  - Theme-aware UI with glass morphism
+- **Components Built:**
+  - ConnectWalletPage.tsx (fully themed)
+  - PayrollWalletContext.tsx (state management)
+  - connectToWallet.ts (wallet SDK integration)
+- **Backend:** Midnight Lace Wallet SDK integration ✅
+- **Critical:** ✅ Wallet connection working
 
-#### 1.3 Role Detection & Loading (`/loading`)
-- **File Reference:** `AUTHENTICATION_ONBOARDING_WIREFRAMES.md` (Page 3)
-- **Components:**
-  - Loading spinner with status messages
-  - Role detection logic
-  - Redirect logic (company vs employee vs new user)
-- **Backend API:** `getCompanyInfo()`, `getEmployeeInfo()`
-- **Complexity:** 🟢 Low (0.5 day)
+#### 1.3 Network Validation & Role Detection (`/loading`) ✅ **COMPLETED**
+- **File Reference:** `AUTH_ONBOARDING_FLOW.md` (Pages 4-5)
+- **Status:** ✅ Shipped November 5, 2025
+- **Implementation:**
+  - Network validation hook with chainId checking
+  - Loading page with multi-step progress indicator
+  - Role detection service (smart contract queries)
+  - Intelligent routing based on detected role
+  - Error handling for network mismatch
+- **Components Built:**
+  - RoleDetectionPage.tsx (loading UI with status)
+  - useNetworkValidation.ts (network checking hook)
+  - roleDetection.ts (smart contract query service)
+  - Updated ConnectWalletPage to redirect to /loading
+  - Updated App.tsx with /loading route
+- **Routing Logic:**
+  - New User → `/onboarding/role` (Phase 1.4)
+  - Company Only → `/dashboard` (company view)
+  - Employee Only → `/dashboard` (employee view)
+  - Both Roles → `/role-switcher` (Phase 1.5)
+- **Backend API:** Network validation ✅, Role queries (mock ready for integration)
+- **Sub-tasks:**
+  - ✅ Network validation component
+  - ✅ Network error handling
+  - ✅ Loading page with status updates
+  - ✅ Role detection service
+  - ✅ Routing logic (redirect to correct page)
 
 #### 1.4 Company Onboarding Wizard (`/onboard/company`)
 - **File Reference:** `1_ONBOARDING_WIREFRAME.md` (Pages 3-5)

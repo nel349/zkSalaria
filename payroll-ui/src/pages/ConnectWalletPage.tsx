@@ -19,21 +19,20 @@ export const ConnectWalletPage: React.FC = () => {
   const theme = useThemeValues();
   const { isConnected, isConnecting, error, connect, walletAddress } = usePayrollWallet();
 
-  // If already connected, redirect to dashboard
+  // If already connected, redirect to role detection
   useEffect(() => {
     if (isConnected && walletAddress) {
-      console.log('[ConnectWallet] Already connected, redirecting to dashboard');
-      // TODO: Add role detection logic here (Phase 1.3)
-      navigate('/dashboard');
+      console.log('[ConnectWallet] Already connected, redirecting to role detection');
+      navigate('/loading');
     }
   }, [isConnected, walletAddress, navigate]);
 
   const handleConnect = async () => {
     try {
       await connect();
-      // After successful connection, navigate to dashboard
-      // Role detection will happen in Phase 1.3
-      navigate('/dashboard');
+      // After successful connection, navigate to role detection page
+      // which will validate network and detect user role
+      navigate('/loading');
     } catch (err) {
       console.error('Connection failed:', err);
       // Error is already set in the context

@@ -1,13 +1,20 @@
 import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { LandingPage, SampleThemePage, ConnectWalletPage, DashboardPage } from './pages';
+import { LandingPage, SampleThemePage, ConnectWalletPage, RoleDetectionPage, RoleSelectorPage, DashboardPage } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
 
 /**
  * Main App component with routing configuration
- * Phase 1.2: Added PayrollWalletProvider for wallet connection
+ * Phase 1.3: Added role detection flow
+ *
+ * Routing Flow:
+ * / → Landing Page
+ * /connect → Connect Wallet
+ * /loading → Network Validation & Role Detection
+ * /onboarding/role → Role Selector (new users)
+ * /dashboard → Dashboard (company or employee based on role)
  *
  * Follows best practice:
  * - Centralized routing in one place
@@ -30,6 +37,12 @@ export const App: React.FC = () => {
 
           {/* Wallet connection */}
           <Route path="/connect" element={<ConnectWalletPage />} />
+
+          {/* Network validation & role detection */}
+          <Route path="/loading" element={<RoleDetectionPage />} />
+
+          {/* Role selector (new users) */}
+          <Route path="/onboarding/role" element={<RoleSelectorPage />} />
 
           {/* Dashboard (company or employee) */}
           <Route path="/dashboard" element={<DashboardPage />} />

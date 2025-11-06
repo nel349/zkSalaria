@@ -1,0 +1,163 @@
+import React from 'react';
+import { Box, Container, Typography, Stack, Paper } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import BusinessIcon from '@mui/icons-material/Business';
+import PersonIcon from '@mui/icons-material/Person';
+import { useTheme, useThemeValues, createGlassMorphism } from '../theme';
+
+/**
+ * Role Selector Page - Phase 1.4 (Placeholder)
+ * New users choose between Company or Employee onboarding
+ * Reference: docs/design/AUTH_ONBOARDING_FLOW.md (Page 6)
+ */
+export const RoleSelectorPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { mode } = useTheme();
+  const theme = useThemeValues();
+
+  const handleCompanySelect = () => {
+    console.log('[RoleSelector] User selected: Company');
+    // TODO: Navigate to company onboarding wizard (Phase 1.4)
+    alert('Company onboarding wizard - Coming in Phase 1.4!');
+    // navigate('/onboarding/company');
+  };
+
+  const handleEmployeeSelect = () => {
+    console.log('[RoleSelector] User selected: Employee');
+    // TODO: Navigate to employee welcome page (Phase 1.4)
+    alert('Employee welcome page - Coming in Phase 1.4!');
+    // navigate('/welcome');
+  };
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: theme.colors.background.default,
+      }}
+    >
+      <Container maxWidth="md">
+        <Stack spacing={6} alignItems="center" textAlign="center">
+          {/* Header */}
+          <Stack spacing={2}>
+            <Typography
+              variant="h3"
+              fontWeight={theme.typography.fontWeight.bold}
+              color={theme.colors.text.primary}
+            >
+              Welcome to zkSalaria! 👋
+            </Typography>
+            <Typography
+              variant="h6"
+              color={theme.colors.text.secondary}
+              sx={{ maxWidth: 600 }}
+            >
+              Are you here as a company or an employee?
+            </Typography>
+          </Stack>
+
+          {/* Role Cards */}
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={4}
+            sx={{ width: '100%', maxWidth: 800 }}
+          >
+            {/* Company Card */}
+            <Paper
+              elevation={0}
+              onClick={handleCompanySelect}
+              sx={{
+                ...createGlassMorphism(theme, mode),
+                flex: 1,
+                p: 6,
+                borderRadius: theme.borderRadius['2xl'],
+                border: `1px solid ${theme.colors.border.default}`,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  borderColor: theme.colors.primary[mode === 'dark' ? 400 : 600],
+                  transform: 'translateY(-4px)',
+                  boxShadow: `0 12px 24px rgba(0, 0, 0, 0.15), 0 0 0 2px ${theme.colors.primary[mode === 'dark' ? 400 : 600]}40`,
+                },
+              }}
+            >
+              <Stack spacing={3} alignItems="center">
+                <BusinessIcon
+                  sx={{
+                    fontSize: 64,
+                    color: theme.colors.primary[mode === 'dark' ? 400 : 600],
+                  }}
+                />
+                <Typography
+                  variant="h4"
+                  fontWeight={theme.typography.fontWeight.bold}
+                  color={theme.colors.text.primary}
+                >
+                  Company
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color={theme.colors.text.secondary}
+                  sx={{ maxWidth: 280 }}
+                >
+                  I want to pay my employees with private, encrypted payroll
+                </Typography>
+              </Stack>
+            </Paper>
+
+            {/* Employee Card */}
+            <Paper
+              elevation={0}
+              onClick={handleEmployeeSelect}
+              sx={{
+                ...createGlassMorphism(theme, mode),
+                flex: 1,
+                p: 6,
+                borderRadius: theme.borderRadius['2xl'],
+                border: `1px solid ${theme.colors.border.default}`,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  borderColor: theme.colors.primary[mode === 'dark' ? 400 : 600],
+                  transform: 'translateY(-4px)',
+                  boxShadow: `0 12px 24px rgba(0, 0, 0, 0.15), 0 0 0 2px ${theme.colors.primary[mode === 'dark' ? 400 : 600]}40`,
+                },
+              }}
+            >
+              <Stack spacing={3} alignItems="center">
+                <PersonIcon
+                  sx={{
+                    fontSize: 64,
+                    color: theme.colors.primary[mode === 'dark' ? 400 : 600],
+                  }}
+                />
+                <Typography
+                  variant="h4"
+                  fontWeight={theme.typography.fontWeight.bold}
+                  color={theme.colors.text.primary}
+                >
+                  Employee
+                </Typography>
+                <Typography
+                  variant="body1"
+                  color={theme.colors.text.secondary}
+                  sx={{ maxWidth: 280 }}
+                >
+                  I receive salary from my employer and want to verify my income
+                </Typography>
+              </Stack>
+            </Paper>
+          </Stack>
+
+          {/* Helper Text */}
+          <Typography variant="caption" color={theme.colors.text.disabled}>
+            Don't worry, you can access both views if you need to
+          </Typography>
+        </Stack>
+      </Container>
+    </Box>
+  );
+};

@@ -6,4 +6,6 @@
 export { LandingPage } from './LandingPage';
 export { SampleThemePage } from './SampleThemePage';
 export { ConnectWalletPage } from './ConnectWalletPage';
+export { RoleDetectionPage } from './RoleDetectionPage';
+export { RoleSelectorPage } from './RoleSelectorPage';
 export { DashboardPage } from './DashboardPage';
