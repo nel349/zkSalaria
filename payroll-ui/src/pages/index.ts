@@ -13,3 +13,4 @@ export { CompanyQuickStartPage } from './CompanyQuickStartPage';
 export { EmployeeOnboardingPage } from './EmployeeOnboardingPage';
 export { DashboardPage } from './DashboardPage';
 export { CompanySelectorPage } from './CompanySelectorPage';
+export { AddEmployeePage } from './AddEmployeePage';

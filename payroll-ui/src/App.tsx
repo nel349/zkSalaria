@@ -11,6 +11,7 @@ import {
   EmployeeOnboardingPage,
   DashboardPage,
   CompanySelectorPage,
+  AddEmployeePage,
 } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
@@ -67,6 +68,9 @@ export const App: React.FC = () => {
 
           {/* Employee onboarding */}
           <Route path="/onboarding/employee" element={<EmployeeOnboardingPage />} />
+
+          {/* Add employee */}
+          <Route path="/employees/add" element={<AddEmployeePage />} />
 
           {/* Dashboard (company or employee) */}
           <Route path="/dashboard" element={<DashboardPage />} />
