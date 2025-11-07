@@ -209,20 +209,19 @@ export const PayrollWalletProvider: React.FC<{ children: React.ReactNode }> = ({
         const api: any = (window as any)?.midnight?.mnLace;
         if (api && typeof api.isEnabled === 'function') {
           const enabled = await api.isEnabled();
-          const wasConnected = localStorage.getItem('wallet_connected') === 'true';
-          if (enabled && wasConnected && !cancelled && !isConnected && !isConnecting) {
-            console.log('[AutoConnect] Attempting to reconnect wallet...');
+          if (enabled && !cancelled && !isConnected) {
+            console.log('[AutoConnect] Lace authorized - reconnecting wallet...');
             await connect();
           }
         }
       } catch (err) {
-        console.warn(`Auto-connect failed: ${(err as Error)?.message}`);
+        console.warn(`[AutoConnect] Failed: ${(err as Error)?.message}`);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [connect, isConnected, isConnecting]);
+  }, [connect, isConnected]);
 
   return <PayrollWalletContext.Provider value={state}>{children}</PayrollWalletContext.Provider>;
 };

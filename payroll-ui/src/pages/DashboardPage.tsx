@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, CircularProgress, Alert } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { firstValueFrom } from 'rxjs';
 import { useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany } from '../utils/CompaniesLocalState';
 import { listEmployers, getCurrentEmployer, setCurrentEmployer } from '../utils/EmployerContractsLocalState';
-import { PayrollAPI, utils } from '@zksalaria/payroll-api';
+import { PayrollAPI } from '@zksalaria/payroll-api';
 import { CompanyDashboard } from '../components/CompanyDashboard';
 import { EmployeeDashboard } from '../components/EmployeeDashboard';
+import { WalletConnectionPrompt } from '../components/WalletConnectionPrompt';
 import pino from 'pino';
 
 const logger = pino({
@@ -21,28 +21,21 @@ const logger = pino({
 
 type UserRole = 'company' | 'employee' | 'both' | 'none';
 
-/**
- * Role-Aware Dashboard Router (Phase 3.1 & 3.2)
- * Detects user role and renders appropriate dashboard view
- */
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useThemeValues();
-  const { walletAddress, providers } = usePayrollWallet();
+  const { walletAddress, isConnecting, isConnected, connect, providers } = usePayrollWallet();
 
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize with either current company (if owner) or current employer (if employee)
-  // Prefer company for dual-role users
   const initialAddress = getCurrentCompany() || getCurrentEmployer();
   const [selectedCompanyAddress, setSelectedCompanyAddress] = useState<string | null>(initialAddress);
 
   const companies = listCompanies();
   const employers = walletAddress ? listEmployers(walletAddress) : [];
 
-  // Look for company info in both lists and normalize to SavedCompany shape
   const companyMatch = companies.find((c) => c.contractAddress === selectedCompanyAddress);
   const employerMatch = employers.find((e) => e.contractAddress === selectedCompanyAddress);
 
@@ -53,42 +46,33 @@ export const DashboardPage: React.FC = () => {
     createdAt: employerMatch.joinedAt,
   } : undefined);
 
-  // Handle company switch without page reload
   const handleCompanySwitch = useCallback((contractAddress: string) => {
     setCurrentCompany(contractAddress);
     setSelectedCompanyAddress(contractAddress);
-    setLoading(true); // Trigger re-detection and reconnect
+    setLoading(true);
   }, []);
 
-  // Detect user role
   useEffect(() => {
     const detectRole = async () => {
       if (!walletAddress) {
-        setError('Wallet not connected');
-        setLoading(false);
+        if (!isConnecting) {
+          setLoading(false);
+        }
         return;
       }
 
       try {
-        // Check if user is a company owner
         const isCompanyOwner = companies.length > 0;
-
-        // Check if user has employer contracts
         const hasEmployers = employers.length > 0;
 
-        // If we have a selected address, verify the role at that contract
         let isEmployeeAtContract = false;
         let isOwnerAtContract = false;
 
         if (selectedCompanyAddress) {
           try {
-            // Check if this address is in the company list (user is owner)
             isOwnerAtContract = companies.some((c) => c.contractAddress === selectedCompanyAddress);
 
-            // Query contract to see if wallet is an employee
             const api = await PayrollAPI.connect(providers, selectedCompanyAddress, walletAddress, logger);
-
-            // Use API method to check employee status
             const employeeInfo = await api.getEmployeeInfo(walletAddress);
             isEmployeeAtContract = employeeInfo.exists;
           } catch (err) {
@@ -96,13 +80,11 @@ export const DashboardPage: React.FC = () => {
           }
         }
 
-        // Determine overall role (can own companies AND be employee elsewhere)
         const isCompany = isCompanyOwner || isOwnerAtContract;
         const isEmployee = hasEmployers || isEmployeeAtContract;
 
-        // Determine role
         if (isCompany && isEmployee) {
-          setRole('both'); // Dual role - will need role switcher in Phase 3.6
+          setRole('both');
         } else if (isCompany) {
           setRole('company');
         } else if (isEmployee) {
@@ -121,10 +103,13 @@ export const DashboardPage: React.FC = () => {
     };
 
     detectRole();
-  }, [walletAddress, providers, companies, employers, selectedCompanyAddress]);
+  }, [walletAddress, isConnecting, providers, companies, employers, selectedCompanyAddress]);
 
-  // Loading state
-  if (loading) {
+  if (!isConnected && !isConnecting) {
+    return <WalletConnectionPrompt onConnect={connect} />;
+  }
+
+  if (loading || isConnecting) {
     return (
       <Box
         sx={{
@@ -140,7 +125,6 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  // Error state
   if (error || role === 'none') {
     return (
       <Box
@@ -160,8 +144,7 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  // Render appropriate dashboard based on role
-  // For dual role users, default to company view (Phase 3.6 will add role switcher)
+  // For dual role users, default to company view
   if (role === 'company' || role === 'both') {
     if (!currentCompany) {
       return (
@@ -185,7 +168,6 @@ export const DashboardPage: React.FC = () => {
     return <CompanyDashboard currentCompany={currentCompany} companies={companies} onCompanySwitch={handleCompanySwitch} />;
   }
 
-  // Employee view
   if (role === 'employee') {
     if (!selectedCompanyAddress || !currentCompany) {
       return (
