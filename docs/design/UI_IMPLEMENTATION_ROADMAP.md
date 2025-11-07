@@ -395,22 +395,35 @@ All Phase 1 API integrations have been successfully completed:
 - **Notes:**
   - Encrypted balance decryption and payment history queries deferred to Phase 4
 
-#### 3.3 Payment List View (`/payments`)
-- **File Reference:** `3_PAYROLL_LIST_VIEW_WIREFRAME.md`
-- **Components:**
-  - Tab navigation (All, Received, Sent, Search)
-  - Table with columns (Status, Employee, Amount, Date, Type, Actions)
-  - Encrypted amount display with decrypt button
-  - Actions dropdown (View Details, Generate Proof, Download Receipt)
-  - Empty state cards
-  - Search modal with filters
-  - Privacy banner (employee view)
-- **Backend API:** `getEmployeePaymentHistory()`, decrypt locally
-- **Complexity:** 🔴 High (2 days)
+#### 3.3 Payment History Section (Dashboard Integration) ✅ **COMPLETED**
+- **Status:** ✅ Implemented November 6, 2025
+- **Implementation:**
+  - **Embedded in dashboard** (not a separate route - better UX)
+  - PaymentHistorySection component integrated into both Company and Employee dashboards
+  - Payment table with columns: Status, Employee/Company, Amount, Date, Type, Actions
+  - Encrypted amount display with individual decrypt/encrypt toggle buttons (employee view)
+  - Privacy banner with "Decrypt All Amounts" button (employee view, dismissible)
+  - Actions dropdown: View Details, Generate Proof, Download Receipt
+  - Empty state when no payments exist
+  - Status badges (Completed ✓, Pending ⏳, Failed ✗)
+  - Type badges (Salary, Bonus, Advance, Withdrawal)
+  - Hover effects with border highlighting
+  - Shows recent 5 payments on dashboard (configurable maxRows)
+  - Compact table design optimized for dashboard view
+- **Components Built:**
+  - PaymentHistorySection.tsx (reusable component)
+  - Integrated into CompanyDashboard.tsx
+  - Integrated into EmployeeDashboard.tsx
+- **Routing:** No separate route - embedded in `/dashboard`
+- **Backend API:** Mock data (ready for Phase 4 `getPaymentHistory()` integration)
+- **Complexity:** 🟡 Medium (1 day)
+- **Notes:** Dashboard-integrated approach provides better UX than separate page
 
-#### 3.4 Payment Detail Page (`/payments/:id`)
+#### 3.4 Payment Detail Page (Dashboard integration)
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md`
-- **Components:**
+- **Implementation:**
+  - **Embedded in dashboard** (not a separate route - better UX)
+  - **Components:**
   - Left panel: Payment card (visual center)
   - Right panel: Attributes, Balance Status, Transaction Details, Actions
   - Details modal (tabbed: Overview, Accounting, History)

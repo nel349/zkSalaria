@@ -11,6 +11,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -22,6 +23,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import { PaymentHistorySection } from './PaymentHistorySection';
 import pino from 'pino';
 
 const logger = pino({
@@ -51,7 +53,7 @@ interface EmployeeDashboardProps {
  * Shows employee-specific stats and actions
  */
 export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ contractAddress, companyName }) => {
-
+  const navigate = useNavigate();
   const { mode } = useTheme();
   const theme = useThemeValues();
   const { walletAddress, providers } = usePayrollWallet();
@@ -67,6 +69,43 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ contractAd
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Mock payment data (TODO: Phase 4 - load from contract with encrypted amounts)
+  const mockPayments = [
+    {
+      id: 'pay-001',
+      status: 'completed' as const,
+      employeeName: companyName,
+      employeeId: 'company-address',
+      amount: 500000n,
+      isEncrypted: true, // Employee view shows encrypted
+      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      type: 'salary' as const,
+      transactionId: '0xa3f2...8b9c',
+    },
+    {
+      id: 'pay-002',
+      status: 'completed' as const,
+      employeeName: companyName,
+      employeeId: 'company-address',
+      amount: 500000n,
+      isEncrypted: true,
+      date: new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString(),
+      type: 'salary' as const,
+      transactionId: '0xb4e3...7c8d',
+    },
+    {
+      id: 'pay-003',
+      status: 'completed' as const,
+      employeeName: companyName,
+      employeeId: 'company-address',
+      amount: 500000n,
+      isEncrypted: true,
+      date: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+      type: 'salary' as const,
+      transactionId: '0xc5f4...6d7e',
+    },
+  ];
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -426,24 +465,16 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ contractAd
             </Grid>
           </Paper>
 
-          {/* Payment History (Empty State) */}
-          <Paper
-            elevation={2}
-            sx={{
-              p: 4,
-              borderRadius: 3,
-              bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
-              textAlign: 'center',
-            }}
-          >
-            <ReceiptIcon sx={{ fontSize: 60, color: theme.colors.text.disabled, mb: 2 }} />
-            <Typography variant="h6" color={theme.colors.text.secondary} sx={{ mb: 1 }}>
-              Payment History
-            </Typography>
-            <Typography variant="body2" color={theme.colors.text.disabled}>
-              Your payment history and transaction details will appear here
-            </Typography>
-          </Paper>
+          {/* Payment History */}
+          <Box>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <ReceiptIcon sx={{ color: theme.colors.primary[500] }} />
+              <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold}>
+                Payment History
+              </Typography>
+            </Stack>
+            <PaymentHistorySection userRole="employee" payments={mockPayments} maxRows={5} />
+          </Box>
         </Stack>
       </Container>
     </Box>

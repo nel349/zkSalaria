@@ -29,6 +29,7 @@ import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany, SavedCompany } from '../utils/CompaniesLocalState';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { AddEmployeeModal } from './AddEmployeeModal';
+import { PaymentHistorySection } from './PaymentHistorySection';
 import pino from 'pino';
 
 const logger = pino({
@@ -72,6 +73,43 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addEmployeeModalOpen, setAddEmployeeModalOpen] = useState(false);
+
+  // Mock payment data (TODO: Phase 4 - load from contract)
+  const mockPayments = [
+    {
+      id: 'pay-001',
+      status: 'completed' as const,
+      employeeName: 'Alice Johnson',
+      employeeId: 'alice-wallet-address',
+      amount: 500000n,
+      isEncrypted: false,
+      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      type: 'salary' as const,
+      transactionId: '0xa3f2...8b9c',
+    },
+    {
+      id: 'pay-002',
+      status: 'completed' as const,
+      employeeName: 'Bob Smith',
+      employeeId: 'bob-wallet-address',
+      amount: 420000n,
+      isEncrypted: false,
+      date: new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString(),
+      type: 'salary' as const,
+      transactionId: '0xb4e3...7c8d',
+    },
+    {
+      id: 'pay-003',
+      status: 'pending' as const,
+      employeeName: 'Carol Lee',
+      employeeId: 'carol-wallet-address',
+      amount: 650000n,
+      isEncrypted: false,
+      date: new Date().toISOString(),
+      type: 'salary' as const,
+      transactionId: '0xc5f4...6d7e',
+    },
+  ];
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -421,24 +459,16 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
             </Grid>
           </Paper>
 
-          {/* Recent Activity (Empty State) */}
-          <Paper
-            elevation={2}
-            sx={{
-              p: 4,
-              borderRadius: 3,
-              bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
-              textAlign: 'center',
-            }}
-          >
-            <DashboardIcon sx={{ fontSize: 60, color: theme.colors.text.disabled, mb: 2 }} />
-            <Typography variant="h6" color={theme.colors.text.secondary} sx={{ mb: 1 }}>
-              No Recent Activity
-            </Typography>
-            <Typography variant="body2" color={theme.colors.text.disabled}>
-              Payment history and activity will appear here
-            </Typography>
-          </Paper>
+          {/* Recent Payment Activity */}
+          <Box>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <ReceiptIcon sx={{ color: theme.colors.primary[500] }} />
+              <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold}>
+                Recent Payment Activity
+              </Typography>
+            </Stack>
+            <PaymentHistorySection userRole="company" payments={mockPayments} maxRows={5} />
+          </Box>
         </Stack>
       </Container>
 
