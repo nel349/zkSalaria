@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Container,
@@ -6,47 +6,33 @@ import {
   Button,
   Stack,
   Paper,
+  TextField,
   CircularProgress,
   Alert,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import PersonIcon from '@mui/icons-material/Person';
+import BusinessIcon from '@mui/icons-material/Business';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import EmailIcon from '@mui/icons-material/Email';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
-import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
-import { PayrollAPI } from '@zksalaria/payroll-api';
+import { useTheme, useThemeValues } from '../theme';
+import { PayrollAPI, utils } from '@zksalaria/payroll-api';
+import { saveEmployer, setCurrentEmployer } from '../utils/EmployerContractsLocalState';
+import { firstValueFrom } from 'rxjs';
 import pino from 'pino';
 
-// Create logger for employee onboarding
 const logger = pino({
-  name: 'employeeOnboarding',
+  name: 'employee-onboarding',
   level: 'info',
   browser: {
     asObject: false,
   },
 });
 
-type EmployeeStatus = 'checking' | 'added' | 'pending';
-
-interface EmployeeData {
-  companyName?: string;
-  role?: string;
-  salary?: string;
-  salaryFrequency?: string;
-  balance?: string; // Encrypted balance
-}
-
 /**
- * Employee Onboarding Page - Phase 1.5
- * Two states: Added (by company) or Pending (not yet added)
- * Reference: docs/design/AUTH_ONBOARDING_FLOW.md (Page 10)
+ * Employee Onboarding Page (Option 2: Manual Entry)
+ * Employee enters company contract address shared by employer
+ * We verify they're in the employee list and save the relationship
  */
 export const EmployeeOnboardingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -54,421 +40,234 @@ export const EmployeeOnboardingPage: React.FC = () => {
   const theme = useThemeValues();
   const { walletAddress, providers } = usePayrollWallet();
 
-  const [status, setStatus] = useState<EmployeeStatus>('checking');
-  const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
+  const [contractAddress, setContractAddress] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [balanceDecrypted, setBalanceDecrypted] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
-  // Check if employee has been added by a company
-  useEffect(() => {
-    const checkEmployeeStatus = async () => {
-      if (!walletAddress) return;
-
-      try {
-        setStatus('checking');
-        console.log('[EmployeeOnboarding] Checking employee status...');
-
-        // Check for stored contract address
-        const storedContractAddress = localStorage.getItem('payroll_contract_address');
-
-        if (!storedContractAddress) {
-          // No contract address stored - employee hasn't been added yet
-          console.log('[EmployeeOnboarding] No contract address found - pending state');
-          setStatus('pending');
-          return;
-        }
-
-        console.log('[EmployeeOnboarding] Connecting to contract:', storedContractAddress);
-
-        // Connect to the contract
-        const api = await PayrollAPI.connect(
-          providers,
-          storedContractAddress,
-          walletAddress,
-          logger
-        );
-
-        // Query employee info
-        const employeeInfo = await api.getEmployeeInfo(walletAddress);
-
-        if (employeeInfo.exists) {
-          console.log('[EmployeeOnboarding] Employee found in contract');
-
-          // Employee has been added by a company
-          // Get company info to display company name
-          const companyData = JSON.parse(localStorage.getItem('company_data') || '{}');
-
-          // Get payment history to calculate balance
-          const paymentHistory = await api.getEmployeePaymentHistory(walletAddress);
-          const totalPayments = paymentHistory.length;
-
-          setStatus('added');
-          setEmployeeData({
-            companyName: companyData.name || 'Unknown Company',
-            role: 'Employee', // Can be enhanced to store role in contract
-            salary: '---', // Encrypted - will show as encrypted
-            salaryFrequency: 'Monthly', // Can be enhanced to store in contract
-            balance: '••••••', // Encrypted - use decrypt button to show
-          });
-          localStorage.setItem('user_role', 'employee');
-        } else {
-          // Employee not yet added to this contract
-          console.log('[EmployeeOnboarding] Employee not found in contract - pending state');
-          setStatus('pending');
-        }
-      } catch (err) {
-        console.error('[EmployeeOnboarding] Error checking employee status:', err);
-        setError(err instanceof Error ? err.message : 'Failed to check employee status');
-        setStatus('pending');
-      }
-    };
-
-    checkEmployeeStatus();
-  }, [walletAddress, providers]);
-
-  const handleCopyAddress = () => {
-    if (walletAddress) {
-      navigator.clipboard.writeText(walletAddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const handleVerify = async () => {
+    if (!walletAddress) {
+      setError('Please connect your wallet first');
+      return;
     }
-  };
 
-  const handleDecryptBalance = () => {
-    // TODO: Actual decryption logic
-    setBalanceDecrypted(!balanceDecrypted);
-  };
+    if (!contractAddress.trim()) {
+      setError('Please enter a company contract address');
+      return;
+    }
 
-  const handleEmailEmployer = () => {
-    const subject = encodeURIComponent('zkSalaria - Add Me as Employee');
-    const body = encodeURIComponent(
-      `Hello,\n\nI've set up my zkSalaria wallet and would like to be added to the payroll system.\n\nMy wallet address is:\n${walletAddress}\n\nThank you!`
-    );
-    window.open(`mailto:?subject=${subject}&body=${body}`);
-  };
+    setIsVerifying(true);
+    setError(null);
+    setSuccess(false);
 
-  const handleGoToDashboard = () => {
-    navigate('/dashboard');
+    try {
+      console.log(`[EmployeeOnboarding] Verifying employment at ${contractAddress}...`);
+
+      // Connect to the contract
+      const api = await PayrollAPI.connect(providers, contractAddress.trim(), walletAddress, logger);
+
+      // Use direct query method with retry (wait for indexer to sync)
+      let retryCount = 0;
+      const maxRetries = 10;
+      const retryDelayMs = 2000;
+      let employeeInfo = await api.getEmployeeInfo(walletAddress);
+
+      // Retry if not found (indexer may be syncing)
+      while (!employeeInfo.exists && retryCount < maxRetries) {
+        console.log(`[EmployeeOnboarding] Employee not found yet, retrying in ${retryDelayMs/1000}s... (attempt ${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+        employeeInfo = await api.getEmployeeInfo(walletAddress);
+        retryCount++;
+      }
+
+      // For debugging: Hash wallet address to show what we're looking for
+      const employeeIdBytes = await utils.walletAddressToEmployeeId(walletAddress);
+
+      console.log('[EmployeeOnboarding] Verification DEBUG:', {
+        walletAddress,
+        hashedBytes: Array.from(employeeIdBytes),
+        hashedHex: Array.from(employeeIdBytes).map(b => b.toString(16).padStart(2, '0')).join(''),
+        employeeInfo,
+        retriesNeeded: retryCount,
+      });
+
+      console.log('[EmployeeOnboarding] Employee found:', employeeInfo.exists);
+
+      if (!employeeInfo.exists) {
+        setError('You are not registered as an employee at this company. Please contact your employer.');
+        setIsVerifying(false);
+        return;
+      }
+
+      // Get company info
+      const companyInfo = await api.getCompanyInfo(contractAddress.trim());
+      const name = companyInfo.companyName || 'Unknown Company';
+
+      console.log(`[EmployeeOnboarding] Successfully verified employment at ${name}`);
+
+      // Save to employer contracts
+      if (walletAddress) {
+        saveEmployer(walletAddress, {
+          contractAddress: contractAddress.trim(),
+          companyName: name,
+          joinedAt: new Date().toISOString(),
+        });
+
+        // Set as current employer
+        setCurrentEmployer(contractAddress.trim());
+      }
+
+      setCompanyName(name);
+      setSuccess(true);
+      setIsVerifying(false);
+
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 2000);
+    } catch (err) {
+      console.error('[EmployeeOnboarding] Verification failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to verify employment');
+      setIsVerifying(false);
+    }
   };
 
   return (
     <Box
       sx={{
         minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         bgcolor: theme.colors.background.default,
         py: 4,
       }}
     >
-      <Container maxWidth="md">
-        <Paper
-          elevation={0}
-          sx={{
-            ...createGlassMorphism(theme, mode),
-            p: { xs: 4, md: 6 },
-            borderRadius: theme.borderRadius['2xl'],
-            border: `1px solid ${theme.colors.border.default}`,
-          }}
-        >
-          {/* Checking State */}
-          {status === 'checking' && (
-            <Stack spacing={4} alignItems="center" textAlign="center">
-              <CircularProgress
-                size={80}
-                sx={{ color: theme.colors.primary[mode === 'dark' ? 400 : 600] }}
-              />
-              <Typography
-                variant="h5"
-                fontWeight={theme.typography.fontWeight.semibold}
-                color={theme.colors.text.primary}
-              >
-                Checking your status...
-              </Typography>
-              <Typography variant="body2" color={theme.colors.text.secondary}>
-                Querying the payroll system to see if you've been added by a company
-              </Typography>
-            </Stack>
-          )}
+      <Container maxWidth="sm">
+        <Stack spacing={4}>
+          {/* Header */}
+          <Box sx={{ textAlign: 'center' }}>
+            <PersonIcon sx={{ fontSize: 60, color: theme.colors.primary[500], mb: 2 }} />
+            <Typography variant="h4" fontWeight={theme.typography.fontWeight.bold} color={theme.colors.text.primary}>
+              Join as Employee
+            </Typography>
+            <Typography variant="body1" color={theme.colors.text.secondary} sx={{ mt: 1 }}>
+              Enter the company contract address provided by your employer
+            </Typography>
+          </Box>
 
-          {/* Error State */}
-          {error && (
-            <Alert
-              severity="error"
-              sx={{
-                bgcolor: mode === 'dark' ? `${theme.colors.error[500]}20` : theme.colors.error[50],
-                border: `1px solid ${theme.colors.error[500]}`,
-              }}
-            >
-              {error}
-            </Alert>
-          )}
-
-          {/* Added State - Employee has been added by company */}
-          {status === 'added' && employeeData && (
-            <Stack spacing={4}>
-              {/* Header */}
-              <Stack spacing={2} alignItems="center" textAlign="center">
-                <Box
+          {/* Form */}
+          <Paper
+            elevation={3}
+            sx={{
+              p: 4,
+              borderRadius: 3,
+              bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
+            }}
+          >
+            <Stack spacing={3}>
+              {/* Wallet Address Display */}
+              <Box>
+                <Typography variant="caption" color={theme.colors.text.secondary} sx={{ mb: 1, display: 'block' }}>
+                  Your Wallet Address
+                </Typography>
+                <Typography
+                  variant="body2"
                   sx={{
-                    width: 80,
-                    height: 80,
-                    borderRadius: '50%',
-                    bgcolor: `${theme.colors.success[500]}20`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    fontFamily: 'monospace',
+                    bgcolor: theme.colors.background.surface,
+                    p: 1.5,
+                    borderRadius: 1,
+                    wordBreak: 'break-all',
                   }}
                 >
-                  <CheckCircleIcon
-                    sx={{
-                      fontSize: 48,
-                      color: theme.colors.success[500],
-                    }}
-                  />
-                </Box>
-                <Typography
-                  variant="h4"
-                  fontWeight={theme.typography.fontWeight.bold}
-                  color={theme.colors.text.primary}
-                >
-                  Welcome! 🎉
+                  {walletAddress || 'Not connected'}
                 </Typography>
-                <Typography variant="body1" color={theme.colors.text.secondary}>
-                  You've been added to the zkSalaria payroll system
-                </Typography>
-              </Stack>
-
-              {/* Company Info */}
-              <Box
-                sx={{
-                  p: 3,
-                  borderRadius: theme.borderRadius.lg,
-                  bgcolor: mode === 'dark' ? theme.colors.background.elevated : theme.colors.background.surface,
-                  border: `1px solid ${theme.colors.border.light}`,
-                }}
-              >
-                <Stack spacing={2}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2" color={theme.colors.text.secondary}>
-                      Company
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      fontWeight={theme.typography.fontWeight.semibold}
-                      color={theme.colors.text.primary}
-                    >
-                      🏢 {employeeData.companyName}
-                    </Typography>
-                  </Stack>
-
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2" color={theme.colors.text.secondary}>
-                      Role
-                    </Typography>
-                    <Typography variant="body1" color={theme.colors.text.primary}>
-                      {employeeData.role}
-                    </Typography>
-                  </Stack>
-
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2" color={theme.colors.text.secondary}>
-                      Salary
-                    </Typography>
-                    <Typography variant="body1" color={theme.colors.text.primary}>
-                      ${employeeData.salary}/{employeeData.salaryFrequency?.toLowerCase()}
-                    </Typography>
-                  </Stack>
-
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2" color={theme.colors.text.secondary}>
-                      Current Balance
-                    </Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography
-                        variant="body1"
-                        fontWeight={theme.typography.fontWeight.semibold}
-                        color={theme.colors.text.primary}
-                      >
-                        {balanceDecrypted ? `$${employeeData.salary}` : employeeData.balance}
-                      </Typography>
-                      <Tooltip title={balanceDecrypted ? 'Encrypt balance' : 'Decrypt balance'}>
-                        <IconButton size="small" onClick={handleDecryptBalance}>
-                          {balanceDecrypted ? (
-                            <VisibilityOffIcon fontSize="small" />
-                          ) : (
-                            <VisibilityIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  </Stack>
-                </Stack>
               </Box>
 
-              {/* Info Alert */}
-              <Alert
-                severity="info"
-                sx={{
-                  bgcolor: mode === 'dark' ? `${theme.colors.info[500]}20` : theme.colors.info[50],
-                }}
-              >
-                <Typography variant="body2">
-                  Your salary is encrypted on-chain. Only you can decrypt it with your private key.
-                </Typography>
-              </Alert>
+              {/* Contract Address Input */}
+              <TextField
+                fullWidth
+                label="Company Contract Address"
+                placeholder="Enter contract address (e.g., 0x1234...)"
+                value={contractAddress}
+                onChange={(e) => setContractAddress(e.target.value)}
+                disabled={isVerifying || success}
+                helperText="Ask your employer for this address"
+                required
+              />
 
-              {/* Action Button */}
+              {/* Error Alert */}
+              {error && (
+                <Alert severity="error" onClose={() => setError(null)}>
+                  {error}
+                </Alert>
+              )}
+
+              {/* Success Alert */}
+              {success && companyName && (
+                <Alert severity="success" icon={<CheckCircleIcon />}>
+                  <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
+                    Success! You're registered as an employee at {companyName}
+                  </Typography>
+                  <Typography variant="caption">
+                    Redirecting to dashboard...
+                  </Typography>
+                </Alert>
+              )}
+
+              {/* Verify Button */}
               <Button
                 variant="contained"
                 fullWidth
-                onClick={handleGoToDashboard}
+                size="large"
+                onClick={handleVerify}
+                disabled={isVerifying || success || !contractAddress.trim()}
+                startIcon={isVerifying ? <CircularProgress size={20} /> : <BusinessIcon />}
                 sx={{
-                  ...createPrimaryCTA(theme, mode),
                   py: 1.5,
+                  bgcolor: theme.colors.primary[500],
+                  '&:hover': { bgcolor: theme.colors.primary[700] },
                 }}
               >
-                Go to Dashboard →
+                <Typography>{isVerifying ? 'Verifying...' : success ? 'Verified!' : 'Verify & Join'}</Typography>
+              </Button>
+
+              {/* Cancel Button */}
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => navigate('/onboarding/role')}
+                disabled={isVerifying || success}
+              >
+                Back
               </Button>
             </Stack>
-          )}
+          </Paper>
 
-          {/* Pending State - Employee not yet added */}
-          {status === 'pending' && (
-            <Stack spacing={4}>
-              {/* Header */}
-              <Stack spacing={2} alignItems="center" textAlign="center">
-                <Box
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    borderRadius: '50%',
-                    bgcolor: `${theme.colors.warning[500]}20`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <AccessTimeIcon
-                    sx={{
-                      fontSize: 48,
-                      color: theme.colors.warning[500],
-                    }}
-                  />
-                </Box>
-                <Typography
-                  variant="h4"
-                  fontWeight={theme.typography.fontWeight.bold}
-                  color={theme.colors.text.primary}
-                >
-                  Not Yet Added
-                </Typography>
-                <Typography variant="body1" color={theme.colors.text.secondary} sx={{ maxWidth: 500 }}>
-                  Your employer hasn't added you to their payroll system yet. Share your wallet address with them to get started.
-                </Typography>
-              </Stack>
-
-              {/* Wallet Address */}
-              <Box
-                sx={{
-                  p: 3,
-                  borderRadius: theme.borderRadius.lg,
-                  bgcolor: mode === 'dark' ? theme.colors.background.elevated : theme.colors.background.surface,
-                  border: `1px solid ${theme.colors.border.light}`,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  color={theme.colors.text.secondary}
-                  sx={{ display: 'block', mb: 1 }}
-                >
-                  Your Wallet Address
-                </Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography
-                    variant="body2"
-                    fontFamily={theme.typography.fontFamily.mono}
-                    color={theme.colors.text.primary}
-                    sx={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {walletAddress}
-                  </Typography>
-                  <Tooltip title={copied ? 'Copied!' : 'Copy address'}>
-                    <IconButton size="small" onClick={handleCopyAddress}>
-                      <ContentCopyIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Stack>
-              </Box>
-
-              {/* Instructions */}
-              <Alert
-                severity="info"
-                sx={{
-                  bgcolor: mode === 'dark' ? `${theme.colors.info[500]}20` : theme.colors.info[50],
-                }}
-              >
-                <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold} sx={{ mb: 1 }}>
-                  Next Steps:
-                </Typography>
-                <Typography variant="body2" component="div">
-                  1. Copy your wallet address above
-                  <br />
-                  2. Share it with your employer
-                  <br />
-                  3. Wait for them to add you to their payroll system
-                  <br />
-                  4. You'll be able to access your dashboard once added
-                </Typography>
-              </Alert>
-
-              {/* Action Buttons */}
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  onClick={handleCopyAddress}
-                  startIcon={<ContentCopyIcon />}
-                  sx={{
-                    py: 1.5,
-                    borderRadius: theme.borderRadius.full,
-                    borderColor: theme.colors.border.default,
-                    color: theme.colors.text.secondary,
-                    '&:hover': {
-                      borderColor: theme.colors.border.strong,
-                      bgcolor: theme.colors.action.hover,
-                    },
-                  }}
-                >
-                  {copied ? 'Copied!' : 'Copy Address'}
-                </Button>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={handleEmailEmployer}
-                  startIcon={<EmailIcon />}
-                  sx={{
-                    ...createPrimaryCTA(theme, mode),
-                    py: 1.5,
-                  }}
-                >
-                  Email Employer
-                </Button>
-              </Stack>
-
-              {/* Help Text */}
-              <Typography variant="caption" color={theme.colors.text.disabled} textAlign="center">
-                Don't have an employer? You can't use zkSalaria as an individual employee. Companies must add you to their payroll system.
+          {/* Info Box */}
+          <Paper
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              bgcolor: mode === 'dark' ? theme.colors.background.surface : theme.colors.primary[50],
+              border: `1px solid ${theme.colors.primary[500]}`,
+            }}
+          >
+            <Stack spacing={1}>
+              <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.primary[500]}>
+                How to get the contract address?
+              </Typography>
+              <Typography variant="body2" color={theme.colors.text.secondary}>
+                1. Contact your employer (HR or payroll admin)
+              </Typography>
+              <Typography variant="body2" color={theme.colors.text.secondary}>
+                2. They will provide the company contract address
+              </Typography>
+              <Typography variant="body2" color={theme.colors.text.secondary}>
+                3. Paste it above and click "Verify & Join"
               </Typography>
             </Stack>
-          )}
-        </Paper>
+          </Paper>
+        </Stack>
       </Container>
     </Box>
   );

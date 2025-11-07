@@ -23,6 +23,7 @@ import { useTheme, useThemeValues } from '../theme';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { getCurrentCompany, listCompanies } from '../utils/CompaniesLocalState';
 import pino from 'pino';
+import { firstValueFrom } from 'rxjs';
 
 const logger = pino({
   name: 'addEmployee',
@@ -172,8 +173,30 @@ export const AddEmployeePage: React.FC = () => {
     try {
       console.log(`[AddEmployee] Adding employee ${employeeWallet} to company ${currentCompany}`);
 
+      // DEBUG: Check contract state
+      const state = await firstValueFrom(api.state$);
+      console.log('[AddEmployee] Current contract state:', {
+        totalEmployees: state.totalEmployees,
+        hasEmployeesMap: !!state.employees,
+        employeesMapType: state.employees?.constructor?.name,
+      });
+
+      // Check if employee already exists
+      const employeeInfo = await api.getEmployeeInfo(employeeWallet);
+      console.log('[AddEmployee] Employee check:', {
+        wallet: employeeWallet,
+        exists: employeeInfo.exists,
+        info: employeeInfo
+      });
+
+      if (employeeInfo.exists) {
+        setError('This employee has already been added to the company');
+        setIsSubmitting(false);
+        return;
+      }
+
       // Call smart contract to add employee on-chain
-      await api.addEmployee(walletAddress, employeeWallet);
+      await api.addEmployee(currentCompany, employeeWallet);
 
       // Save metadata off-chain
       const metadata: EmployeeMetadata = {

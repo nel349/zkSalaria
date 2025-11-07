@@ -48,6 +48,29 @@ export const stringToBytes32 = (str: string): Uint8Array => {
   return bytes;
 };
 
+/**
+ * Hash a wallet address (shield address) to a 32-byte employee ID
+ * Uses SHA-256 to convert long wallet addresses to contract-compatible IDs
+ * This ensures each wallet has a unique employee ID
+ */
+export const walletAddressToEmployeeId = async (walletAddress: string): Promise<Uint8Array> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(walletAddress);
+
+  // Check if we're in a browser environment
+  if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.subtle) {
+    // Browser environment (or Node.js 20+ with crypto.subtle)
+    const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
+    return new Uint8Array(hashBuffer);
+  } else {
+    // Node.js environment (fallback to node:crypto)
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256');
+    hash.update(data);
+    return new Uint8Array(hash.digest());
+  }
+};
+
 // Convert string to Bytes<64> for contract calls (e.g., company names)
 export const stringToBytes64 = (str: string): Uint8Array => {
   const bytes = new Uint8Array(64);

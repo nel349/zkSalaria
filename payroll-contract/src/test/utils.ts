@@ -59,3 +59,19 @@ export const randomBytes = (size: number): Uint8Array => {
   }
   return out;
 };
+
+/**
+ * Hash a wallet address (shield address) to a 32-byte employee ID
+ * Uses SHA-256 to convert long wallet addresses to contract-compatible IDs
+ * This matches the implementation in payroll-api/src/utils/index.ts
+ */
+export const walletAddressToEmployeeId = async (walletAddress: string): Promise<Uint8Array> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(walletAddress);
+
+  // Node.js environment
+  const crypto = await import('crypto');
+  const hash = crypto.createHash('sha256');
+  hash.update(data);
+  return new Uint8Array(hash.digest());
+};

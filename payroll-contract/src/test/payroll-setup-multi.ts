@@ -120,6 +120,20 @@ export class PayrollMultiPartyTestSetup {
     return result.result;
   }
 
+  // Public method to expose contract for direct circuit calls (for debugging)
+  getContract(): Contract<PayrollPrivateState, typeof payrollWitnesses> {
+    return this.contract;
+  }
+
+  // Public method to execute circuits directly (for debugging)
+  executeCircuitDirectly<TArgs extends any[], TResult>(
+    participantId: string,
+    circuitFn: (context: CircuitContext<PayrollPrivateState>, ...args: TArgs) => { context: CircuitContext<PayrollPrivateState>, result: TResult },
+    ...args: TArgs
+  ): TResult {
+    return this.executeAsParticipant(participantId, circuitFn, ...args);
+  }
+
   // Test method: Add employee (executed by company participant)
   addEmployee(employeeId: string): Ledger {
     console.log(`👤 ${this.companyName} adding employee ${employeeId}`);

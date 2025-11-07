@@ -46,13 +46,13 @@ export interface DeployedPayrollAPI {
   getCompanyInfo(companyId: string): Promise<CompanyInfo>;
 
   // Employee operations
-  addEmployee(companyId: string, employeeId: string): Promise<void>;
-  withdrawEmployeeSalary(employeeId: string, amount: string): Promise<void>;
-  getEmployeeInfo(employeeId: string): Promise<EmployeeInfo>;
+  addEmployee(companyId: string, employeeWalletAddress: string): Promise<void>;
+  withdrawEmployeeSalary(employeeWalletAddress: string, amount: string): Promise<void>;
+  getEmployeeInfo(employeeWalletAddress: string): Promise<EmployeeInfo>;
 
   // Payment operations
-  payEmployee(companyId: string, employeeId: string, amount: string, paymentType?: number): Promise<void>;
-  getEmployeePaymentHistory(employeeId: string): Promise<PaymentRecord[]>;
+  payEmployee(companyId: string, employeeWalletAddress: string, amount: string, paymentType?: number): Promise<void>;
+  getEmployeePaymentHistory(employeeWalletAddress: string): Promise<PaymentRecord[]>;
 
   // Withdrawal history (API-layer storage)
   getWithdrawalHistory(): Promise<import('./common-types.js').DetailedWithdrawalTransaction[]>;
@@ -64,7 +64,7 @@ export interface DeployedPayrollAPI {
   // Recurring payment operations
   createRecurringPayment(
     companyId: string,
-    employeeId: string,
+    employeeWalletAddress: string,
     amount: string,
     frequency: bigint,
     startDate: Date,
@@ -326,66 +326,90 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // EMPLOYEE OPERATIONS
   // ========================================
 
-  async addEmployee(companyId: string, employeeId: string): Promise<void> {
-    this.logger?.info({ addEmployee: { companyId, employeeId } });
+  async addEmployee(companyId: string, employeeWalletAddress: string): Promise<void> {
+    this.logger?.info({ addEmployee: { companyId, employeeWalletAddress } });
+
+    // Hash wallet address to get employee ID (SHA-256 -> 32 bytes)
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
+
+    // DEBUG: Log the hashed bytes
+    console.log('[PayrollAPI] addEmployee DEBUG:', {
+      walletAddress: employeeWalletAddress,
+      hashedBytes: Array.from(employeeIdBytes),
+      hashedHex: Array.from(employeeIdBytes).map(b => b.toString(16).padStart(2, '0')).join(''),
+      bytesLength: employeeIdBytes.length,
+    });
+
     this.transactions$.next({
       transaction: {
         type: 'add_employee',
         timestamp: new Date(),
         companyId,
-        employeeId,
+        employeeId: employeeWalletAddress, // Store full wallet address for UI
       },
       cancelledTransaction: undefined,
     });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
-
     // Note: add_employee circuit signature: (employee_id)
     // CompanyId comes from contract ledger state (one contract per company)
-    await this.circuits.add_employee(employeeIdBytes);
+    // We pass the hashed wallet address as employee_id
+    try {
+      await this.circuits.add_employee(employeeIdBytes);
+      console.log('[PayrollAPI] add_employee transaction submitted successfully');
+    } catch (err) {
+      console.error('[PayrollAPI] add_employee transaction FAILED:', err);
+      console.error('[PayrollAPI] Error details:', {
+        message: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+        errorType: err?.constructor?.name,
+        fullError: err,
+      });
+      throw err;
+    }
   }
 
-  async withdrawEmployeeSalary(employeeId: string, amount: string): Promise<void> {
-    this.logger?.info({ withdrawEmployeeSalary: { employeeId, amount } });
+  async withdrawEmployeeSalary(employeeWalletAddress: string, amount: string): Promise<void> {
+    this.logger?.info({ withdrawEmployeeSalary: { employeeWalletAddress, amount } });
     const withdrawalAmount = utils.parseAmount(amount);
     const withdrawalTimestamp = new Date();
+
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
 
     this.transactions$.next({
       transaction: {
         type: 'withdraw',
         amount: withdrawalAmount,
         timestamp: withdrawalTimestamp,
-        employeeId,
+        employeeId: employeeWalletAddress,
       },
       cancelledTransaction: undefined,
     });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
-
     await this.circuits.withdraw_employee_salary(employeeIdBytes, withdrawalAmount);
 
     // Get updated balance after withdrawal
-    const employeeInfo = await this.getEmployeeInfo(employeeId);
+    const employeeInfo = await this.getEmployeeInfo(employeeWalletAddress);
     const balanceAfter = employeeInfo.balance ?? 0n;
 
     // Log withdrawal to history (API-layer storage)
     const withdrawalId = `withdraw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await this.appendWithdrawalLog({
       withdrawal_id: withdrawalId,
-      employee_id: employeeId,
+      employee_id: employeeWalletAddress,
       amount: withdrawalAmount,
       balance_after: balanceAfter,
       timestamp: withdrawalTimestamp,
     });
   }
 
-  async getEmployeeInfo(employeeId: string): Promise<EmployeeInfo> {
-    const normalizedId = utils.normalizeId(employeeId);
-    const employeeIdBytes = utils.stringToBytes32(normalizedId);
+  async getEmployeeInfo(employeeWalletAddress: string): Promise<EmployeeInfo> {
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
 
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {
-      return { employeeId: normalizedId, exists: false };
+      return { employeeId: employeeWalletAddress, exists: false };
     }
 
     const ledgerState = ledger(state.data);
@@ -400,7 +424,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     return {
-      employeeId: normalizedId,
+      employeeId: employeeWalletAddress,
       exists,
       paymentHistoryCount,
     };
@@ -410,21 +434,23 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // PAYMENT OPERATIONS
   // ========================================
 
-  async payEmployee(companyId: string, employeeId: string, amount: string, paymentType: number = 0): Promise<void> {
+  async payEmployee(companyId: string, employeeWalletAddress: string, amount: string, paymentType: number = 0): Promise<void> {
     const typeLabel = paymentType === 0 ? 'SALARY' : paymentType === 1 ? 'ADVANCE' : 'BONUS';
-    this.logger?.info({ payEmployee: { companyId, employeeId, amount, paymentType, typeLabel } });
+    this.logger?.info({ payEmployee: { companyId, employeeWalletAddress, amount, paymentType, typeLabel } });
+
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
+
     this.transactions$.next({
       transaction: {
         type: 'pay_salary',
         amount: utils.parseAmount(amount),
         timestamp: new Date(),
         companyId,
-        employeeId,
+        employeeId: employeeWalletAddress,
       },
       cancelledTransaction: undefined,
     });
-
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
 
     // Note: pay_employee circuit signature: (employee_id, salary_amount, payment_type)
     // CompanyId comes from contract ledger state (one contract per company)
@@ -432,9 +458,9 @@ export class PayrollAPI implements DeployedPayrollAPI {
     await this.circuits.pay_employee(employeeIdBytes, utils.parseAmount(amount), BigInt(paymentType));
   }
 
-  async getEmployeePaymentHistory(employeeId: string): Promise<PaymentRecord[]> {
-    const normalizedId = utils.normalizeId(employeeId);
-    const employeeIdBytes = utils.stringToBytes32(normalizedId);
+  async getEmployeePaymentHistory(employeeWalletAddress: string): Promise<PaymentRecord[]> {
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
 
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {
@@ -471,14 +497,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
   async createRecurringPayment(
     companyId: string,
-    employeeId: string,
+    employeeWalletAddress: string,
     amount: string,
     frequency: bigint,
     startDate: Date,
     endDate: Date | null,
     dayOfWeek: number = 5 // Default to Friday for weekly
   ): Promise<void> {
-    this.logger?.info({ createRecurringPayment: { companyId, employeeId, amount, frequency, startDate, endDate } });
+    this.logger?.info({ createRecurringPayment: { companyId, employeeWalletAddress, amount, frequency, startDate, endDate } });
 
     // Get standard calendar configuration based on frequency
     const calendarConfig = getStandardCalendarConfig(frequency, dayOfWeek);
@@ -486,7 +512,9 @@ export class PayrollAPI implements DeployedPayrollAPI {
     // Calculate next payment date using contract's calendar utilities
     const nextPaymentDate = calculateNextPaymentDate(startDate, frequency, dayOfWeek);
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
+
     const startTimestamp = toUnixTimestamp(startDate);
     const endTimestamp = endDate ? toUnixTimestamp(endDate) : 0n;
     const nextPaymentTimestamp = toUnixTimestamp(nextPaymentDate);
