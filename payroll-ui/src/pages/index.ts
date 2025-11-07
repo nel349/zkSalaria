@@ -8,6 +8,7 @@ export { SampleThemePage } from './SampleThemePage';
 export { ConnectWalletPage } from './ConnectWalletPage';
 export { RoleDetectionPage } from './RoleDetectionPage';
 export { RoleSelectorPage } from './RoleSelectorPage';
+export { AccountSelectorPage } from './AccountSelectorPage';
 export { CompanyOnboardingPage } from './CompanyOnboardingPage';
 export { CompanyQuickStartPage } from './CompanyQuickStartPage';
 export { EmployeeOnboardingPage } from './EmployeeOnboardingPage';

@@ -130,8 +130,12 @@ export class PayrollAPI implements DeployedPayrollAPI {
         totalPayments: value.totalPayments,
         totalSupply: value.totalSupply,
         currentTimestamp: value.currentTimestamp,
+        companyName: value.companyName,
         lastTransaction: value.lastTransaction ?? acc.lastTransaction,
         lastCancelledTransaction: value.lastCancelledTransaction,
+        employees: value.employees,
+        paymentHistory: value.paymentHistory,
+        encryptedBalances: value.encryptedBalances,
       };
     };
 
@@ -162,6 +166,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
           totalPayments: ledgerState.total_payments,
           totalSupply: ledgerState.total_supply,
           currentTimestamp: Number(ledgerState.current_timestamp),
+          companyName: utils.bytes64ToString(ledgerState.company_name),
           lastTransaction: userActions.transaction,
           lastCancelledTransaction: userActions.cancelledTransaction,
           // Include ledger state maps for employee/payment queries

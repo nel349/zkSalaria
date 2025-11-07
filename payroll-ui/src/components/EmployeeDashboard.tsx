@@ -86,27 +86,17 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ contractAd
         const subscription = connectedApi.state$.subscribe((state) => {
           console.log('[EmployeeDashboard] State updated:', state);
 
-          // Get employee encrypted balance (decrypt would happen client-side in production)
-          const encryptedBalance = state.encryptedBalances?.get(walletAddress);
-          const employeeBalance = 0n; // TODO: Decrypt encryptedBalance client-side
-
-          // Get payment history for this employee
-          const paymentHistory = state.paymentHistory?.get(walletAddress) ?? [];
-          const paymentsThisYear = paymentHistory.filter((payment: any) => {
-            const paymentDate = new Date(payment.timestamp);
-            const currentYear = new Date().getFullYear();
-            return paymentDate.getFullYear() === currentYear;
-          });
-
-          // Get last payment
-          const lastPayment = paymentHistory.length > 0 ? paymentHistory[paymentHistory.length - 1] : null;
+          // TODO: Implement encrypted balance decryption (Phase 4)
+          // TODO: Implement payment history queries (Phase 4)
+          // For now, use placeholder values
+          const employeeBalance = 0n;
 
           setStats({
             currentBalance: employeeBalance,
-            lastPaymentAmount: lastPayment?.amount ?? 0n,
-            lastPaymentDate: lastPayment?.timestamp ?? null,
-            totalPaymentsThisYear: BigInt(paymentsThisYear.length),
-            employmentStatus: state.employees?.get(walletAddress) ? 'Active' : 'Inactive',
+            lastPaymentAmount: 0n,
+            lastPaymentDate: null,
+            totalPaymentsThisYear: state.totalPayments,
+            employmentStatus: 'Active',
             companyName: companyName,
           });
           setLoading(false);

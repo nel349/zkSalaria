@@ -100,9 +100,9 @@ export const EmployeeOnboardingPage: React.FC = () => {
         return;
       }
 
-      // Get company info
-      const companyInfo = await api.getCompanyInfo(contractAddress.trim());
-      const name = companyInfo.companyName || 'Unknown Company';
+      // Get company name directly from contract state
+      const state = await firstValueFrom(api.state$);
+      const name = state.companyName || 'Unknown Company';
 
       console.log(`[EmployeeOnboarding] Successfully verified employment at ${name}`);
 

@@ -1,5 +1,6 @@
 import { PayrollAPI, type PayrollProviders, type CompanyInfo, type EmployeeInfo } from '@zksalaria/payroll-api';
 import { listCompanies, getCurrentCompany } from '../utils/CompaniesLocalState';
+import { listEmployers } from '../utils/EmployerContractsLocalState';
 import pino from 'pino';
 
 export type UserRole = 'new' | 'company' | 'employee' | 'both';
@@ -40,11 +41,12 @@ export const detectUserRole = async (
   console.log(`[RoleDetection] Detecting role for address: ${walletAddress}`);
 
   try {
-    // Get all companies from new storage
+    // Get all companies and employers from local storage
     const companies = listCompanies();
+    const employers = listEmployers(walletAddress);
 
-    if (companies.length === 0) {
-      console.log('[RoleDetection] No companies found - treating as new user');
+    if (companies.length === 0 && employers.length === 0) {
+      console.log('[RoleDetection] No companies or employers found - treating as new user');
       return {
         role: 'new',
         isCompany: false,
@@ -52,7 +54,7 @@ export const detectUserRole = async (
       };
     }
 
-    console.log(`[RoleDetection] Found ${companies.length} companies, checking roles...`);
+    console.log(`[RoleDetection] Found ${companies.length} companies and ${employers.length} employers, checking roles...`);
 
     // Check role across ALL companies (user might be company admin in one, employee in another)
     let isCompanyInAny = false;
@@ -60,9 +62,10 @@ export const detectUserRole = async (
     let lastCompanyData: CompanyInfo | null = null;
     let lastEmployeeData: EmployeeInfo | null = null;
 
+    // Check all company contracts
     for (const company of companies) {
       try {
-        console.log(`[RoleDetection] Checking contract: ${company.contractAddress}`);
+        console.log(`[RoleDetection] Checking company contract: ${company.contractAddress}`);
         const api = await PayrollAPI.connect(
           providers,
           company.contractAddress,
@@ -85,6 +88,29 @@ export const detectUserRole = async (
         }
       } catch (err) {
         console.warn(`[RoleDetection] Failed to check contract ${company.contractAddress}:`, err);
+        // Continue checking other contracts
+      }
+    }
+
+    // Check all employer contracts (where user is employee)
+    for (const employer of employers) {
+      try {
+        console.log(`[RoleDetection] Checking employer contract: ${employer.contractAddress}`);
+        const api = await PayrollAPI.connect(
+          providers,
+          employer.contractAddress,
+          walletAddress,
+          logger
+        );
+
+        const employeeData = await api.getEmployeeInfo(walletAddress).catch(() => null);
+
+        if (employeeData?.exists) {
+          isEmployeeInAny = true;
+          lastEmployeeData = employeeData;
+        }
+      } catch (err) {
+        console.warn(`[RoleDetection] Failed to check employer contract ${employer.contractAddress}:`, err);
         // Continue checking other contracts
       }
     }

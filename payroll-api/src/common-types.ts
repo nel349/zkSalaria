@@ -144,6 +144,7 @@ export type PayrollDerivedState = {
   readonly totalPayments: bigint;
   readonly totalSupply: bigint;
   readonly currentTimestamp: number;
+  readonly companyName?: string; // company_name from ledger
   readonly lastTransaction?: PayrollTransaction;
   readonly lastCancelledTransaction?: PayrollTransaction;
   // Full ledger state maps (for employee and payment queries)

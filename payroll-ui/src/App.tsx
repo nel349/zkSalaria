@@ -6,6 +6,7 @@ import {
   ConnectWalletPage,
   RoleDetectionPage,
   RoleSelectorPage,
+  AccountSelectorPage,
   CompanyOnboardingPage,
   CompanyQuickStartPage,
   EmployeeOnboardingPage,
@@ -19,12 +20,13 @@ import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
 
 /**
  * Main App component with routing configuration
- * Phase 1.5: Added employee onboarding
+ * Phase 3.1: Unified account selection
  *
  * Routing Flow:
  * / → Landing Page
  * /connect → Connect Wallet
  * /loading → Network Validation & Role Detection
+ * /selector → Account Selector (existing users with companies/employers)
  * /onboarding/role → Role Selector (new users)
  * /onboarding/company → Company Registration Form
  * /onboarding/company/quickstart → Quick Start Wizard (3 steps)
@@ -55,6 +57,9 @@ export const App: React.FC = () => {
 
           {/* Network validation & role detection */}
           <Route path="/loading" element={<RoleDetectionPage />} />
+
+          {/* Account selector (existing users) */}
+          <Route path="/selector" element={<AccountSelectorPage />} />
 
           {/* Role selector (new users) */}
           <Route path="/onboarding/role" element={<RoleSelectorPage />} />

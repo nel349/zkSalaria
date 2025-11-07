@@ -87,12 +87,10 @@ export const DashboardPage: React.FC = () => {
 
             // Query contract to see if wallet is an employee
             const api = await PayrollAPI.connect(providers, selectedCompanyAddress, walletAddress, logger);
-            const state = await firstValueFrom(api.state$);
 
-            // Hash wallet address to match what's stored in contract
-            const employeeIdBytes = await utils.walletAddressToEmployeeId(walletAddress);
-            const employeeInfo = state.employees?.get(employeeIdBytes);
-            isEmployeeAtContract = employeeInfo !== undefined;
+            // Use API method to check employee status
+            const employeeInfo = await api.getEmployeeInfo(walletAddress);
+            isEmployeeAtContract = employeeInfo.exists;
           } catch (err) {
             console.warn('[Dashboard] Failed to check contract status:', err);
           }

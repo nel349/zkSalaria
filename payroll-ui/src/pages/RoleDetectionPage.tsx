@@ -8,6 +8,7 @@ import { useNetworkValidation } from '../hooks/useNetworkValidation';
 import { detectUserRole, type UserRole } from '../services/roleDetection';
 import { useTheme, useThemeValues } from '../theme';
 import { listCompanies, migrateLegacyCompany } from '../utils/CompaniesLocalState';
+import { listEmployers } from '../utils/EmployerContractsLocalState';
 
 /**
  * Role Detection Page - Phase 1.3
@@ -75,9 +76,11 @@ export const RoleDetectionPage: React.FC = () => {
         // Small delay for UX (let user see the success state)
         await new Promise((resolve) => setTimeout(resolve, 800));
 
-        // Check for multiple companies
+        // Check for existing accounts
         const companies = listCompanies();
-        const hasMultipleCompanies = companies.length > 1;
+        const employers = listEmployers(walletAddress);
+        const hasCompanies = companies.length > 0;
+        const hasEmployers = employers.length > 0;
 
         // Redirect based on role
         switch (result.role) {
@@ -88,29 +91,21 @@ export const RoleDetectionPage: React.FC = () => {
             break;
 
           case 'company':
-            // Company only → Check if multiple companies exist
-            if (hasMultipleCompanies) {
-              console.log('[RoleDetection] Multiple companies detected, redirecting to company selector');
-              localStorage.setItem('user_role', 'company');
-              navigate('/companies');
-            } else {
-              console.log('[RoleDetection] Single company, redirecting to company dashboard');
-              localStorage.setItem('user_role', 'company');
-              navigate('/dashboard');
-            }
+            // Company only → Account selector (user must choose which company)
+            console.log('[RoleDetection] Company accounts found, redirecting to account selector');
+            navigate('/selector');
             break;
 
           case 'employee':
-            // Employee only → Employee dashboard
-            console.log('[RoleDetection] Redirecting to employee dashboard');
-            localStorage.setItem('user_role', 'employee');
-            navigate('/dashboard');
+            // Employee only → Account selector (user must choose which employer)
+            console.log('[RoleDetection] Employee accounts found, redirecting to account selector');
+            navigate('/selector');
             break;
 
           case 'both':
-            // Both roles → Role switcher page (Phase 1.5)
-            console.log('[RoleDetection] Redirecting to role switcher');
-            navigate('/role-switcher');
+            // Both roles → Account selector (user must choose company or employer)
+            console.log('[RoleDetection] Multiple account types found, redirecting to account selector');
+            navigate('/selector');
             break;
         }
       } catch (err) {
