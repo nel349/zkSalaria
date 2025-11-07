@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Container, Typography, Button, Stack, Paper, TextField, Alert, CircularProgress, Divider } from '@mui/material';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Box, CircularProgress, Alert } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import BusinessIcon from '@mui/icons-material/Business';
-import AddIcon from '@mui/icons-material/Add';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import { listCompanies, getCurrentCompany } from '../utils/CompaniesLocalState';
+import { firstValueFrom } from 'rxjs';
+import { useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
+import { listCompanies, getCurrentCompany, setCurrentCompany } from '../utils/CompaniesLocalState';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import { CompanyDashboard } from '../components/CompanyDashboard';
+import { EmployeeDashboard } from '../components/EmployeeDashboard';
 import pino from 'pino';
 
-// Create logger for dashboard
 const logger = pino({
   name: 'dashboard',
   level: 'info',
@@ -19,214 +18,169 @@ const logger = pino({
   },
 });
 
+type UserRole = 'company' | 'employee' | 'both' | 'none';
+
 /**
- * Dashboard page (placeholder)
- * Will show company or employee dashboard based on role
- * TODO: Implement role detection and full dashboard
+ * Role-Aware Dashboard Router (Phase 3.1 & 3.2)
+ * Detects user role and renders appropriate dashboard view
  */
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const theme = useThemeValues();
   const { walletAddress, providers } = usePayrollWallet();
+
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCompanyAddress, setSelectedCompanyAddress] = useState<string | null>(getCurrentCompany());
+
   const companies = listCompanies();
-  const currentCompany = getCurrentCompany();
-  const hasMultipleCompanies = companies.length > 1;
+  const currentCompany = companies.find((c) => c.contractAddress === selectedCompanyAddress);
 
-  const [api, setApi] = useState<DeployedPayrollAPI | null>(null);
-  const [depositAmount, setDepositAmount] = useState('');
-  const [isDepositing, setIsDepositing] = useState(false);
-  const [depositSuccess, setDepositSuccess] = useState<string | null>(null);
-  const [depositError, setDepositError] = useState<string | null>(null);
+  // Handle company switch without page reload
+  const handleCompanySwitch = useCallback((contractAddress: string) => {
+    setCurrentCompany(contractAddress);
+    setSelectedCompanyAddress(contractAddress);
+    setLoading(true); // Trigger re-detection and reconnect
+  }, []);
 
-  const currentCompanyInfo = companies.find(c => c.contractAddress === currentCompany);
-
-  // Connect to the deployed contract on mount
+  // Detect user role
   useEffect(() => {
-    const connectToContract = async () => {
-      if (!currentCompany || !walletAddress) {
-        console.log('[Dashboard] Missing contract address or wallet address');
+    const detectRole = async () => {
+      if (!walletAddress) {
+        setError('Wallet not connected');
+        setLoading(false);
         return;
       }
 
       try {
-        console.log(`[Dashboard] Connecting to contract: ${currentCompany}`);
-        const connectedApi = await PayrollAPI.connect(providers, currentCompany, walletAddress, logger);
-        setApi(connectedApi);
-        console.log('[Dashboard] Successfully connected to contract');
+        // Check if user is a company
+        const isCompany = companies.length > 0 && selectedCompanyAddress !== null;
+
+        // Check if user is an employee (query contract)
+        let isEmployee = false;
+        if (selectedCompanyAddress) {
+          try {
+            const api = await PayrollAPI.connect(providers, selectedCompanyAddress, walletAddress, logger);
+            const state = await firstValueFrom(api.state$);
+
+            // Check if wallet is in employee_accounts map
+            const employeeInfo = state.employees?.get(walletAddress);
+            isEmployee = employeeInfo !== undefined;
+          } catch (err) {
+            console.warn('[Dashboard] Failed to check employee status:', err);
+          }
+        }
+
+        // Determine role
+        if (isCompany && isEmployee) {
+          setRole('both'); // Dual role - will need role switcher in Phase 3.6
+        } else if (isCompany) {
+          setRole('company');
+        } else if (isEmployee) {
+          setRole('employee');
+        } else {
+          setRole('none');
+          setError('No company or employee role found. Please complete onboarding.');
+        }
+
+        setLoading(false);
       } catch (err) {
-        console.error('[Dashboard] Failed to connect to contract:', err);
-        setDepositError('Failed to connect to contract');
+        console.error('[Dashboard] Role detection failed:', err);
+        setError('Failed to detect user role');
+        setLoading(false);
       }
     };
 
-    connectToContract();
-  }, [currentCompany, walletAddress, providers]);
+    detectRole();
+  }, [walletAddress, providers, companies, selectedCompanyAddress]);
 
-  const handleDeposit = async () => {
-    console.log('[Dashboard] Deposit attempt:', {
-      depositAmount,
-      walletAddress,
-      hasApi: !!api,
-      currentCompany,
-    });
+  // Loading state
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: theme.colors.background.default,
+        }}
+      >
+        <CircularProgress sx={{ color: theme.colors.primary[500] }} />
+      </Box>
+    );
+  }
 
-    if (!depositAmount || !walletAddress || !api || !currentCompany) {
-      const missing = [];
-      if (!depositAmount) missing.push('depositAmount');
-      if (!walletAddress) missing.push('walletAddress');
-      if (!api) missing.push('api');
-      if (!currentCompany) missing.push('currentCompany');
+  // Error state
+  if (error || role === 'none') {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: theme.colors.background.default,
+          p: 4,
+        }}
+      >
+        <Alert severity="error" sx={{ maxWidth: 600 }}>
+          {error || 'No company or employee role found. Please complete onboarding.'}
+        </Alert>
+      </Box>
+    );
+  }
 
-      const errorMsg = `Missing required information: ${missing.join(', ')}`;
-      console.error('[Dashboard]', errorMsg);
-      setDepositError(errorMsg);
-      return;
-    }
-
-    const amount = parseFloat(depositAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setDepositError('Please enter a valid amount');
-      return;
-    }
-
-    setIsDepositing(true);
-    setDepositError(null);
-    setDepositSuccess(null);
-
-    try {
-      console.log(`[Dashboard] Depositing ${amount} to company ${currentCompany}`);
-      await api.depositCompanyFunds(walletAddress, depositAmount);
-
-      setDepositSuccess(`Successfully deposited ${amount} tokens!`);
-      setDepositAmount('');
-    } catch (err) {
-      console.error('[Dashboard] Deposit failed:', err);
-      setDepositError(err instanceof Error ? err.message : 'Failed to deposit funds');
-    } finally {
-      setIsDepositing(false);
-    }
-  };
-
-  return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-      }}
-    >
-      <Container maxWidth="md">
-        <Paper
-          elevation={3}
+  // Render appropriate dashboard based on role
+  // For dual role users, default to company view (Phase 3.6 will add role switcher)
+  if (role === 'company' || role === 'both') {
+    if (!currentCompany) {
+      return (
+        <Box
           sx={{
-            p: 6,
-            borderRadius: 3,
-            textAlign: 'center',
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: theme.colors.background.default,
+            p: 4,
           }}
         >
-          <Stack spacing={4} alignItems="center">
-            <DashboardIcon
-              sx={{
-                fontSize: 80,
-                color: '#10B981',
-              }}
-            />
+          <Alert severity="warning" sx={{ maxWidth: 600 }}>
+            No company selected. Please select a company from the companies page.
+          </Alert>
+        </Box>
+      );
+    }
 
-            <Typography variant="h4" component="h1" fontWeight="bold">
-              Company Dashboard
-            </Typography>
+    return <CompanyDashboard currentCompany={currentCompany} companies={companies} onCompanySwitch={handleCompanySwitch} />;
+  }
 
-            {currentCompanyInfo && (
-              <Box textAlign="center">
-                <Typography variant="h6" fontWeight="bold">
-                  {currentCompanyInfo.name}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {currentCompanyInfo.contractAddress.slice(0, 8)}...{currentCompanyInfo.contractAddress.slice(-6)}
-                </Typography>
-              </Box>
-            )}
+  // Employee view
+  if (role === 'employee') {
+    if (!selectedCompanyAddress || !currentCompany) {
+      return (
+        <Box
+          sx={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: theme.colors.background.default,
+            p: 4,
+          }}
+        >
+          <Alert severity="warning" sx={{ maxWidth: 600 }}>
+            No employer contract found. Please contact your employer.
+          </Alert>
+        </Box>
+      );
+    }
 
-            <Divider sx={{ width: '100%' }} />
+    return <EmployeeDashboard contractAddress={selectedCompanyAddress} companyName={currentCompany.name} />;
+  }
 
-            {/* Deposit Funds Section */}
-            <Box sx={{ width: '100%', maxWidth: 400 }}>
-              <Typography variant="h6" fontWeight="bold" mb={2}>
-                Deposit Funds
-              </Typography>
-
-              <Stack spacing={2}>
-                <TextField
-                  label="Amount"
-                  type="number"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  disabled={isDepositing}
-                  fullWidth
-                  placeholder="Enter amount to deposit"
-                  inputProps={{ min: 0, step: 0.01 }}
-                />
-
-                <Button
-                  variant="contained"
-                  startIcon={isDepositing ? <CircularProgress size={20} /> : <AccountBalanceWalletIcon />}
-                  onClick={handleDeposit}
-                  disabled={isDepositing || !depositAmount}
-                  fullWidth
-                  sx={{ py: 1.5 }}
-                >
-                  {isDepositing ? 'Depositing...' : 'Deposit Funds'}
-                </Button>
-
-                {depositSuccess && (
-                  <Alert severity="success" onClose={() => setDepositSuccess(null)}>
-                    {depositSuccess}
-                  </Alert>
-                )}
-
-                {depositError && (
-                  <Alert severity="error" onClose={() => setDepositError(null)}>
-                    {depositError}
-                  </Alert>
-                )}
-              </Stack>
-            </Box>
-
-            <Divider sx={{ width: '100%' }} />
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              {hasMultipleCompanies && (
-                <Button
-                  variant="outlined"
-                  startIcon={<BusinessIcon />}
-                  onClick={() => navigate('/companies')}
-                  sx={{ px: 4, py: 1.5 }}
-                >
-                  Switch Company
-                </Button>
-              )}
-
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => navigate('/onboarding/company')}
-                sx={{ px: 4, py: 1.5 }}
-              >
-                Create New Company
-              </Button>
-
-              <Button
-                variant="outlined"
-                onClick={() => navigate('/')}
-                sx={{ px: 4, py: 1.5 }}
-              >
-                Back to Home
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-      </Container>
-    </Box>
-  );
+  // Fallback (should never reach here)
+  return null;
 };

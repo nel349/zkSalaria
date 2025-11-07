@@ -146,6 +146,11 @@ export type PayrollDerivedState = {
   readonly currentTimestamp: number;
   readonly lastTransaction?: PayrollTransaction;
   readonly lastCancelledTransaction?: PayrollTransaction;
+  // Full ledger state maps (for employee and payment queries)
+  // Using 'any' because Compact Map types are not compatible with JS Map
+  readonly employees?: any; // employee_accounts from ledger
+  readonly paymentHistory?: any; // employee_payment_history from ledger
+  readonly encryptedBalances?: any; // encrypted_employee_balances from ledger
 };
 
 export const emptyPayrollState: PayrollDerivedState = {
@@ -156,6 +161,9 @@ export const emptyPayrollState: PayrollDerivedState = {
   currentTimestamp: 0,
   lastTransaction: undefined,
   lastCancelledTransaction: undefined,
+  employees: undefined,
+  paymentHistory: undefined,
+  encryptedBalances: undefined,
 };
 
 export type CompanyInfo = {

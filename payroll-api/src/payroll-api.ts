@@ -164,6 +164,10 @@ export class PayrollAPI implements DeployedPayrollAPI {
           currentTimestamp: Number(ledgerState.current_timestamp),
           lastTransaction: userActions.transaction,
           lastCancelledTransaction: userActions.cancelledTransaction,
+          // Include ledger state maps for employee/payment queries
+          employees: ledgerState.employee_accounts,
+          paymentHistory: ledgerState.employee_payment_history,
+          encryptedBalances: ledgerState.encrypted_employee_balances,
         };
         return result;
       },
