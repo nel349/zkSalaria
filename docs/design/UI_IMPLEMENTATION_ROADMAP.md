@@ -213,7 +213,7 @@ All Phase 1 API integrations have been successfully completed:
 
 ### Screens to Build
 
-#### 2.1 Add Employee Page (`/employees/add`)
+#### 2.1 Add Employee Page (Integration with modal)
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 1)
 - **Components:**
   - Employee info form (name, wallet, email, role, salary)
@@ -222,7 +222,7 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** `addEmployee()`
 - **Complexity:** 🟢 Low (0.5 day)
 
-#### 2.2 Pay Employee (One-Time) (`/pay`)
+#### 2.2 Pay Employee (One-Time) (Integration with modal)
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 2)
 - **Components:**
   - Employee dropdown (searchable)
@@ -234,7 +234,7 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** `payEmployee()`
 - **Complexity:** 🟡 Medium (1 day)
 
-#### 2.3 Setup Recurring Payment (`/recurring/setup`)
+#### 2.3 Setup Recurring Payment (Integration with modal)
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 3)
 - **Components:**
   - Employee dropdown

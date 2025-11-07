@@ -12,7 +12,6 @@ import {
   EmployeeOnboardingPage,
   DashboardPage,
   CompanySelectorPage,
-  AddEmployeePage,
   EmployeeListPage,
 } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
@@ -77,7 +76,6 @@ export const App: React.FC = () => {
 
           {/* Employee management */}
           <Route path="/employees" element={<EmployeeListPage />} />
-          <Route path="/employees/add" element={<AddEmployeePage />} />
 
           {/* Dashboard (company or employee) */}
           <Route path="/dashboard" element={<DashboardPage />} />

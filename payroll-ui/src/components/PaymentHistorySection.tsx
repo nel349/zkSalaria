@@ -116,17 +116,16 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
     setDecryptedAmounts(newMap);
   };
 
-  // Format date
+  // Format date - show actual date and time
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return '1 day ago';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   // Status badge
@@ -156,7 +155,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
     return (
       <Chip
         icon={config.icon}
-        label={config.label}
+        label={<Typography>{config.label}</Typography>}
         size="small"
         sx={{
           bgcolor: config.bg,
@@ -177,7 +176,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
     };
     return (
       <Chip
-        label={typeLabels[type]}
+        label={<Typography>{typeLabels[type]}</Typography>}
         size="small"
         sx={{
           bgcolor: mode === 'dark' ? theme.colors.primary[900] : theme.colors.primary[100],
@@ -300,7 +299,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
           <TableBody>
             {recentPayments.map((payment) => (
               <TableRow
-                key={payment.id}
+                key={`${payment.id}-${payment.date}`}
                 hover
                 sx={{
                   '&:hover': {

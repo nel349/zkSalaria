@@ -12,20 +12,11 @@ import {
   Typography,
 } from '@mui/material';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useThemeValues } from '../theme';
 import { type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { firstValueFrom } from 'rxjs';
-
-interface EmployeeMetadata {
-  employeeId: string;
-  name: string;
-  email: string;
-  role?: string;
-  baseSalary?: string;
-  addedAt: string;
-  companyContractAddress: string;
-}
+import { ToastNotification } from './ToastNotification';
+import { type EmployeeMetadata } from '../types/payment';
 
 interface AddEmployeeModalProps {
   open: boolean;
@@ -48,7 +39,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+
+  // Toast notification state
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
   // Form fields
   const [employeeName, setEmployeeName] = useState('');
@@ -167,18 +162,26 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       saveEmployeeMetadata(metadata);
 
       console.log('[AddEmployeeModal] Employee added successfully');
-      setSuccess(true);
 
-      // Reset form after short delay
-      setTimeout(() => {
-        resetForm();
-        setSuccess(false);
-        onClose();
-        onSuccess?.();
-      }, 2000);
+      // Show success toast
+      setToastMessage(`Successfully added ${employeeName} to your payroll`);
+      setToastSeverity('success');
+      setToastOpen(true);
+
+      // Close modal and reset
+      resetForm();
+      onClose();
+      onSuccess?.();
     } catch (err) {
       console.error('[AddEmployeeModal] Failed to add employee:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add employee');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add employee';
+
+      // Show error toast
+      setToastMessage(errorMessage);
+      setToastSeverity('error');
+      setToastOpen(true);
+
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -200,13 +203,17 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const handleClose = () => {
     if (!isSubmitting) {
       resetForm();
-      setSuccess(false);
       onClose();
     }
   };
 
+  const handleToastClose = () => {
+    setToastOpen(false);
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <>
+      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Stack direction="row" alignItems="center" spacing={1}>
           <PersonAddIcon sx={{ color: theme.colors.primary[500] }} />
@@ -217,17 +224,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       </DialogTitle>
 
       <DialogContent>
-        {success ? (
-          <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 2 }}>
-            <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
-              <strong>{employeeName}</strong> has been successfully added to your payroll.
-            </Typography>
-            <Typography variant="caption">
-              They can now connect their wallet to view their encrypted balance and payment history.
-            </Typography>
-          </Alert>
-        ) : (
-          <Stack spacing={3} sx={{ mt: 2 }}>
+        <Stack spacing={3} sx={{ mt: 2 }}>
             {error && (
               <Alert severity="error" onClose={() => setError(null)}>
                 {error}
@@ -289,22 +286,30 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               inputProps={{ min: 0, step: 0.01 }}
             />
           </Stack>
-        )}
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={handleClose} disabled={isSubmitting || success}>
+        <Button onClick={handleClose} disabled={isSubmitting}>
           Cancel
         </Button>
         <Button
           variant="contained"
           onClick={handleSubmit}
-          disabled={isSubmitting || !api || success}
+          disabled={isSubmitting || !api}
           startIcon={isSubmitting ? <CircularProgress size={20} /> : <PersonAddIcon />}
         >
           {isSubmitting ? 'Adding...' : 'Add Employee'}
         </Button>
       </DialogActions>
     </Dialog>
+
+    {/* Toast Notification */}
+    <ToastNotification
+      open={toastOpen}
+      message={toastMessage}
+      severity={toastSeverity}
+      onClose={handleToastClose}
+    />
+  </>
   );
 };

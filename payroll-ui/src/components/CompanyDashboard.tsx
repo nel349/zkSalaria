@@ -27,9 +27,11 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany, SavedCompany } from '../utils/CompaniesLocalState';
-import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import { PayrollAPI, type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
 import { AddEmployeeModal } from './AddEmployeeModal';
+import { PayEmployeeModal } from './PayEmployeeModal';
 import { PaymentHistorySection } from './PaymentHistorySection';
+import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
 
 const logger = pino({
@@ -73,43 +75,10 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addEmployeeModalOpen, setAddEmployeeModalOpen] = useState(false);
-
-  // Mock payment data (TODO: Phase 4 - load from contract)
-  const mockPayments = [
-    {
-      id: 'pay-001',
-      status: 'completed' as const,
-      employeeName: 'Alice Johnson',
-      employeeId: 'alice-wallet-address',
-      amount: 500000n,
-      isEncrypted: false,
-      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      type: 'salary' as const,
-      transactionId: '0xa3f2...8b9c',
-    },
-    {
-      id: 'pay-002',
-      status: 'completed' as const,
-      employeeName: 'Bob Smith',
-      employeeId: 'bob-wallet-address',
-      amount: 420000n,
-      isEncrypted: false,
-      date: new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString(),
-      type: 'salary' as const,
-      transactionId: '0xb4e3...7c8d',
-    },
-    {
-      id: 'pay-003',
-      status: 'pending' as const,
-      employeeName: 'Carol Lee',
-      employeeId: 'carol-wallet-address',
-      amount: 650000n,
-      isEncrypted: false,
-      date: new Date().toISOString(),
-      type: 'salary' as const,
-      transactionId: '0xc5f4...6d7e',
-    },
-  ];
+  const [payEmployeeModalOpen, setPayEmployeeModalOpen] = useState(false);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<EmployeeMetadata[]>([]);
+  const [contractState, setContractState] = useState<any>(null); // Store reactive contract state
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -135,8 +104,12 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
             totalPayments: state.totalPayments,
             complianceStatus: '100%', // TODO: Calculate from audit data
           });
+          setContractState(state); // Store full state for payment history
           setLoading(false);
         });
+
+        // Initial payment history load
+        loadPaymentHistory(connectedApi);
 
         return () => subscription.unsubscribe();
       } catch (err) {
@@ -148,6 +121,89 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
 
     connectAndLoadStats();
   }, [currentCompany.contractAddress, walletAddress, providers]);
+
+  // Auto-refresh payment history when contract state updates (reactive)
+  useEffect(() => {
+    if (api && contractState) {
+      loadPaymentHistory();
+    }
+  }, [contractState, api]);
+
+  // Load payment history from reactive contract state
+  const loadPaymentHistory = async () => {
+    if (!contractState?.paymentHistory) return;
+
+    try {
+      // Get employees from localStorage
+      const employeesKey = `payroll-ui.employees.${currentCompany.contractAddress}`;
+      const storedEmployees: EmployeeMetadata[] = JSON.parse(localStorage.getItem(employeesKey) || '[]');
+      setEmployees(storedEmployees);
+
+      // Get payment metadata from localStorage
+      const paymentsKey = `payroll-ui.payments.${currentCompany.contractAddress}`;
+      const paymentMetadata: PaymentMetadata[] = JSON.parse(localStorage.getItem(paymentsKey) || '[]');
+
+      console.log('[CompanyDashboard] Loading payment history:', {
+        employees: storedEmployees.length,
+        metadata: paymentMetadata.length
+      });
+
+      const allPayments: any[] = [];
+
+      for (const employee of storedEmployees) {
+        // Get employee's payment history from contract state
+        const employeeIdBytes = await utils.walletAddressToEmployeeId(employee.employeeId);
+        const history = contractState.paymentHistory.member(employeeIdBytes)
+          ? contractState.paymentHistory.lookup(employeeIdBytes).filter((r: any) => r.timestamp > 0)
+          : [];
+
+        console.log(`[CompanyDashboard] Employee ${employee.name}: ${history.length} payments from contract`);
+
+        // Get employee's metadata sorted by index
+        const employeeMetas: PaymentMetadata[] = paymentMetadata
+          .filter((m) => m.employeeId === employee.employeeId)
+          .sort((a, b) => a.timestamp - b.timestamp); // Sort by submission time
+
+        console.log(`[CompanyDashboard] Employee ${employee.name}: ${employeeMetas.length} metadata entries`);
+
+        // Match by index - payments are added chronologically to the vector
+        for (let i = 0; i < history.length; i++) {
+          const record = history[i];
+          const contractType = record.payment_type === 0n ? 'Regular Salary' :
+                              record.payment_type === 1n ? 'Advance' : 'Bonus';
+
+          // Match by payment index - same index in metadata array
+          const metadata = employeeMetas[i];
+          const amount = metadata ? metadata.amount : 0;
+
+          // Use metadata timestamp (milliseconds) for now until we fix contract timestamp
+          const timestamp = metadata ? metadata.timestamp : Date.now();
+
+          const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
+          const paymentType = record.payment_type === 0n ? 'salary' : record.payment_type === 1n ? 'advance' : 'bonus';
+
+          console.log(`[CompanyDashboard] Payment ${i}: type=${contractType}, amount=${amount}, hasMetadata=${!!metadata}`);
+
+          allPayments.push({
+            id: `${employee.employeeId}-${i}`, // Unique: employeeId + index
+            status: record.status === 1n ? 'completed' : record.status === 0n ? 'pending' : 'failed',
+            employeeName: employee.name,
+            employeeId: employee.employeeId,
+            amount: BigInt(Math.round(amount * 100)),
+            isEncrypted: false,
+            date: new Date(timestamp).toISOString(), // timestamp is already in milliseconds
+            type: paymentType,
+            transactionId: paymentId,
+          });
+        }
+      }
+
+      setPayments(allPayments);
+      console.log(`[CompanyDashboard] Loaded ${allPayments.length} total payments`);
+    } catch (err) {
+      console.error('[CompanyDashboard] Failed to load payment history:', err);
+    }
+  };
 
   const formatBalance = (balance: bigint): string => {
     return `$${(Number(balance) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -418,7 +474,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                   variant="contained"
                   fullWidth
                   startIcon={<PaymentIcon />}
-                  onClick={() => navigate('/pay')}
+                  onClick={() => setPayEmployeeModalOpen(true)}
                   sx={{
                     py: 1.5,
                     bgcolor: theme.colors.warning[500],
@@ -467,7 +523,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                 Recent Payment Activity
               </Typography>
             </Stack>
-            <PaymentHistorySection userRole="company" payments={mockPayments} maxRows={5} />
+            <PaymentHistorySection userRole="company" payments={payments} maxRows={5} />
           </Box>
         </Stack>
       </Container>
@@ -482,6 +538,20 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
         onSuccess={() => {
           // Modal will auto-close, state will update via observable
           console.log('[CompanyDashboard] Employee added, state will refresh automatically');
+        }}
+      />
+
+      {/* Pay Employee Modal */}
+      <PayEmployeeModal
+        open={payEmployeeModalOpen}
+        onClose={() => setPayEmployeeModalOpen(false)}
+        api={api}
+        walletAddress={walletAddress}
+        currentCompany={currentCompany.contractAddress}
+        employees={employees}
+        onSuccess={() => {
+          // Modal will auto-close, state will update via observable
+          console.log('[CompanyDashboard] Payment processed, state will refresh automatically');
         }}
       />
     </Box>
