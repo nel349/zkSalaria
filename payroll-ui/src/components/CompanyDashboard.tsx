@@ -28,6 +28,7 @@ import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany, SavedCompany } from '../utils/CompaniesLocalState';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import { AddEmployeeModal } from './AddEmployeeModal';
 import pino from 'pino';
 
 const logger = pino({
@@ -70,6 +71,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addEmployeeModalOpen, setAddEmployeeModalOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -351,7 +353,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                   variant="contained"
                   fullWidth
                   startIcon={<PersonAddIcon />}
-                  onClick={() => navigate('/employees/add')}
+                  onClick={() => setAddEmployeeModalOpen(true)}
                   sx={{
                     py: 1.5,
                     bgcolor: theme.colors.primary[500],
@@ -430,6 +432,19 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
           </Paper>
         </Stack>
       </Container>
+
+      {/* Add Employee Modal */}
+      <AddEmployeeModal
+        open={addEmployeeModalOpen}
+        onClose={() => setAddEmployeeModalOpen(false)}
+        api={api}
+        walletAddress={walletAddress}
+        currentCompany={currentCompany.contractAddress}
+        onSuccess={() => {
+          // Modal will auto-close, state will update via observable
+          console.log('[CompanyDashboard] Employee added, state will refresh automatically');
+        }}
+      />
     </Box>
   );
 };
