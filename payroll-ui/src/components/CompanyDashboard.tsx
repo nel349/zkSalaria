@@ -252,7 +252,15 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                   borderRadius: 3,
                   bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
                   textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: theme.shadows[6],
+                    borderColor: theme.colors.info[500],
+                  },
                 }}
+                onClick={() => navigate('/employees')}
               >
                 <PeopleIcon sx={{ fontSize: 40, color: theme.colors.info[500], mb: 1 }} />
                 <Typography
@@ -268,6 +276,9 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                 </Typography>
                 <Typography variant="body2" color={theme.colors.text.secondary}>
                   Active Employees
+                </Typography>
+                <Typography variant="caption" color={theme.colors.info[500]} sx={{ mt: 1, display: 'block' }}>
+                  Click to manage →
                 </Typography>
               </Paper>
             </Grid>
@@ -400,13 +411,11 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                 <Button
                   variant="outlined"
                   fullWidth
-                  startIcon={<AccountBalanceWalletIcon />}
-                  onClick={() => {
-                    /* TODO: Open deposit modal */
-                  }}
+                  startIcon={<PeopleIcon />}
+                  onClick={() => navigate('/employees')}
                   sx={{ py: 1.5 }}
                 >
-                  Deposit Funds
+                  View Employees
                 </Button>
               </Grid>
             </Grid>

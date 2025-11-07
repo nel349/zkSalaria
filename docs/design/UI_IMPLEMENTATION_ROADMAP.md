@@ -322,28 +322,78 @@ All Phase 1 API integrations have been successfully completed:
 
 ### Screens to Build
 
-#### 3.1 Company Dashboard (`/dashboard`)
+#### 3.1 Company Dashboard (`/dashboard`) ✅ **MOSTLY COMPLETED**
 - **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md` (Company View)
-- **Components:**
-  - Top navigation bar
-  - Alert banner (dismissible)
-  - 3 feature cards (Private Payroll, ZK Verification, Compliance)
-  - Quick stats grid (4 columns)
-  - Quick actions floating panel
-  - Featured companies carousel
-- **Backend API:** `state$` observable
-- **Complexity:** 🟡 Medium (1.5 days)
+- **Status:** ✅ Implemented November 6, 2025
+- **Implementation:**
+  - Company dashboard with live contract state
+  - Stats cards (Total Balance, Employees, Payments, Compliance)
+  - Quick actions panel (Add Employee, Pay Employee, Setup Recurring, Deposit Funds)
+  - AddEmployeeModal integrated (replaces route-based AddEmployeePage)
+  - Real-time state updates via RxJS observable
+  - SHA-256 wallet address hashing for employee IDs
+- **Components Built:**
+  - CompanyDashboard.tsx (main dashboard with state subscription)
+  - AddEmployeeModal.tsx (add employee modal with validation)
+  - DashboardPage.tsx (role detection and routing)
+- **Backend API:** ✅ `PayrollAPI.connect()`, `state$` observable, `addEmployee()`, `getEmployeeInfo()`
+- **Notes:**
+  - Employee name now displays correctly from state.companyName
+  - Fixed Compact Map access errors (using API methods instead of direct .get())
+  - Account switcher for multiple companies (company selector)
 
-#### 3.2 Employee Dashboard (`/dashboard`)
-- **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md` (Employee View)
-- **Components:**
-  - Same layout as company, different cards:
-    - My Salary (balance, last payment)
-    - Verification Proofs
-    - Employment Status
-  - Different quick actions (Withdraw, Generate Proof, Grant Disclosure)
-- **Backend API:** `state$`, `getEmployeeInfo()`, `getEmployeePaymentHistory()`
+#### 3.1b Account Selector Page (`/selector`) ✅ **COMPLETED**
+- **Status:** ✅ Implemented November 6, 2025
+- **Implementation:**
+  - Unified account selector showing both companies (owner) and employers (employee)
+  - Large action cards at top (Join as Employee, Create Company)
+  - Separate sections for companies vs employers with color-coding
+  - No default selection - user must choose account
+  - Integrates with CompaniesLocalState and EmployerContractsLocalState
+- **Components Built:**
+  - AccountSelectorPage.tsx (unified selector with glassmorphic design)
+  - Updated roleDetection.ts to check both companies and employers
+  - Updated RoleDetectionPage.tsx to redirect to /selector for existing users
+- **Routing:** `/selector` - Shown to users with existing companies or employer relationships
+
+#### 3.1c Employee List/Management Page (`/employees`) ✅ **COMPLETED**
+- **Status:** ✅ Implemented November 6, 2025
+- **Implementation:**
+  - Full employee table with columns: Name, Wallet Address, Email, Role, Base Salary, Status, Added Date, Actions
+  - Search functionality (searches across name, email, wallet address, role)
+  - Role filter dropdown
+  - Actions menu per employee: View Details, Pay Employee, Edit Info, Remove Employee
+  - Export to CSV functionality (exports all filtered employees)
+  - View Details modal (shows all employee information)
+  - Edit Employee modal (updates name, email, role, salary in localStorage)
+  - Delete confirmation dialog (removes from localStorage with warning)
+  - Empty state with "Add Employee" CTA
+  - No search results state
+  - Integration with AddEmployeeModal for adding new employees
+  - Navigation from CompanyDashboard (clickable stat card + Quick Actions button)
+- **Components Built:**
+  - EmployeeListPage.tsx (full employee management interface)
+  - Integrated with existing AddEmployeeModal.tsx
+  - Connected to localStorage (`payroll-ui.employees.{companyAddress}`)
+- **Routing:** `/employees` - Accessible from company dashboard
+- **Backend API:** localStorage read/write for employee metadata
 - **Complexity:** 🟡 Medium (1 day)
+- **Notes:** Complete employee roster management with search, filter, CRUD operations, and CSV export
+
+#### 3.2 Employee Dashboard (`/dashboard`) ✅ **COMPLETED**
+- **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md` (Employee View)
+- **Status:** ✅ Implemented November 6, 2025
+- **Implementation:**
+  - Employee dashboard with basic stats
+  - Stats cards (Current Balance, Last Payment, Total Payments, Status)
+  - Quick actions panel (placeholder for Phase 4)
+  - Company name display from contract state
+- **Components Built:**
+  - EmployeeDashboard.tsx (employee view with state subscription)
+  - Uses placeholder values for encrypted balance/payment history (Phase 4)
+- **Backend API:** ✅ `state$` observable, `getEmployeeInfo()`
+- **Notes:**
+  - Encrypted balance decryption and payment history queries deferred to Phase 4
 
 #### 3.3 Payment List View (`/payments`)
 - **File Reference:** `3_PAYROLL_LIST_VIEW_WIREFRAME.md`
