@@ -193,16 +193,30 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
           const metadata = employeeMetas[i];
           const amount = metadata ? metadata.amount : 0;
 
-          // Use metadata timestamp (milliseconds) for now until we fix contract timestamp
-          const timestamp = metadata ? metadata.timestamp : Date.now();
+          // Use blockchain timestamp (convert from seconds to milliseconds)
+          const timestamp = Number(record.timestamp) * 1000;
 
           const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 
-          // Use metadata paymentType if available (has more detail: Commission, Reimbursement, etc.)
-          // Otherwise fall back to contract type
+          // Map blockchain payment_type to display string
+          // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT
+          const getPaymentTypeLabel = (type: bigint): string => {
+            switch (Number(type)) {
+              case 0: return 'regularsalary';
+              case 1: return 'advance';
+              case 2: return 'bonus';
+              case 3: return 'commission';
+              case 4: return 'reimbursement';
+              case 5: return 'adjustment';
+              default: return 'salary';
+            }
+          };
+
+          // Use blockchain payment type (now supports all 6 types)
+          // Metadata is only used for backward compatibility with old payments
           const paymentType = metadata?.paymentType
-            ? metadata.paymentType.toLowerCase().replace(/\s+/g, '')  // "Regular Salary" -> "regularsalary"
-            : (record.payment_type === 0n ? 'salary' : record.payment_type === 1n ? 'advance' : 'bonus');
+            ? metadata.paymentType.toLowerCase().replace(/\s+/g, '')
+            : getPaymentTypeLabel(record.payment_type);
 
           console.log(`[CompanyDashboard] Payment ${i}: contractType=${contractType}, metadataType=${metadata?.paymentType}, amount=${amount}, hasMetadata=${!!metadata}`);
 

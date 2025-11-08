@@ -135,24 +135,90 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
     if (!walletAddress) return;
 
     try {
-      const history = await apiInstance.getEmployeePaymentHistory(walletAddress);
+      // Get payment history with decrypted amounts from blockchain
+      const history = await apiInstance.getEmployeePaymentHistoryDecrypted(walletAddress);
 
-      // Convert PaymentRecord to UI format
-      const uiPayments = history.map((record: any) => ({
-        id: Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8),
-        status: record.status === 1n ? 'completed' : record.status === 0n ? 'pending' : 'failed',
-        employeeName: companyName,
-        employeeId: contractAddress,
-        amount: 0n, // Encrypted - employee needs to decrypt (Phase 4)
-        encryptedAmount: record.encrypted_amount, // Store encrypted data for later decryption
-        isEncrypted: true, // Employee view shows encrypted by default
-        date: new Date(Number(record.timestamp) * 1000).toISOString(),
-        type: record.payment_type === 0n ? 'salary' : record.payment_type === 1n ? 'advance' : 'bonus',
-        transactionId: Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 12),
-      }));
+      console.log(`[EmployeeDashboard] Payment history (on-chain decrypted):`, {
+        contractPayments: history.length,
+        walletAddress,
+      });
+
+      // Optional: Get payment metadata from localStorage for enhanced type labels
+      const paymentsKey = `payroll-ui.payments.${contractAddress}`;
+      const paymentMetadata = JSON.parse(localStorage.getItem(paymentsKey) || '[]');
+
+      console.log(`[EmployeeDashboard] Looking for metadata:`, {
+        key: paymentsKey,
+        totalMetadata: paymentMetadata.length,
+        walletAddress,
+        allEmployeeIds: paymentMetadata.map((m: any) => m.employeeId),
+      });
+
+      const employeeMetas = paymentMetadata
+        .filter((m: any) => m.employeeId === walletAddress)
+        .sort((a: any, b: any) => a.timestamp - b.timestamp);
+
+      console.log(`[EmployeeDashboard] Filtered metadata for employee:`, {
+        matchedMetadata: employeeMetas.length,
+        metadataDetails: employeeMetas.map((m: any) => ({
+          paymentType: m.paymentType,
+          amount: m.amount,
+          employeeName: m.employeeName
+        })),
+      });
+
+      // Map blockchain payment records to UI format
+      const uiPayments = history.map((record: any, index: number) => {
+        // Use decrypted amount from blockchain (primary source)
+        const amount = record.decrypted_amount || 0n;
+
+        // Use blockchain timestamp (convert from seconds to milliseconds)
+        const timestamp = Number(record.timestamp) * 1000;
+
+        const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
+
+        // Map blockchain payment_type to display string
+        // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT
+        const getPaymentTypeLabel = (type: bigint): string => {
+          switch (Number(type)) {
+            case 0: return 'regularsalary';
+            case 1: return 'advance';
+            case 2: return 'bonus';
+            case 3: return 'commission';
+            case 4: return 'reimbursement';
+            case 5: return 'adjustment';
+            default: return 'salary';
+          }
+        };
+
+        const metadata = employeeMetas[index];
+        const paymentType = getPaymentTypeLabel(record.payment_type);
+
+        console.log(`[EmployeeDashboard] Payment ${index}:`, {
+          type: paymentType,
+          metadataType: metadata?.paymentType,
+          blockchainType: record.payment_type,
+          amount,
+          hasMetadata: !!metadata,
+        });
+
+        return {
+          id: `${walletAddress}-${index}`,
+          status: record.status === 1n ? 'completed' : record.status === 0n ? 'pending' : 'failed',
+          employeeName: metadata?.employeeName || walletAddress.substring(0, 12) + '...',
+          employeeId: walletAddress,
+          amount: amount, // Already in base units from blockchain
+          encryptedAmount: record.encrypted_amount,
+          isEncrypted: false, // Showing decrypted amounts from blockchain
+          date: new Date(timestamp).toISOString(),
+          type: paymentType,
+          transactionId: Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 12),
+          companyName: companyName,
+        };
+      });
 
       setPayments(uiPayments);
-      console.log(`[EmployeeDashboard] Loaded ${uiPayments.length} payments`);
+      console.log(`[EmployeeDashboard] Loaded ${uiPayments.length} payments from blockchain`);
     } catch (err) {
       console.error('[EmployeeDashboard] Failed to load payment history:', err);
     }

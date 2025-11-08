@@ -561,6 +561,46 @@ export class PayrollAPI implements DeployedPayrollAPI {
     return history.filter((record: PaymentRecord) => record.timestamp > 0);
   }
 
+  /**
+   * Get employee payment history with decrypted amounts
+   * Uses the value_decryption_map to decrypt encrypted_amount fields
+   * Returns payment records with plaintext amounts
+   */
+  async getEmployeePaymentHistoryDecrypted(employeeWalletAddress: string): Promise<Array<PaymentRecord & { decrypted_amount: bigint }>> {
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
+
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return [];
+    }
+
+    const ledgerState = ledger(state.data);
+
+    if (!ledgerState.employee_payment_history.member(employeeIdBytes)) {
+      return [];
+    }
+
+    const history = ledgerState.employee_payment_history.lookup(employeeIdBytes);
+
+    // Decrypt amounts using value_decryption_map
+    const decryptedHistory = history
+      .filter((record: PaymentRecord) => record.timestamp > 0)
+      .map((record: PaymentRecord) => {
+        // Look up decrypted amount in value_decryption_map
+        const decryptedAmount = ledgerState.value_decryption_map.member(record.encrypted_amount)
+          ? ledgerState.value_decryption_map.lookup(record.encrypted_amount)
+          : 0n; // Default to 0 if not found
+
+        return {
+          ...record,
+          decrypted_amount: decryptedAmount,
+        };
+      });
+
+    return decryptedHistory;
+  }
+
   // ========================================
   // SYSTEM OPERATIONS
   // ========================================

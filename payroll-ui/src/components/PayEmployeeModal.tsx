@@ -129,13 +129,19 @@ export const PayEmployeeModal: React.FC<PayEmployeeModalProps> = ({
   const mapPaymentType = (type: string): bigint => {
     switch (type) {
       case 'Regular Salary':
-        return 0n;
+        return 0n; // PAYMENT_TYPE_SALARY
       case 'Advance':
-        return 1n;
+        return 1n; // PAYMENT_TYPE_ADVANCE
       case 'Bonus':
-        return 2n;
+        return 2n; // PAYMENT_TYPE_BONUS
+      case 'Commission':
+        return 3n; // PAYMENT_TYPE_COMMISSION
+      case 'Reimbursement':
+        return 4n; // PAYMENT_TYPE_REIMBURSEMENT
+      case 'Adjustment':
+        return 5n; // PAYMENT_TYPE_ADJUSTMENT
       default:
-        return 0n;
+        return 0n; // Default to SALARY
     }
   };
 

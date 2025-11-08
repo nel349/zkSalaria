@@ -7,6 +7,9 @@ module PayrollCommons {
   export pure circuit PAYMENT_TYPE_SALARY(): Uint<8> { return 0 as Uint<8>; }
   export pure circuit PAYMENT_TYPE_ADVANCE(): Uint<8> { return 1 as Uint<8>; }
   export pure circuit PAYMENT_TYPE_BONUS(): Uint<8> { return 2 as Uint<8>; }
+  export pure circuit PAYMENT_TYPE_COMMISSION(): Uint<8> { return 3 as Uint<8>; }
+  export pure circuit PAYMENT_TYPE_REIMBURSEMENT(): Uint<8> { return 4 as Uint<8>; }
+  export pure circuit PAYMENT_TYPE_ADJUSTMENT(): Uint<8> { return 5 as Uint<8>; }
 
   // Payment status constants for tracking payment state
   export pure circuit PAYMENT_STATUS_PENDING(): Uint<8> { return 0 as Uint<8>; }

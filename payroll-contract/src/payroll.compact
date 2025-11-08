@@ -222,16 +222,19 @@ export circuit withdraw_employee_salary(
 export circuit pay_employee(
   employee_id: Bytes<32>,
   salary_amount: Uint<64>,
-  payment_type: Uint<8>  // 0=SALARY, 1=ADVANCE, 2=BONUS
+  payment_type: Uint<8>  // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT
 ): [] {
   // Verify employee exists
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
   assert(disclose(salary_amount) > 0 as Uint<64>, "Amount must be positive");
 
-  // Validate payment_type (0=SALARY, 1=ADVANCE, 2=BONUS)
+  // Validate payment_type (0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT)
   const is_valid_type = (disclose(payment_type) == PC_PAYMENT_TYPE_SALARY()) ||
                         (disclose(payment_type) == PC_PAYMENT_TYPE_ADVANCE()) ||
-                        (disclose(payment_type) == PC_PAYMENT_TYPE_BONUS());
+                        (disclose(payment_type) == PC_PAYMENT_TYPE_BONUS()) ||
+                        (disclose(payment_type) == PC_PAYMENT_TYPE_COMMISSION()) ||
+                        (disclose(payment_type) == PC_PAYMENT_TYPE_REIMBURSEMENT()) ||
+                        (disclose(payment_type) == PC_PAYMENT_TYPE_ADJUSTMENT());
   assert(is_valid_type, "Invalid payment type");
 
   // Calculate available budget (total_supply - allocated_to_employees)
