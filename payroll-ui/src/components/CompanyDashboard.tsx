@@ -30,6 +30,9 @@ import { listCompanies, getCurrentCompany, setCurrentCompany, SavedCompany } fro
 import { PayrollAPI, type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
 import { AddEmployeeModal } from './AddEmployeeModal';
 import { PayEmployeeModal } from './PayEmployeeModal';
+import { SetupRecurringPaymentModal } from './SetupRecurringPaymentModal';
+import { RecurringPaymentsModal } from './RecurringPaymentsModal';
+import { BatchPayrollButton } from './BatchPayrollButton';
 import { PaymentHistorySection } from './PaymentHistorySection';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
@@ -76,6 +79,8 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
   const [error, setError] = useState<string | null>(null);
   const [addEmployeeModalOpen, setAddEmployeeModalOpen] = useState(false);
   const [payEmployeeModalOpen, setPayEmployeeModalOpen] = useState(false);
+  const [setupRecurringModalOpen, setSetupRecurringModalOpen] = useState(false);
+  const [recurringPaymentsModalOpen, setRecurringPaymentsModalOpen] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
   const [employees, setEmployees] = useState<EmployeeMetadata[]>([]);
   const [contractState, setContractState] = useState<any>(null); // Store reactive contract state
@@ -453,7 +458,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
             </Stack>
 
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="contained"
                   fullWidth
@@ -469,7 +474,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                 </Button>
               </Grid>
 
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="contained"
                   fullWidth
@@ -485,12 +490,12 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                 </Button>
               </Grid>
 
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="contained"
                   fullWidth
                   startIcon={<RepeatIcon />}
-                  onClick={() => navigate('/recurring/setup')}
+                  onClick={() => setSetupRecurringModalOpen(true)}
                   sx={{
                     py: 1.5,
                     bgcolor: theme.colors.secondary[500],
@@ -501,7 +506,27 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
                 </Button>
               </Grid>
 
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
+                <BatchPayrollButton />
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  startIcon={<RepeatIcon />}
+                  onClick={() => setRecurringPaymentsModalOpen(true)}
+                  sx={{
+                    py: 1.5,
+                    bgcolor: theme.colors.info[500],
+                    '&:hover': { bgcolor: theme.colors.info[700] },
+                  }}
+                >
+                  Manage Recurring
+                </Button>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="outlined"
                   fullWidth
@@ -553,6 +578,26 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
           // Modal will auto-close, state will update via observable
           console.log('[CompanyDashboard] Payment processed, state will refresh automatically');
         }}
+      />
+
+      {/* Setup Recurring Payment Modal */}
+      <SetupRecurringPaymentModal
+        open={setupRecurringModalOpen}
+        onClose={() => setSetupRecurringModalOpen(false)}
+        api={api}
+        currentCompany={currentCompany.contractAddress}
+        employees={employees}
+        onSuccess={() => {
+          console.log('[CompanyDashboard] Recurring payment setup, state will refresh automatically');
+        }}
+      />
+
+      {/* Recurring Payments Management Modal */}
+      <RecurringPaymentsModal
+        open={recurringPaymentsModalOpen}
+        onClose={() => setRecurringPaymentsModalOpen(false)}
+        api={api}
+        currentCompany={currentCompany.contractAddress}
       />
     </Box>
   );

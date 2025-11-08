@@ -270,7 +270,7 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** `createRecurringPayment()`
 - **Complexity:** 🟡 Medium (1.5 days)
 
-#### 2.4 Run Payroll (Batch Payment) (`/payroll/batch`)
+#### 2.4 Run Payroll (Batch Payment) Modal - implement button as coming soon.
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 4)
 - **Components:**
   - Employee table with checkboxes
@@ -283,7 +283,7 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** `payEmployee()` (called N times)
 - **Complexity:** 🔴 High (2 days)
 
-#### 2.5 Recurring Payments Management (`/recurring`)
+#### 2.5 Recurring Payments Management Modal
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 5)
 - **Components:**
   - Card grid of recurring payments

@@ -82,13 +82,20 @@ export const PayEmployeeModal: React.FC<PayEmployeeModalProps> = ({
   useEffect(() => {
     if (open) {
       setSelectedEmployee(null);
-      setAmountType('base');
+      setAmountType('custom');
       setCustomAmount('');
       setPaymentType('Regular Salary');
       setMemo('');
       setError(null);
     }
   }, [open]);
+
+  // Switch to custom when employee without base salary is selected
+  useEffect(() => {
+    if (selectedEmployee && !selectedEmployee.baseSalary && amountType === 'base') {
+      setAmountType('custom');
+    }
+  }, [selectedEmployee, amountType]);
 
   // Calculate payment amount
   const getPaymentAmount = (): string => {
@@ -204,7 +211,7 @@ export const PayEmployeeModal: React.FC<PayEmployeeModalProps> = ({
     setSelectedEmployee(null);
     setCustomAmount('');
     setMemo('');
-    setAmountType('base');
+    setAmountType('custom');
     setPaymentType('Regular Salary');
     setError(null);
   };
@@ -282,22 +289,26 @@ export const PayEmployeeModal: React.FC<PayEmployeeModalProps> = ({
             <FormControl>
               <FormLabel sx={{ mb: 2, color: theme.colors.text.primary }}>Payment Amount *</FormLabel>
               <RadioGroup value={amountType} onChange={(e) => setAmountType(e.target.value as 'base' | 'custom')}>
-                <FormControlLabel
-                  value="base"
-                  control={<Radio />}
-                  label={
-                    <Typography variant="body2">
-                      Use Base Salary: ${selectedEmployee?.baseSalary || '0'}
-                    </Typography>
-                  }
-                  disabled={!selectedEmployee?.baseSalary || isSubmitting}
-                />
+                {selectedEmployee?.baseSalary && (
+                  <FormControlLabel
+                    value="base"
+                    control={<Radio />}
+                    label={
+                      <Typography variant="body2">
+                        Use Base Salary: ${selectedEmployee.baseSalary}
+                      </Typography>
+                    }
+                    disabled={isSubmitting}
+                  />
+                )}
                 <FormControlLabel
                   value="custom"
                   control={<Radio />}
                   label={<Typography variant="body2">Custom Amount</Typography>}
+                  disabled={isSubmitting}
                 />
               </RadioGroup>
+
               {amountType === 'custom' && (
                 <TextField
                   type="number"
@@ -305,11 +316,10 @@ export const PayEmployeeModal: React.FC<PayEmployeeModalProps> = ({
                   onChange={(e) => setCustomAmount(e.target.value)}
                   disabled={isSubmitting}
                   placeholder="Enter amount"
-                  size="small"
                   fullWidth
                   label="Amount (USD)"
                   inputProps={{ min: 0, step: 0.01 }}
-                  sx={{ mt: 1, ml: 4 }}
+                  sx={{ mt: 2 }}
                   autoFocus
                 />
               )}
