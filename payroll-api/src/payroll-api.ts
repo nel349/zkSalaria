@@ -49,6 +49,8 @@ export interface DeployedPayrollAPI {
   addEmployee(companyId: string, employeeWalletAddress: string): Promise<void>;
   withdrawEmployeeSalary(employeeWalletAddress: string, amount: string): Promise<void>;
   getEmployeeInfo(employeeWalletAddress: string): Promise<EmployeeInfo>;
+  getEmployeeCount(): Promise<number>;
+  getAllEmployeeIds(): Promise<string[]>;
 
   // Payment operations
   payEmployee(companyId: string, employeeWalletAddress: string, amount: string, paymentType?: number): Promise<void>;
@@ -310,8 +312,19 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async getCompanyInfo(companyId: string): Promise<CompanyInfo> {
     const normalizedId = utils.normalizeId(companyId);
 
+    this.logger?.info({
+      getCompanyInfo: {
+        originalCompanyId: companyId,
+        originalLength: companyId.length,
+        normalizedId: normalizedId,
+        normalizedLength: normalizedId.length,
+        contractAddress: this.deployedContractAddress,
+      }
+    });
+
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {
+      this.logger?.warn('No contract state available for getCompanyInfo');
       return { companyId: normalizedId, exists: false };
     }
 
@@ -319,6 +332,17 @@ export class PayrollAPI implements DeployedPayrollAPI {
     // Note: One contract per company - check if company_id matches
     const storedCompanyId = utils.bytes32ToString(ledgerState.company_id);
     const exists = storedCompanyId === normalizedId;
+
+    this.logger?.info({
+      companyIdComparison: {
+        storedCompanyId: storedCompanyId,
+        storedLength: storedCompanyId.length,
+        normalizedId: normalizedId,
+        normalizedLength: normalizedId.length,
+        exists: exists,
+        bytesHex: Array.from(ledgerState.company_id).map(b => b.toString(16).padStart(2, '0')).join(''),
+      }
+    });
 
     return {
       companyId: normalizedId,
@@ -433,6 +457,60 @@ export class PayrollAPI implements DeployedPayrollAPI {
       exists,
       paymentHistoryCount,
     };
+  }
+
+  async getEmployeeCount(): Promise<number> {
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return 0;
+    }
+
+    const ledgerState = ledger(state.data);
+
+    // Try to get map size
+    const mapSize = typeof ledgerState.employee_accounts?.size === 'function'
+      ? ledgerState.employee_accounts.size()
+      : ledgerState.employee_accounts?.size;
+
+    if (mapSize !== undefined && mapSize !== null) {
+      this.logger?.info({ getEmployeeCount: { mapSize } });
+      return typeof mapSize === 'number' ? mapSize : Number(mapSize);
+    }
+
+    // Fallback to counter if map size unavailable
+    const counterValue = ledgerState.total_employees;
+    this.logger?.info({ getEmployeeCount: { counterValue } });
+    return typeof counterValue === 'number' ? counterValue : Number(counterValue);
+  }
+
+  async getAllEmployeeIds(): Promise<string[]> {
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return [];
+    }
+
+    const ledgerState = ledger(state.data);
+    const employeeIdsList = ledgerState.employee_ids;
+
+    if (!employeeIdsList) {
+      this.logger?.warn('employee_ids list not found in ledger state');
+      return [];
+    }
+
+    // Lists support TypeScript iteration via Symbol.iterator
+    const employeeIds: string[] = [];
+    for (const employeeIdBytes of employeeIdsList) {
+      if (employeeIdBytes) {
+        // Convert bytes to hex string (employee ID is the wallet address hash)
+        const hexId = Array.from(employeeIdBytes as Uint8Array)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        employeeIds.push(hexId);
+      }
+    }
+
+    this.logger?.info({ getAllEmployeeIds: { count: employeeIds.length, ids: employeeIds } });
+    return employeeIds;
   }
 
   // ========================================
@@ -595,30 +673,51 @@ export class PayrollAPI implements DeployedPayrollAPI {
   }
 
   async getRecurringPaymentByEmployee(employeeId: string): Promise<RecurringPayment | null> {
-    const normalizedId = utils.normalizeId(employeeId);
-    const employeeIdBytes = utils.stringToBytes32(normalizedId);
+    // Use the same hashing method as createRecurringPayment
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
+    this.logger?.info({
+      getRecurringPaymentByEmployee: {
+        employeeId,
+        employeeIdBytesHex: Array.from(employeeIdBytes).map(b => b.toString(16).padStart(2, '0')).join(''),
+      }
+    });
 
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {
+      this.logger?.warn('No contract state available');
       return null;
     }
 
     const ledgerState = ledger(state.data);
 
     // Check if employee has a recurring payment
-    if (!ledgerState.recurring_payment_by_employee.member(employeeIdBytes)) {
+    const hasMember = ledgerState.recurring_payment_by_employee.member(employeeIdBytes);
+    this.logger?.info({
+      checkRecurringPaymentByEmployee: {
+        hasMember,
+        mapSize: ledgerState.recurring_payment_by_employee.size || 'unknown',
+      }
+    });
+
+    if (!hasMember) {
       return null;
     }
 
     // Get the recurring payment ID
     const recurringPaymentId = ledgerState.recurring_payment_by_employee.lookup(employeeIdBytes);
+    this.logger?.info({
+      recurringPaymentId: Array.from(recurringPaymentId).map(b => b.toString(16).padStart(2, '0')).join(''),
+    });
 
     // Get the actual recurring payment
     if (!ledgerState.recurring_payments.member(recurringPaymentId)) {
+      this.logger?.warn('Recurring payment ID found but payment not in map');
       return null;
     }
 
-    return ledgerState.recurring_payments.lookup(recurringPaymentId);
+    const payment = ledgerState.recurring_payments.lookup(recurringPaymentId);
+    this.logger?.info({ foundRecurringPayment: payment });
+    return payment;
   }
 
   async getAllRecurringPayments(companyId?: string, status?: bigint): Promise<RecurringPayment[]> {
@@ -628,14 +727,29 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     const ledgerState = ledger(state.data);
+    const recurringPaymentIdsList = ledgerState.recurring_payment_ids;
+
+    if (!recurringPaymentIdsList) {
+      this.logger?.warn('recurring_payment_ids list not found in ledger state');
+      return [];
+    }
+
+    // Iterate through all recurring payment IDs
     const allPayments: RecurringPayment[] = [];
+    for (const paymentIdBytes of recurringPaymentIdsList) {
+      if (paymentIdBytes && ledgerState.recurring_payments.member(paymentIdBytes)) {
+        const payment = ledgerState.recurring_payments.lookup(paymentIdBytes);
 
-    // Iterate through recurring_payment_by_employee map to get all payments
-    // Note: Compact doesn't expose map iteration, so we track via employee additions
-    // For now, return empty array - full implementation requires ledger iteration support
-    // TODO: Implement when Compact supports map iteration or use indexer
+        // Apply filters if provided
+        if (status !== undefined && payment.status !== status) {
+          continue;
+        }
 
-    this.logger?.warn('getAllRecurringPayments: Full ledger iteration not yet supported');
+        allPayments.push(payment);
+      }
+    }
+
+    this.logger?.info({ getAllRecurringPayments: { count: allPayments.length } });
     return allPayments;
   }
 

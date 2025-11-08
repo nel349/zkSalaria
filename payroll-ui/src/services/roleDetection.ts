@@ -40,10 +40,32 @@ export const detectUserRole = async (
 ): Promise<RoleDetectionResult> => {
   console.log(`[RoleDetection] Detecting role for address: ${walletAddress}`);
 
+  // Add timeout to prevent hanging forever
+  const timeoutMs = 30000; // 30 seconds
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Role detection timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  return Promise.race([detectUserRoleInternal(providers, walletAddress), timeout]);
+};
+
+const detectUserRoleInternal = async (
+  providers: PayrollProviders,
+  walletAddress: string
+): Promise<RoleDetectionResult> => {
+
   try {
     // Get all companies and employers from local storage
     const companies = listCompanies();
     const employers = listEmployers(walletAddress);
+
+    console.log('[RoleDetection] LocalStorage check:', {
+      companiesCount: companies.length,
+      employersCount: employers.length,
+      companies: companies,
+      employers: employers,
+      rawLocalStorage: localStorage.getItem('payroll-ui.companies'),
+    });
 
     if (companies.length === 0 && employers.length === 0) {
       console.log('[RoleDetection] No companies or employers found - treating as new user');
@@ -66,17 +88,61 @@ export const detectUserRole = async (
     for (const company of companies) {
       try {
         console.log(`[RoleDetection] Checking company contract: ${company.contractAddress}`);
-        const api = await PayrollAPI.connect(
-          providers,
-          company.contractAddress,
-          walletAddress,
-          logger
-        );
+        console.log(`[RoleDetection] Company wallet address: ${company.walletAddress}`);
+        console.log(`[RoleDetection] Current wallet address: ${walletAddress}`);
+
+        console.log('[RoleDetection] Calling PayrollAPI.connect...');
+        let api;
+        try {
+          api = await PayrollAPI.connect(
+            providers,
+            company.contractAddress,
+            walletAddress,
+            logger
+          );
+          console.log('[RoleDetection] PayrollAPI.connect succeeded');
+        } catch (connectErr) {
+          console.log('❌❌❌ [RoleDetection] PayrollAPI.connect FAILED ❌❌❌');
+          console.log('Error:', connectErr);
+          console.log('Error message:', connectErr instanceof Error ? connectErr.message : String(connectErr));
+
+          // Check if this is a version mismatch error
+          const errorMsg = connectErr instanceof Error ? connectErr.message : String(connectErr);
+          if (errorMsg.includes('mismatched verifier keys') || errorMsg.includes('are undefined')) {
+            console.log('⚠️ [RoleDetection] Contract version mismatch - treating as company owner');
+            // This is an old contract version, but the user deployed it, so they're the owner
+            isCompanyInAny = true;
+            lastCompanyData = {
+              companyId: company.walletAddress,
+              exists: true,
+              companyName: company.name,
+            };
+            // Don't throw - continue to next contract
+            continue;
+          }
+
+          throw connectErr; // Re-throw other errors
+        }
+
+        console.log('[RoleDetection] API connected, calling getCompanyInfo and getEmployeeInfo...');
 
         const [companyData, employeeData] = await Promise.all([
-          api.getCompanyInfo(walletAddress).catch(() => null),
-          api.getEmployeeInfo(walletAddress).catch(() => null),
+          api.getCompanyInfo(walletAddress).catch((err) => {
+            console.error('[RoleDetection] getCompanyInfo error:', err);
+            return null;
+          }),
+          api.getEmployeeInfo(walletAddress).catch((err) => {
+            console.error('[RoleDetection] getEmployeeInfo error:', err);
+            return null;
+          }),
         ]);
+
+        console.log('[RoleDetection] Results:', {
+          companyData,
+          employeeData,
+          companyExists: companyData?.exists,
+          employeeExists: employeeData?.exists,
+        });
 
         if (companyData?.exists) {
           isCompanyInAny = true;
@@ -87,7 +153,10 @@ export const detectUserRole = async (
           lastEmployeeData = employeeData;
         }
       } catch (err) {
-        console.warn(`[RoleDetection] Failed to check contract ${company.contractAddress}:`, err);
+        console.log(`🔴🔴🔴 [RoleDetection] Failed to check contract ${company.contractAddress} 🔴🔴🔴`);
+        console.log('Outer catch - Error:', err);
+        console.log('Outer catch - Error message:', err instanceof Error ? err.message : String(err));
+        console.log('Outer catch - Error stack:', err instanceof Error ? err.stack : 'no stack');
         // Continue checking other contracts
       }
     }
@@ -110,7 +179,12 @@ export const detectUserRole = async (
           lastEmployeeData = employeeData;
         }
       } catch (err) {
-        console.warn(`[RoleDetection] Failed to check employer contract ${employer.contractAddress}:`, err);
+        console.error(`[RoleDetection] Failed to check employer contract ${employer.contractAddress}:`, err);
+        console.error('[RoleDetection] Employer check error details:', {
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+          fullError: err,
+        });
         // Continue checking other contracts
       }
     }
@@ -137,7 +211,10 @@ export const detectUserRole = async (
       employeeData: lastEmployeeData ?? undefined,
     };
   } catch (error) {
-    console.error('[RoleDetection] Error detecting role:', error);
+    console.log('💥💥💥 [RoleDetection] Error detecting role 💥💥💥');
+    console.log('Final catch - Error:', error);
+    console.log('Final catch - Error message:', error instanceof Error ? error.message : String(error));
+    console.log('Final catch - Error stack:', error instanceof Error ? error.stack : 'no stack');
     // On error, treat as new user
     return {
       role: 'new',

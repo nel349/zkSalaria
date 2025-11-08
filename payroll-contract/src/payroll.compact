@@ -19,6 +19,7 @@ export ledger company_name: Bytes<64>;       // This company's name
 
 // Employee registry (hash commitments only - PUBLIC)
 export ledger employee_accounts: Map<Bytes<32>, Bytes<32>>;  // employee_id -> hash commitment
+export ledger employee_ids: List<Bytes<32>>;                 // List of all employee IDs (for iteration)
 
 // ENCRYPTED BALANCE SYSTEM (Bank Contract Pattern)
 // Employee balances encrypted on ledger, only decryptable with proper keys
@@ -55,6 +56,8 @@ export ledger employment_records: Map<Bytes<32>, PC_EmploymentRecord>;
 export ledger recurring_payments: Map<Bytes<32>, PC_RecurringPayment>;
 // Helper map: employee_id -> recurring_payment_id (for easy lookup in tests)
 export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
+// List of all recurring payment IDs (for iteration/recovery)
+export ledger recurring_payment_ids: List<Bytes<32>>;
 
 // ZKML Attestation System (Phase 2: ZKML Integration)
 // Stores trusted verifier public keys and tracks used attestations
@@ -137,6 +140,10 @@ export circuit add_employee(
   ]);
 
   employee_accounts.insert(disclose(employee_id), disclose(employee_hash));
+
+  // Add employee ID to list (for iteration/recovery)
+  employee_ids.pushFront(disclose(employee_id));
+
   total_employees.increment(1);
 
   // Initialize empty payment history on ledger for new employee
@@ -677,6 +684,9 @@ export circuit create_recurring_payment(
   // Verify employee exists
   assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
 
+  // Verify employee doesn't already have a recurring payment
+  assert(!recurring_payment_by_employee.member(disclose(employee_id)), "Employee already has a recurring payment - use edit_recurring_payment to modify it");
+
   // Verify amount is positive
   assert(disclose(amount) > 0 as Uint<64>, "Amount must be positive");
 
@@ -751,6 +761,9 @@ export circuit create_recurring_payment(
 
   // Also store employee_id -> recurring_payment_id mapping for easy lookup
   recurring_payment_by_employee.insert(disclose(employee_id), recurring_payment_id);
+
+  // Add recurring payment ID to list (for iteration/recovery)
+  recurring_payment_ids.pushFront(recurring_payment_id);
 }
 
 // Pause a recurring payment (company can pause to temporarily stop payments)

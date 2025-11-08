@@ -165,7 +165,7 @@ export const CompanyQuickStartPage: React.FC = () => {
     setError(null);
 
     try {
-      if (!api || !walletAddress) {
+      if (!api || !walletAddress || !contractAddress) {
         throw new Error('API not connected or wallet address missing');
       }
 
@@ -173,12 +173,32 @@ export const CompanyQuickStartPage: React.FC = () => {
         throw new Error('Employee wallet address is required');
       }
 
+      if (!employeeName.trim()) {
+        throw new Error('Employee name is required');
+      }
+
       console.log('[QuickStart] Adding employee:', employeeName);
 
       // Add employee using PayrollAPI
       await api.addEmployee(walletAddress, employeeWallet);
 
-      console.log('[QuickStart] Employee added successfully');
+      // Save employee metadata to localStorage (same as AddEmployeeModal)
+      const employeeMetadata = {
+        employeeId: employeeWallet,
+        name: employeeName,
+        email: '', // Quick Start doesn't collect email (can be updated later)
+        role: employeeRole || undefined,
+        baseSalary: baseSalary || undefined,
+        addedAt: new Date().toISOString(),
+        companyContractAddress: contractAddress,
+      };
+
+      const key = `payroll-ui.employees.${contractAddress}`;
+      const existingEmployees = JSON.parse(localStorage.getItem(key) || '[]');
+      existingEmployees.push(employeeMetadata);
+      localStorage.setItem(key, JSON.stringify(existingEmployees));
+
+      console.log('[QuickStart] Employee added successfully and saved to localStorage');
       setProgress({ ...progress, employeeAdded: true, employeeName });
 
       // Store employee wallet for recurring payment setup in next step
@@ -246,6 +266,25 @@ export const CompanyQuickStartPage: React.FC = () => {
       );
 
       console.log('[QuickStart] Recurring payment setup successfully');
+
+      // Save recurring payment metadata to localStorage (same as SetupRecurringPaymentModal)
+      if (contractAddress) {
+        const recurringMetadata = {
+          employeeId: employeeWalletAddr,
+          employeeName: employeeName,
+          amount: parseFloat(baseSalary),
+          frequency: Number(frequency),
+          startDate: start.getTime(),
+          endDate: null,
+          createdAt: Date.now(),
+        };
+        const recurringKey = `payroll-ui.recurring.${contractAddress}`;
+        const existingRecurring = JSON.parse(localStorage.getItem(recurringKey) || '[]');
+        existingRecurring.push(recurringMetadata);
+        localStorage.setItem(recurringKey, JSON.stringify(existingRecurring));
+        console.log('[QuickStart] Stored recurring payment metadata:', recurringKey, recurringMetadata);
+      }
+
       setProgress({ ...progress, recurringSetup: true });
 
       // Wizard complete, navigate to dashboard

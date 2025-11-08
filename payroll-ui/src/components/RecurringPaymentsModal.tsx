@@ -9,7 +9,6 @@ import {
   Typography,
   Card,
   CardContent,
-  CardActions,
   Chip,
   IconButton,
   Menu,
@@ -28,6 +27,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import { useThemeValues, useTheme } from '../theme';
 import { type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { ToastNotification } from './ToastNotification';
+import { walletAddressToEmployeeIdHex } from '../utils/employeeUtils';
 
 interface RecurringPayment {
   id: string;
@@ -96,10 +96,60 @@ export const RecurringPaymentsModal: React.FC<RecurringPaymentsModalProps> = ({
 
     setLoading(true);
     try {
-      console.log('[RecurringPayments] Loading recurring payments...');
+      console.log('[RecurringPayments] Loading recurring payments from on-chain...');
 
-      setPayments([]);
-      console.log('[RecurringPayments] No recurring payments found');
+      // Fetch ALL recurring payments from on-chain (true recovery capability!)
+      const onChainPayments = await api.getAllRecurringPayments();
+      console.log(`[RecurringPayments] Fetched ${onChainPayments.length} payments from on-chain`);
+
+      // Load metadata from localStorage for employee names and plaintext amounts
+      const employeesKey = `payroll-ui.employees.${currentCompany}`;
+      const storedEmployees = JSON.parse(localStorage.getItem(employeesKey) || '[]');
+      console.log('[RecurringPayments] Employees metadata:', storedEmployees.length);
+
+      const recurringKey = `payroll-ui.recurring.${currentCompany}`;
+      const recurringMetadata = JSON.parse(localStorage.getItem(recurringKey) || '[]');
+      console.log('[RecurringPayments] Recurring metadata:', recurringMetadata.length);
+
+      // Create a map of hashed wallet addresses to employee metadata (async)
+      const employeeHashMap = new Map<string, any>();
+      for (const employee of storedEmployees) {
+        const hashedId = await walletAddressToEmployeeIdHex(employee.employeeId);
+        employeeHashMap.set(hashedId, employee);
+      }
+
+      const recurringHashMap = new Map<string, any>();
+      for (const metadata of recurringMetadata) {
+        const hashedId = await walletAddressToEmployeeIdHex(metadata.employeeId);
+        recurringHashMap.set(hashedId, metadata);
+      }
+
+      // Merge on-chain data with localStorage metadata
+      const allPayments: RecurringPayment[] = onChainPayments.map((payment) => {
+        // Convert employee_id bytes to hex for matching
+        const employeeIdHex = Array.from(payment.employee_id)
+          .map((b: number) => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        // Find employee metadata by hashed ID
+        const employeeMetadata = employeeHashMap.get(employeeIdHex);
+        const recurringMeta = recurringHashMap.get(employeeIdHex);
+
+        return {
+          id: Array.from(payment.recurring_payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join(''),
+          employeeName: employeeMetadata?.name || recurringMeta?.employeeName || `Employee ${employeeIdHex.substring(0, 8)}...`,
+          employeeId: employeeIdHex,
+          amount: recurringMeta?.amount || 0, // Fallback to 0 if metadata missing
+          frequency: Number(payment.frequency),
+          status: Number(payment.status),
+          nextPaymentDate: Number(payment.next_payment_date),
+          startDate: Number(payment.start_date),
+          endDate: payment.end_date ? Number(payment.end_date) : undefined,
+        };
+      });
+
+      setPayments(allPayments);
+      console.log(`[RecurringPayments] Loaded ${allPayments.length} recurring payments (${onChainPayments.length} from on-chain)`);
     } catch (err) {
       console.error('[RecurringPayments] Failed to load:', err);
     } finally {
@@ -179,6 +229,15 @@ export const RecurringPaymentsModal: React.FC<RecurringPaymentsModalProps> = ({
 
     try {
       await api.editRecurringPayment(selectedPayment.id, newAmount);
+
+      // Update amount in localStorage metadata
+      const recurringKey = `payroll-ui.recurring.${currentCompany}`;
+      const recurringMetadata = JSON.parse(localStorage.getItem(recurringKey) || '[]');
+      const index = recurringMetadata.findIndex((m: any) => m.employeeId === selectedPayment.employeeId);
+      if (index !== -1) {
+        recurringMetadata[index].amount = parseFloat(newAmount);
+        localStorage.setItem(recurringKey, JSON.stringify(recurringMetadata));
+      }
 
       setToastMessage('Recurring payment updated successfully');
       setToastSeverity('success');

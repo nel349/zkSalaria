@@ -74,6 +74,8 @@ export const SetupRecurringPaymentModal: React.FC<SetupRecurringPaymentModalProp
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [dayOfWeek, setDayOfWeek] = useState(1);
+  const [hasExistingRecurring, setHasExistingRecurring] = useState(false);
+  const [checkingRecurring, setCheckingRecurring] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -85,11 +87,42 @@ export const SetupRecurringPaymentModal: React.FC<SetupRecurringPaymentModalProp
       setDayOfWeek(1);
       setError(null);
       setShowPreview(false);
+      setHasExistingRecurring(false);
     }
   }, [open]);
 
+  // Check if selected employee already has a recurring payment
+  useEffect(() => {
+    const checkEmployeeRecurring = async () => {
+      if (!selectedEmployee || !api) {
+        setHasExistingRecurring(false);
+        return;
+      }
+
+      setCheckingRecurring(true);
+      try {
+        const payment = await api.getRecurringPaymentByEmployee(selectedEmployee.employeeId);
+        setHasExistingRecurring(!!payment);
+
+        if (payment) {
+          setError(`${selectedEmployee.name} already has a recurring payment. Please use "Manage Recurring" to edit it.`);
+        } else {
+          setError(null);
+        }
+      } catch (err) {
+        console.warn(`[SetupRecurring] Failed to check ${selectedEmployee.name}:`, err);
+        setHasExistingRecurring(false);
+      } finally {
+        setCheckingRecurring(false);
+      }
+    };
+
+    checkEmployeeRecurring();
+  }, [selectedEmployee, api]);
+
   const isFormValid = (): boolean => {
     if (!selectedEmployee) return false;
+    if (hasExistingRecurring) return false;
     if (!amount || parseFloat(amount) <= 0) return false;
     if (!startDate) return false;
     return true;
@@ -150,6 +183,22 @@ export const SetupRecurringPaymentModal: React.FC<SetupRecurringPaymentModalProp
 
       console.log('[SetupRecurringPayment] Recurring payment created successfully');
 
+      // Store recurring payment metadata in localStorage
+      const recurringMetadata = {
+        employeeId: selectedEmployee.employeeId,
+        employeeName: selectedEmployee.name,
+        amount: parseFloat(amount),
+        frequency: frequency,
+        startDate: startDateObj.getTime(),
+        endDate: endDateObj ? endDateObj.getTime() : null,
+        createdAt: Date.now(),
+      };
+      const recurringKey = `payroll-ui.recurring.${currentCompany}`;
+      const existingRecurring = JSON.parse(localStorage.getItem(recurringKey) || '[]');
+      existingRecurring.push(recurringMetadata);
+      localStorage.setItem(recurringKey, JSON.stringify(existingRecurring));
+      console.log('[SetupRecurringPayment] Stored metadata:', recurringKey, recurringMetadata);
+
       setToastMessage(`Successfully set up recurring payment for ${selectedEmployee.name}`);
       setToastSeverity('success');
       setToastOpen(true);
@@ -159,7 +208,12 @@ export const SetupRecurringPaymentModal: React.FC<SetupRecurringPaymentModalProp
       onSuccess?.();
     } catch (err) {
       console.error('[SetupRecurringPayment] Failed:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to setup recurring payment';
+      let errorMessage = err instanceof Error ? err.message : 'Failed to setup recurring payment';
+
+      // Check for duplicate recurring payment error
+      if (errorMessage.includes('already has a recurring payment')) {
+        errorMessage = `${selectedEmployee.name} already has a recurring payment. Please use the "Manage Recurring" button to edit or cancel the existing payment.`;
+      }
 
       setToastMessage(errorMessage);
       setToastSeverity('error');
@@ -228,7 +282,11 @@ export const SetupRecurringPaymentModal: React.FC<SetupRecurringPaymentModalProp
                     placeholder="Search employees..."
                     InputProps={{
                       ...params.InputProps,
-                      startAdornment: <PersonIcon sx={{ mr: 1, color: theme.colors.text.disabled }} />,
+                      startAdornment: checkingRecurring ? (
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                      ) : (
+                        <PersonIcon sx={{ mr: 1, color: theme.colors.text.disabled }} />
+                      ),
                     }}
                   />
                 )}
@@ -246,7 +304,7 @@ export const SetupRecurringPaymentModal: React.FC<SetupRecurringPaymentModalProp
                     </Stack>
                   </li>
                 )}
-                disabled={isSubmitting}
+                disabled={isSubmitting || checkingRecurring}
               />
             </FormControl>
 
