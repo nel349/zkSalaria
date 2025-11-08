@@ -34,6 +34,7 @@ import { SetupRecurringPaymentModal } from './SetupRecurringPaymentModal';
 import { RecurringPaymentsModal } from './RecurringPaymentsModal';
 import { BatchPayrollButton } from './BatchPayrollButton';
 import { PaymentHistorySection } from './PaymentHistorySection';
+import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
 
@@ -56,13 +57,24 @@ interface CompanyDashboardProps {
   currentCompany: SavedCompany;
   companies: SavedCompany[];
   onCompanySwitch: (contractAddress: string) => void;
+  isDualRole?: boolean;
+  currentView?: ViewMode;
+  onViewChange?: (view: ViewMode) => void;
 }
 
 /**
- * Company Dashboard View (Phase 3.1)
+ * Company Dashboard View (Phase 3.1 & 3.6)
  * Main hub for all company operations
+ * Phase 3.6: Adds role switcher for dual-role users
  */
-export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompany, companies, onCompanySwitch }) => {
+export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
+  currentCompany,
+  companies,
+  onCompanySwitch,
+  isDualRole = false,
+  currentView = 'company',
+  onViewChange,
+}) => {
   const navigate = useNavigate();
   const { mode } = useTheme();
   const theme = useThemeValues();
@@ -185,9 +197,14 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
           const timestamp = metadata ? metadata.timestamp : Date.now();
 
           const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
-          const paymentType = record.payment_type === 0n ? 'salary' : record.payment_type === 1n ? 'advance' : 'bonus';
 
-          console.log(`[CompanyDashboard] Payment ${i}: type=${contractType}, amount=${amount}, hasMetadata=${!!metadata}`);
+          // Use metadata paymentType if available (has more detail: Commission, Reimbursement, etc.)
+          // Otherwise fall back to contract type
+          const paymentType = metadata?.paymentType
+            ? metadata.paymentType.toLowerCase().replace(/\s+/g, '')  // "Regular Salary" -> "regularsalary"
+            : (record.payment_type === 0n ? 'salary' : record.payment_type === 1n ? 'advance' : 'bonus');
+
+          console.log(`[CompanyDashboard] Payment ${i}: contractType=${contractType}, metadataType=${metadata?.paymentType}, amount=${amount}, hasMetadata=${!!metadata}`);
 
           allPayments.push({
             id: `${employee.employeeId}-${i}`, // Unique: employeeId + index
@@ -199,6 +216,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
             date: new Date(timestamp).toISOString(), // timestamp is already in milliseconds
             type: paymentType,
             transactionId: paymentId,
+            companyName: currentCompany.name, // Add company name for employee view
           });
         }
       }
@@ -272,8 +290,11 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ currentCompa
               </Box>
             </Stack>
 
-            {/* Right: Network badge */}
-            <Stack direction="row" alignItems="center" spacing={1}>
+            {/* Right: Role switcher (if dual role) and Network badge */}
+            <Stack direction="row" alignItems="center" spacing={2}>
+              {isDualRole && onViewChange && (
+                <RoleSwitcher currentView={currentView} onViewChange={onViewChange} />
+              )}
               <Box
                 sx={{
                   px: 2,

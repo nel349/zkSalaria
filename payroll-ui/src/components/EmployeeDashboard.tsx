@@ -24,6 +24,7 @@ import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { PaymentHistorySection } from './PaymentHistorySection';
+import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import pino from 'pino';
 
 const logger = pino({
@@ -46,13 +47,23 @@ interface EmployeeDashboardStats {
 interface EmployeeDashboardProps {
   contractAddress: string;
   companyName: string;
+  isDualRole?: boolean;
+  currentView?: ViewMode;
+  onViewChange?: (view: ViewMode) => void;
 }
 
 /**
- * Employee Dashboard View (Phase 3.2)
+ * Employee Dashboard View (Phase 3.2 & 3.6)
  * Shows employee-specific stats and actions
+ * Phase 3.6: Adds role switcher for dual-role users
  */
-export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ contractAddress, companyName }) => {
+export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
+  contractAddress,
+  companyName,
+  isDualRole = false,
+  currentView = 'employee',
+  onViewChange,
+}) => {
   const navigate = useNavigate();
   const { mode } = useTheme();
   const theme = useThemeValues();
@@ -212,8 +223,11 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ contractAd
               </Box>
             </Stack>
 
-            {/* Right: Network badge */}
-            <Stack direction="row" alignItems="center" spacing={1}>
+            {/* Right: Role switcher (if dual role) and Network badge */}
+            <Stack direction="row" alignItems="center" spacing={2}>
+              {isDualRole && onViewChange && (
+                <RoleSwitcher currentView={currentView} onViewChange={onViewChange} />
+              )}
               <Box
                 sx={{
                   px: 2,

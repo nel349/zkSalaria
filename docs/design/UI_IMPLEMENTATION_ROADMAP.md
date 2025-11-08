@@ -1,9 +1,9 @@
 # zkSalaria UI Implementation Roadmap
 
-**Version:** 1.1
-**Date:** 2025-11-07
-**Status:** Phase 3 In Progress
-**Backend Coverage:** 96% Complete ✅
+**Version:** 1.2
+**Date:** 2025-11-08
+**Status:** Phase 2-3 In Progress
+**Backend Coverage:** 98% Complete ✅ (On-Chain Recovery Implemented)
 
 ---
 
@@ -283,16 +283,30 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** `payEmployee()` (called N times)
 - **Complexity:** 🔴 High (2 days)
 
-#### 2.5 Recurring Payments Management Modal
+#### 2.5 Recurring Payments Management Modal ✅ **COMPLETED**
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 5)
-- **Components:**
-  - Card grid of recurring payments
-  - Filters (active, paused, cancelled)
-  - Actions: Edit, Pause, Resume, Cancel
-  - Modals for each action
-  - Empty state
-- **Backend API:** Query `state$`, `pauseRecurringPayment()`, `resumeRecurringPayment()`, `editRecurringPayment()`
+- **Status:** ✅ Shipped November 7, 2025
+- **Implementation:**
+  - Modal-based recurring payments management (integrated into dashboard)
+  - Card grid displaying all recurring payments with employee info
+  - Filters (All, Active, Paused) with button toggles
+  - **On-chain recovery capability:** Fetches ALL recurring payments from blockchain via List iteration
+  - Actions menu per payment: Edit Amount, Pause, Resume
+  - Edit Amount modal with validation
+  - Success/error toast notifications
+  - **SHA-256 hashing:** Uses `employeeUtils.ts` to hash wallet addresses for matching on-chain employee IDs with localStorage metadata
+  - **Hybrid data model:** On-chain structure (frequency, status, dates, encrypted amounts) + localStorage metadata (employee names, plaintext amounts)
+  - **Graceful fallback:** Shows `Employee 24aa4733...` if localStorage metadata missing
+  - Empty state with instructions
+- **Components Built:**
+  - RecurringPaymentsModal.tsx (full CRUD + on-chain recovery)
+  - employeeUtils.ts (SHA-256 hashing utility)
+- **Backend API:** ✅ `getAllRecurringPayments()` (List iteration), `pauseRecurringPayment()`, `resumeRecurringPayment()`, `editRecurringPayment()`
 - **Complexity:** 🟡 Medium (1.5 days)
+- **Notes:**
+  - True recovery capability - companies can retrieve all recurring payments from blockchain even if localStorage lost
+  - Leverages new Compact List types (`recurring_payment_ids: List<Bytes<32>>`) with TypeScript iteration
+  - On-chain data includes: employee_id, frequency, start_date, next_payment_date, status, encrypted_amount
 
 #### 2.6 Withdraw Salary Modal (Employee)
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 1)
@@ -331,12 +345,12 @@ All Phase 1 API integrations have been successfully completed:
 - ✅ One-time payment (modal-based)
 - ⏳ Recurring payment setup
 - ⏳ Batch payroll
-- ⏳ Recurring payment management
+- ✅ Recurring payment management (with on-chain recovery)
 - ⏳ Withdraw salary (employee)
 - ⏳ Generate ZK proof (employee)
 - ⏳ Download receipt
 
-**Current Status:** 2/8 completed (25%)
+**Current Status:** 3/8 completed (37.5%)
 **Total Effort:** 2 weeks (2 developers)
 
 ### Phase 2 Type System (Completed)
@@ -921,6 +935,9 @@ All Phase 1 API integrations have been successfully completed:
 - `withdrawEmployeeSalary(employeeId, amount)` → Withdraw to wallet
 - `getEmployeePaymentHistory(employeeId)` → Get payments
 - `getEmployeeInfo(employeeId)` → Get employee details
+- `getEmployeeCount()` → Get total employee count
+- `getAllEmployeeIds()` → Get all employee IDs from blockchain (List iteration)
+- `getAllRecurringPayments()` → Get all recurring payments from blockchain (List iteration)
 
 **Disclosure & Privacy:**
 - `grantIncomeDisclosure(employeeId, lenderId, minThreshold, expiresIn)`
@@ -1097,9 +1114,9 @@ Multiply all estimates by 1.5x for single developer.
 - **96% backend coverage** (ready for UI)
 - **6-8 weeks** timeline (2 developers)
 
-**Current Progress (as of November 7, 2025):**
+**Current Progress (as of November 8, 2025):**
 - ✅ Phase 1: **Complete** (5/5 screens - 100%)
-- ⏳ Phase 2: **In Progress** (2/8 screens - 25%)
+- ⏳ Phase 2: **In Progress** (3/8 screens - 37.5%)
 - ⏳ Phase 3: **In Progress** (5/8 screens - 62.5%)
 - ⏳ Phase 4: **Not Started** (0/7 screens - 0%)
 - ⏳ Phase 5: **Not Started** (0/6 features - 0%)
@@ -1107,10 +1124,13 @@ Multiply all estimates by 1.5x for single developer.
 **Recent Completions:**
 - ✅ AddEmployeeModal with full validation + API integration
 - ✅ PayEmployeeModal with payment type support
+- ✅ RecurringPaymentsModal with on-chain recovery capability
 - ✅ Payment history with index-based matching (solves timestamp sync issues)
 - ✅ TypeScript type system (PaymentMetadata, EmployeeMetadata)
 - ✅ Auto-reconnect wallet on page refresh (bank-ui pattern)
 - ✅ WalletConnectionPrompt reusable component
+- ✅ On-chain recovery system (employee IDs + recurring payments via Compact Lists)
+- ✅ SHA-256 hashing utility (employeeUtils.ts) for on-chain ID matching
 
 **Critical Path:**
 Landing → Connect Wallet → Role Detection → Onboarding → Dashboard → **[Current: Payments]** → Settings → Polish
@@ -1121,4 +1141,89 @@ Landing → Connect Wallet → Role Detection → Onboarding → Dashboard → *
 
 ---
 
-*Generated: November 4, 2025 | Updated: November 7, 2025 | zkSalaria v1.1*
+## On-Chain Recovery System (November 8, 2025)
+
+### Implementation Summary
+
+**Problem:** Companies could lose all employee and recurring payment data if localStorage was deleted, even though employee IDs exist on-chain.
+
+**Solution:** Implemented complete on-chain recovery capability using Compact List types with TypeScript iteration.
+
+### Contract Changes (payroll.compact)
+
+Added two new ledger Lists for iterating through on-chain data:
+
+```compact
+export ledger employee_ids: List<Bytes<32>>;              // Line 22
+export ledger recurring_payment_ids: List<Bytes<32>>;     // Line 60
+```
+
+**Circuit Updates:**
+- `add_employee` circuit: Calls `employee_ids.pushFront(disclose(employee_id));` (Line 143)
+- `create_recurring_payment` circuit: Calls `recurring_payment_ids.pushFront(recurring_payment_id);` (Line 766)
+
+**Compilation:** ✅ 19 circuits (successful)
+
+### API Changes (payroll-api.ts)
+
+**New Methods:**
+1. `getEmployeeCount()` - Returns total employee count from map or counter
+2. `getAllEmployeeIds()` - Iterates `employee_ids` List using TypeScript for-of loop, returns hex strings
+3. `getAllRecurringPayments()` - Iterates `recurring_payment_ids` List, returns all payment structures
+
+**List Iteration Pattern:**
+```typescript
+for (const employeeIdBytes of ledgerState.employee_ids) {
+  const hexId = Array.from(employeeIdBytes as Uint8Array)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  employeeIds.push(hexId);
+}
+```
+
+### UI Changes
+
+**New Utility (employeeUtils.ts):**
+- `walletAddressToEmployeeIdHex()` - SHA-256 hashing function to convert wallet addresses to on-chain employee IDs
+- Uses `crypto.subtle.digest('SHA-256', data)` for client-side hashing
+- Returns 32-byte hex string matching on-chain format
+
+**RecurringPaymentsModal Updates:**
+- Completely rewrote `loadRecurringPayments()` to fetch directly from blockchain
+- Calls `api.getAllRecurringPayments()` once (no per-employee queries)
+- Hashes localStorage wallet addresses to match on-chain employee IDs
+- Merges on-chain data with localStorage metadata for display
+- Shows fallback names (`Employee 24aa4733...`) if metadata missing
+
+### Data Flow
+
+**On-Chain Data (Recoverable):**
+- Employee IDs (SHA-256 hashes of wallet addresses)
+- Recurring payment IDs
+- Payment frequency (weekly/bi-weekly/monthly)
+- Payment status (active/paused/cancelled/completed)
+- Start date, next payment date, end date
+- Encrypted amounts
+
+**Off-Chain Data (localStorage - Metadata Only):**
+- Employee names, emails, roles
+- Plaintext amounts for display
+- Internal notes/memos
+
+**Recovery Scenario:**
+If localStorage is lost, companies can:
+1. Retrieve all employee IDs from blockchain via `getAllEmployeeIds()`
+2. Retrieve all recurring payment structures via `getAllRecurringPayments()`
+3. Re-enter employee names/emails (metadata only)
+4. Continue operations with full payment history and schedules intact
+
+### Technical Notes
+
+- **Compact Lists:** Support `pushFront()`, `popFront()`, `head()`, `length()`, `isEmpty()`, and TypeScript Symbol.iterator
+- **No Map Iteration:** Compact Maps don't support iteration, hence separate Lists required
+- **SHA-256 Matching:** Browser crypto API used for hashing (no server dependency)
+- **Backward Compatible:** Old localStorage data still works, new recovery is additive
+
+---
+
+*Generated: November 4, 2025 | Updated: November 8, 2025 | zkSalaria v1.2*

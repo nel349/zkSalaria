@@ -5,6 +5,7 @@ import { useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany } from '../utils/CompaniesLocalState';
 import { listEmployers, getCurrentEmployer, setCurrentEmployer } from '../utils/EmployerContractsLocalState';
+import { getSelectedView, setSelectedView, type ViewMode } from '../utils/ViewModeLocalState';
 import { PayrollAPI } from '@zksalaria/payroll-api';
 import { CompanyDashboard } from '../components/CompanyDashboard';
 import { EmployeeDashboard } from '../components/EmployeeDashboard';
@@ -22,8 +23,9 @@ const logger = pino({
 type UserRole = 'company' | 'employee' | 'both' | 'none';
 
 /**
- * Role-Aware Dashboard Router (Phase 3.1 & 3.2)
+ * Role-Aware Dashboard Router (Phase 3.1, 3.2 & 3.6)
  * Detects user role and renders appropriate dashboard view
+ * Phase 3.6: Adds role switcher for dual-role users
  */
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +35,7 @@ export const DashboardPage: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedView, setSelectedViewState] = useState<ViewMode>(getSelectedView());
 
   // Initialize with either current company (if owner) or current employer (if employee)
   // Prefer company for dual-role users
@@ -58,6 +61,12 @@ export const DashboardPage: React.FC = () => {
     setCurrentCompany(contractAddress);
     setSelectedCompanyAddress(contractAddress);
     setLoading(true);
+  }, []);
+
+  // Handle view mode switch (company vs employee)
+  const handleViewChange = useCallback((view: ViewMode) => {
+    setSelectedView(view);
+    setSelectedViewState(view);
   }, []);
 
   useEffect(() => {
@@ -162,8 +171,13 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
-  // For dual role users, default to company view
-  if (role === 'company' || role === 'both') {
+  // Determine which view to render
+  const isDualRole = role === 'both';
+  const showCompanyView = role === 'company' || (isDualRole && selectedView === 'company');
+  const showEmployeeView = role === 'employee' || (isDualRole && selectedView === 'employee');
+
+  // Company view
+  if (showCompanyView) {
     if (!currentCompany) {
       return (
         <Box
@@ -183,11 +197,20 @@ export const DashboardPage: React.FC = () => {
       );
     }
 
-    return <CompanyDashboard currentCompany={currentCompany} companies={companies} onCompanySwitch={handleCompanySwitch} />;
+    return (
+      <CompanyDashboard
+        currentCompany={currentCompany}
+        companies={companies}
+        onCompanySwitch={handleCompanySwitch}
+        isDualRole={isDualRole}
+        currentView={selectedView}
+        onViewChange={handleViewChange}
+      />
+    );
   }
 
   // Employee view
-  if (role === 'employee') {
+  if (showEmployeeView) {
     if (!selectedCompanyAddress || !currentCompany) {
       return (
         <Box
@@ -207,7 +230,15 @@ export const DashboardPage: React.FC = () => {
       );
     }
 
-    return <EmployeeDashboard contractAddress={selectedCompanyAddress} companyName={currentCompany.name} />;
+    return (
+      <EmployeeDashboard
+        contractAddress={selectedCompanyAddress}
+        companyName={currentCompany.name}
+        isDualRole={isDualRole}
+        currentView={selectedView}
+        onViewChange={handleViewChange}
+      />
+    );
   }
 
   // Fallback (should never reach here)

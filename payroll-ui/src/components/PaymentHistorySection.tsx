@@ -30,6 +30,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import DownloadIcon from '@mui/icons-material/Download';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import { useTheme, useThemeValues } from '../theme';
+import { PaymentDetailModal } from './PaymentDetailModal';
 
 type PaymentStatus = 'completed' | 'pending' | 'failed';
 type PaymentType = 'salary' | 'bonus' | 'advance' | 'withdrawal';
@@ -72,6 +73,9 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
   // Actions menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedPayment, setSelectedPayment] = useState<PaymentRecord | null>(null);
+
+  // Payment detail modal (Phase 3.4)
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   // Get recent payments (limited by maxRows)
   const recentPayments = useMemo(() => {
@@ -167,16 +171,21 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
   };
 
   // Type badge
-  const renderTypeBadge = (type: PaymentType) => {
-    const typeLabels = {
+  const renderTypeBadge = (type: PaymentType | string) => {
+    const typeLabels: Record<string, string> = {
       salary: 'Salary',
+      regularsalary: 'Regular Salary',
       bonus: 'Bonus',
       advance: 'Advance',
       withdrawal: 'Withdrawal',
+      commission: 'Commission',
+      reimbursement: 'Reimbursement',
+      adjustment: 'Adjustment',
     };
+    const label = typeLabels[type.toLowerCase()] || type;
     return (
       <Chip
-        label={<Typography>{typeLabels[type]}</Typography>}
+        label={<Typography>{label}</Typography>}
         size="small"
         sx={{
           bgcolor: mode === 'dark' ? theme.colors.primary[900] : theme.colors.primary[100],
@@ -198,8 +207,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
 
   const handleViewDetails = () => {
     handleCloseMenu();
-    // TODO: Phase 3.4 - Open payment detail modal
-    console.log('[PaymentHistory] View details:', selectedPayment?.id);
+    setDetailModalOpen(true);
   };
 
   const handleGenerateProof = () => {
@@ -373,6 +381,14 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
           Download Receipt
         </MenuItem>
       </Menu>
+
+      {/* Payment Detail Modal (Phase 3.4) */}
+      <PaymentDetailModal
+        open={detailModalOpen}
+        onClose={() => setDetailModalOpen(false)}
+        payment={selectedPayment}
+        userRole={userRole}
+      />
     </Box>
   );
 };

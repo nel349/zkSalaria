@@ -331,12 +331,12 @@ export const RecurringPaymentsModal: React.FC<RecurringPaymentsModalProps> = ({
                       </Stack>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Chip
-                          label={STATUS_LABELS[payment.status]}
+                          label={<Typography>{STATUS_LABELS[payment.status]}</Typography> }
                           size="small"
                           color={payment.status === 0 ? 'success' : payment.status === 1 ? 'warning' : 'default'}
                         />
                         <IconButton size="small" onClick={(e) => handleOpenMenu(e, payment)}>
-                          <MoreVertIcon />
+                          <MoreVertIcon sx={{ fontSize: 18, color: theme.colors.text.secondary }} />
                         </IconButton>
                       </Stack>
                     </Stack>
