@@ -1,8 +1,8 @@
 # zkSalaria UI Implementation Roadmap
 
-**Version:** 1.2
+**Version:** 1.3
 **Date:** 2025-11-08
-**Status:** Phase 2-3 In Progress
+**Status:** Phase 3 Complete, Phase 2 In Progress
 **Backend Coverage:** 98% Complete ✅ (On-Chain Recovery Implemented)
 
 ---
@@ -258,17 +258,29 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** ✅ `payEmployee(companyId, employeeId, amount, paymentType)`
 - **Complexity:** 🟡 Medium (1 day)
 
-#### 2.3 Setup Recurring Payment (Integration with modal)
+#### 2.3 Setup Recurring Payment (Integration with modal) ✅ **COMPLETED**
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 3)
-- **Components:**
-  - Employee dropdown
-  - Amount input
-  - Frequency dropdown (weekly, biweekly, monthly)
-  - Schedule picker (start/end dates)
-  - Preview modal (shows next 10 payments)
-  - Success modal
-- **Backend API:** `createRecurringPayment()`
+- **Status:** ✅ Shipped (integrated into CompanyDashboard)
+- **Implementation:**
+  - Modal-based recurring payment creation from dashboard Quick Actions
+  - Employee autocomplete with search
+  - Amount input with validation
+  - Frequency dropdown (Weekly, Bi-Weekly, Monthly)
+  - Schedule picker (start date, optional end date)
+  - Day of week selector for weekly/bi-weekly payments
+  - Checks for existing recurring payments per employee
+  - Success/error toast notifications
+  - Stores recurring payment metadata in localStorage
+  - Integrated with on-chain recurring payment system
+- **Components Built:**
+  - SetupRecurringPaymentModal.tsx (full form with validation)
+  - Integrated into CompanyDashboard.tsx Quick Actions
+- **Backend API:** ✅ `createRecurringPayment()`
 - **Complexity:** 🟡 Medium (1.5 days)
+- **Notes:**
+  - Validates employee doesn't already have a recurring payment
+  - Supports all three frequency types (0=Weekly, 1=Bi-Weekly, 2=Monthly)
+  - Metadata stored for amount display since on-chain amounts are encrypted
 
 #### 2.4 Run Payroll (Batch Payment) Modal - implement button as coming soon.
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 4)
@@ -343,14 +355,14 @@ All Phase 1 API integrations have been successfully completed:
 ### Phase 2 Deliverables
 - ✅ Add employee flow (modal-based)
 - ✅ One-time payment (modal-based)
-- ⏳ Recurring payment setup
+- ✅ Recurring payment setup (modal-based)
 - ⏳ Batch payroll
 - ✅ Recurring payment management (with on-chain recovery)
 - ⏳ Withdraw salary (employee)
 - ⏳ Generate ZK proof (employee)
 - ⏳ Download receipt
 
-**Current Status:** 3/8 completed (37.5%)
+**Current Status:** 4/8 completed (50%)
 **Total Effort:** 2 weeks (2 developers)
 
 ### Phase 2 Type System (Completed)
@@ -485,19 +497,31 @@ All Phase 1 API integrations have been successfully completed:
 - **Complexity:** 🟡 Medium (1 day)
 - **Notes:** Index-based matching solves timestamp synchronization issues between client and contract
 
-#### 3.4 Payment Detail Page (Dashboard integration)
+#### 3.4 Payment Detail Page (Dashboard integration) ✅ **COMPLETED**
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md`
+- **Status:** ✅ Shipped November 8, 2025
 - **Implementation:**
-  - **Embedded in dashboard** (not a separate route - better UX)
-  - **Components:**
-  - Left panel: Payment card (visual center)
-  - Right panel: Attributes, Balance Status, Transaction Details, Actions
-  - Details modal (tabbed: Overview, Accounting, History)
-  - All action modals (Withdraw, Generate Proof, Download Receipt)
-- **Backend API:** `getEmployeePaymentHistory()`, `state$`
+  - **Embedded in dashboard as modal** (not a separate route - better UX)
+  - **Visual payment card** with gradient background showing amount, status, type, and date
+  - **Three-tab interface:**
+    - **Overview:** Employee/company info, payment date, status cards
+    - **Transaction Details:** Complete transaction information in table format
+    - **History:** Payment timeline showing processing events
+  - **Status indicators:** Color-coded chips for completed/pending/failed payments
+  - **Encryption awareness:** Shows encrypted amounts with warning for employee view
+  - **Download Receipt button** (placeholder for Phase 2.8)
+  - **Responsive design:** Adapts to dark/light themes with glassmorphic styling
+- **Components Built:**
+  - PaymentDetailModal.tsx (comprehensive detail view)
+  - Integrated into PaymentHistorySection.tsx (opens from "View Details" action)
+- **Backend API:** ✅ `getEmployeePaymentHistory()`, `state$`
 - **Complexity:** 🔴 High (2 days)
+- **Notes:**
+  - Supports all payment types including Commission, Reimbursement, Adjustment
+  - Company name added to payment objects for employee view
+  - Modal design matches overall app theme and style
 
-#### 3.5 Notification Center
+#### 3.5 Notification Center (Postponed for later)
 - **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md`
 - **Components:**
   - Bell icon with badge in header
@@ -507,14 +531,28 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** WebSocket or polling for real-time updates
 - **Complexity:** 🟡 Medium (1 day)
 
-#### 3.6 Role Switcher (Dual Role Users)
+#### 3.6 Role Switcher (Dual Role Users) ✅ **COMPLETED**
 - **File Reference:** `2_APP_DASHBOARD_WIREFRAME.md`
-- **Components:**
-  - Toggle in top nav (Company vs Employee)
-  - Persists in localStorage
-  - Switches entire dashboard view
+- **Status:** ✅ Shipped November 8, 2025
+- **Implementation:**
+  - **Toggle button group** in dashboard header (Company ⇄ Employee)
+  - **Only shows for dual-role users** (users who are both company owner and employee)
+  - **Persists selection in localStorage** via ViewModeLocalState utility
+  - **Seamless view switching** without page reload
+  - **Integrated into both dashboards:** CompanyDashboard and EmployeeDashboard
+  - **Theme-aware styling** with proper active/inactive states
+- **Components Built:**
+  - RoleSwitcher.tsx (toggle button component)
+  - ViewModeLocalState.ts (localStorage persistence utility)
+  - Updated DashboardPage.tsx (view mode state management)
+  - Updated CompanyDashboard.tsx (adds switcher to header)
+  - Updated EmployeeDashboard.tsx (adds switcher to header)
 - **Backend API:** None (client-side routing)
 - **Complexity:** 🟢 Low (0.5 day)
+- **Notes:**
+  - Clean UX - toggle appears in header next to network badge
+  - Default view is "company" for dual-role users
+  - View preference persists across sessions
 
 ### Phase 3 Deliverables
 - ✅ Company dashboard (with live contract state)
@@ -522,11 +560,11 @@ All Phase 1 API integrations have been successfully completed:
 - ✅ Account selector (unified company/employer view)
 - ✅ Employee list/management page (full CRUD + CSV export)
 - ✅ Payment history section (index-based matching, embedded in dashboard)
-- ⏳ Payment detail page
-- ⏳ Notification center
-- ⏳ Role switcher (dual role support)
+- ✅ Payment detail page (modal with 3-tab interface)
+- ⏸️ Notification center (postponed - not required for MVP)
+- ✅ Role switcher (dual role support)
 
-**Current Status:** 5/8 completed (62.5%)
+**Current Status:** 7/8 completed (87.5%) - 1 postponed
 **Total Effort:** 1.5 weeks (2 developers)
 
 ---
@@ -1116,12 +1154,19 @@ Multiply all estimates by 1.5x for single developer.
 
 **Current Progress (as of November 8, 2025):**
 - ✅ Phase 1: **Complete** (5/5 screens - 100%)
-- ⏳ Phase 2: **In Progress** (3/8 screens - 37.5%)
-- ⏳ Phase 3: **In Progress** (5/8 screens - 62.5%)
+- ⏳ Phase 2: **In Progress** (4/8 screens - 50%)
+- ✅ Phase 3: **Complete** (7/8 screens - 87.5%, 1 postponed)
 - ⏳ Phase 4: **Not Started** (0/7 screens - 0%)
 - ⏳ Phase 5: **Not Started** (0/6 features - 0%)
 
-**Recent Completions:**
+**Recent Completions (November 8, 2025):**
+- ✅ **Setup Recurring Payment Modal** - Full recurring payment creation with frequency selection
+- ✅ **Payment Detail Modal** - 3-tab interface with Overview, Transaction Details, and History
+- ✅ **Role Switcher** - Toggle between Company and Employee views for dual-role users
+- ✅ **Payment type fixes** - Full support for Commission, Reimbursement, Adjustment types
+- ✅ **Payment amount display** - Fixed metadata matching to show correct amounts from localStorage
+
+**Previous Completions:**
 - ✅ AddEmployeeModal with full validation + API integration
 - ✅ PayEmployeeModal with payment type support
 - ✅ RecurringPaymentsModal with on-chain recovery capability
@@ -1226,4 +1271,4 @@ If localStorage is lost, companies can:
 
 ---
 
-*Generated: November 4, 2025 | Updated: November 8, 2025 | zkSalaria v1.2*
+*Generated: November 4, 2025 | Updated: November 8, 2025 | zkSalaria v1.3*

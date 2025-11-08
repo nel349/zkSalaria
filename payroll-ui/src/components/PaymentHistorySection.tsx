@@ -354,7 +354,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
                 </TableCell>
                 <TableCell>{renderTypeBadge(payment.type)}</TableCell>
                 <TableCell align="center">
-                  <Tooltip title="Actions">
+                  <Tooltip title={<Typography>Actions</Typography>}>
                     <IconButton size="small" onClick={(e) => handleOpenMenu(e, payment)}>
                       <MoreVertIcon sx={{ fontSize: 18 }} />
                     </IconButton>

@@ -342,7 +342,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                       </Typography>
                     </Stack>
                     <Chip
-                      label={payment.status.toUpperCase()}
+                      label={<Typography>{payment.status.toUpperCase()}</Typography>}
                       color={getStatusColor()}
                       size="small"
                       sx={{ fontWeight: theme.typography.fontWeight.semibold }}
