@@ -1,38 +1,42 @@
 # zkSalaria App Dashboard - Detailed Wireframe Specification
 
-**Version:** 1.0
-**Date:** 2025-10-31
+**Version:** 2.0
+**Date:** 2025-11-08
 **Purpose:** Application interface after user connects wallet (post-authentication)
+**Status:** Updated to reflect actual implementation
 
 ---
 
-## Design System (Inherited from Onboarding)
+## Implementation Status
 
-### Color Palette
-```
-Primary Background: #0A0E27 (Deep midnight blue)
-Secondary Background: #1A1F3A (Lighter midnight blue)
-Card Background: #151932 (Medium midnight blue)
-Accent Primary: #00D9FF (Cyan - privacy/encryption)
-Accent Secondary: #7B61FF (Purple - ZKML/AI)
-Warning/CTA: #FF6B35 (Orange - primary actions)
-Success: #10B981 (Green - compliance/verified)
-Alert Background: rgba(255, 107, 53, 0.1) (Orange tint)
-Text Primary: #FFFFFF (White)
-Text Secondary: #A0AEC0 (Light gray)
-Border: #2D3748 (Dark gray)
-```
+### ✅ Completed Components
+- Role-based dashboard routing (company/employee views)
+- Role switcher for dual-role users
+- Company dashboard with live contract state
+- Employee dashboard with balance and payment history
+- Quick Actions (Withdraw Salary, Generate Proof)
+- Payment history section (embedded in dashboard)
+- All modals (Pay Employee, Add Employee, Recurring Payments, Withdraw, Generate Proof, Download Receipt, Payment Detail)
 
-### Typography
-```
-Same as onboarding page:
-Heading 1: Inter, 48px, Bold
-Heading 2: Inter, 32px, Bold
-Heading 3: Inter, 24px, Semibold
-Body Large: Inter, 16px, Regular
-Body: Inter, 14px, Regular
-Monospace: JetBrains Mono, 14px
-```
+### 🔜 Pending Components (Phase 4)
+- Grant Disclosure modal
+- Download W-2 modal
+- Settings pages
+- Notification center
+
+### Key Implementation Files
+- `src/pages/DashboardPage.tsx` - Role detection and routing
+- `src/components/CompanyDashboard.tsx` - Company view
+- `src/components/EmployeeDashboard.tsx` - Employee view
+- `src/components/GenerateProofModal.tsx` - ZKML proof generation (Phase 2.7)
+- `src/components/WithdrawSalaryModal.tsx` - Employee withdrawals (Phase 2.6)
+- `src/components/PaymentHistorySection.tsx` - Payment list (Phase 3.3)
+
+---
+
+## Design System
+
+**Note:** Theme details (colors, typography) are managed in the UI theme system (`src/theme/`). This document focuses on structure, layout, and behavior.
 
 ---
 
@@ -561,47 +565,54 @@ Current Balance    Last Payment         This Year          Status
 
 ## 👤 EMPLOYEE VIEW - Quick Actions
 
-**Floating Panel (bottom-right):**
-
-```
-┌─────────────────────────────────┐
-│      Quick Actions              │
-│  [💵 Withdraw Salary]           │
-│  [🔐 Generate Proof]            │
-│  [✅ Grant Disclosure]          │
-│  [📄 Download W-2]              │
-└─────────────────────────────────┘
-```
+**Implementation:** Integrated into `EmployeeDashboard.tsx`
+**Location:** Main dashboard page (not floating panel)
+**Layout:** Grid of 4 action buttons (3 columns on desktop)
 
 **Action Buttons:**
 
-**1. Withdraw Salary**
-- Icon: 💵 (20px)
-- Text: "Withdraw Salary"
-- Background: #FF6B35 (orange - primary action)
-- Full width, height 40px
-- Hover: Brightness increase
+**1. Withdraw Salary** ✅ Implemented
+- **Component:** `WithdrawSalaryModal.tsx`
+- **Icon:** MonetizationOnIcon
+- **Color:** Warning color (orange/amber theme)
+- **Trigger:** Opens withdrawal modal
+- **Disabled when:** Balance is zero
+- **Features:**
+  - Full balance or custom amount selection
+  - Gas fee display
+  - Timestamp update before withdrawal
+  - Success/error notifications
 
-**2. Generate Proof**
-- Icon: 🔐 (20px)
-- Text: "Generate Proof"
-- Background: #7B61FF (purple - ZKML)
-- Full width
+**2. Generate Proof** ✅ Implemented
+- **Component:** `GenerateProofModal.tsx`
+- **Icon:** VerifiedIcon
+- **Color:** Secondary color (purple theme)
+- **Trigger:** Opens ZKML proof generation modal
+- **Features:**
+  - 4 proof types from smart contract
+  - Dynamic threshold inputs
+  - 15-second simulated ZKML processing
+  - Shareable proof links
 
-**3. Grant Disclosure**
-- Icon: ✅ (20px)
-- Text: "Grant Disclosure"
-- Background: #00D9FF (cyan - privacy)
-- Full width
+**3. Grant Disclosure** 🔜 Coming Soon
+- **Icon:** CheckCircleIcon
+- **Color:** Primary color (cyan theme)
+- **Status:** Placeholder (Phase 4)
+- **Future:** Opens disclosure management modal
 
-**4. Download W-2**
-- Icon: 📄 (20px)
-- Text: "Download W-2"
-- Background: #10B981 (green - tax/compliance)
-- Full width
+**4. Download W-2** 🔜 Coming Soon
+- **Icon:** ReceiptIcon
+- **Color:** Outlined button
+- **Status:** Placeholder (Phase 4)
+- **Future:** Opens tax form download modal
 
 **Button Specs:**
-- Same as company view (height 40px, gap 8px, etc.)
+- Full width buttons
+- Height: 48px (py: 1.5)
+- Icon + text layout with startIcon
+- Contained variant (primary buttons)
+- Outlined variant (W-2 button)
+- Responsive grid: 3 columns on medium+, 2 columns on small, 1 column on mobile
 
 ---
 
@@ -880,78 +891,113 @@ Mobile:   < 768px (single column, hide action bar, show FAB instead)
 
 ---
 
-### Generate Proof Modal
+### Generate Proof Modal (ZKML Income Verification)
 
-**Trigger:** Click "Generate Proof" from quick actions
-**Size:** 640px width
+**Implementation:** `GenerateProofModal.tsx` (Phase 2.7 - Complete)
+**Trigger:** Click "Generate Proof" from Employee Dashboard Quick Actions
+**Size:** 640px width, auto height
+**Component:** Modal with three states (form → processing → success)
 
-```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│  Generate ZK Proof                       [X]     │
-│  ──────────────────────────────────────────────  │
-│                                                  │
-│  Proof Type                                      │
-│  ○ Credit Score     ● Employment     ○ Audit     │
-│                                                  │
-│  Employee ID                                     │
-│  [alice                                    ▼]    │
-│                                                  │
-│  ZKML Model                                      │
-│  [XGBoost Credit Scorer v1               ▼]    │
-│                                                  │
-│  ℹ️  This will generate a zero-knowledge proof   │
-│     using your private salary data. The proof    │
-│     verifies your credit score without revealing │
-│     actual salary amounts.                       │
-│                                                  │
-│  Estimated time: 30-60 seconds                   │
-│  Gas cost: ~0.005 DUST                           │
-│                                                  │
-│            [Cancel]  [Generate Proof]            │
-│                                                  │
-└──────────────────────────────────────────────────┘
+#### State 1: Proof Type Selection Form
+
+**Proof Types (from smart contract):**
+1. **Income Above Threshold** (Type 0)
+   - Prove: "I earn at least $X/month"
+   - Threshold input: Single amount field
+   - Use case: Minimum income requirements (loans, credit cards)
+
+2. **Income Range** (Type 1)
+   - Prove: "I earn between $X and $Y/month"
+   - Threshold inputs: Minimum and maximum amount fields
+   - Use case: Income bracket verification (credit products, benefits)
+
+3. **Average Income** (Type 2)
+   - Prove: "My average income is at least $X/month"
+   - Threshold input: Single amount field
+   - Use case: Stable income history (leases, mortgages)
+
+4. **Payment Consistency Score** (Type 3)
+   - Prove: "My payment consistency score is at least X"
+   - Threshold input: Score field (0-850 range, like credit score)
+   - Use case: Creditworthiness without revealing amounts
+
+**Form Fields:**
+- Proof type selector (radio buttons, 4 options)
+- Dynamic threshold inputs (change based on proof type)
+- Optional metadata checkboxes:
+  - ☑ Include employment status
+  - ☑ Include company name
+- Expiration dropdown: 7 days, 30 days, 60 days, 90 days, No expiration
+- Verifier field (optional): Email or wallet address for proof recipient
+- Proof preview: Real-time statement showing what will be proven
+
+**Buttons:**
+- Cancel (secondary)
+- Generate Proof (primary, disabled until valid input)
+
+#### State 2: Processing (ZKML Computation)
+
+**Duration:** 15 seconds (simulated EZKL proof generation)
+
+**Display:**
+- Circular progress indicator with percentage (0% → 100%)
+- Title: "Generating Zero-Knowledge Proof"
+- Subtitle: "Computing ZKML proof using your payment history..."
+- Warning: "Please don't close this window"
+
+**Steps (simulated):**
+- Fetching payment history from contract
+- Computing ZKML model inference
+- Generating zero-knowledge proof
+- Submitting attestation to blockchain
+
+#### State 3: Success
+
+**Display:**
+- Success icon and message: "✅ Proof Generated Successfully!"
+- Proof details:
+  - Proof ID: `proof-{timestamp}`
+  - Expiration date (if set)
+  - Shareable link: `https://zksalaria.app/verify/{proofId}`
+- Share options:
+  - Copy Link (copies shareable URL to clipboard)
+  - Email (opens mailto with pre-filled proof link)
+  - Download PDF (generates PDF receipt with proof details)
+
+**Buttons:**
+- Close (returns to dashboard)
+
+#### Technical Implementation
+
+**Component:** `GenerateProofModal.tsx` (670 lines)
+**Location:** `src/components/GenerateProofModal.tsx`
+**Integration:** Employee Dashboard Quick Actions button
+
+**Backend API (mocked for now, ready for ZKML service):**
+```typescript
+await api.submitIncomeProof(
+  employeeId,
+  proofType,           // 0-3
+  threshold1,          // minimum or single threshold
+  threshold2,          // maximum (only for INCOME_RANGE)
+  includeStatus,       // boolean
+  includeCompany,      // boolean
+  expirationSeconds    // 0 = no expiration
+);
 ```
 
-**Progress State (After clicking Generate):**
-```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│  Generating Proof...                             │
-│  ──────────────────────────────────────────────  │
-│                                                  │
-│         [Animated spinner/progress bar]          │
-│                                                  │
-│  ✓ Loading ZKML model                            │
-│  ✓ Fetching encrypted salary data                │
-│  ⏳ Computing zero-knowledge proof...            │
-│  ⏳ Submitting to blockchain...                  │
-│                                                  │
-│  This may take up to 60 seconds.                 │
-│  Please don't close this window.                 │
-│                                                  │
-└──────────────────────────────────────────────────┘
-```
+**Mock Response:**
+- `proofId`: Generated timestamp-based ID
+- `merkleRoot`: Placeholder hash (0x1234...)
+- `attestationHash`: Placeholder hash (0x5678...)
+- `txids`: Empty array (ready for blockchain transaction IDs)
 
-**Success State:**
-```
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│  ✅ Proof Generated Successfully!                │
-│  ──────────────────────────────────────────────  │
-│                                                  │
-│  Credit Score: 750 (Excellent)                   │
-│  Proof Hash: 0xa3f2...8b9c                       │
-│  Transaction: View on explorer →                 │
-│                                                  │
-│  Your credit score proof has been stored         │
-│  on-chain. Authorized verifiers can now          │
-│  check your score without seeing your salary.    │
-│                                                  │
-│               [Share Proof]  [Close]             │
-│                                                  │
-└──────────────────────────────────────────────────┘
-```
+**Future Integration:**
+When ZKML verifier service is ready, this modal will:
+1. Call real EZKL proof generation service
+2. Submit proof attestation to smart contract
+3. Display actual transaction hash and explorer link
+4. Store proof ID for verification lookups
 
 ---
 
@@ -1305,26 +1351,24 @@ After implementing this dashboard:
 
 ---
 
-## Comparison to Sablier
+## Original Design Inspiration
 
-**What we adapted:**
-- ✅ Clean 3-card overview layout
-- ✅ Network selector in nav bar
-- ✅ Alert banner for new features
-- ✅ Featured users/companies carousel
-- ✅ "View yours" CTA pattern
-- ✅ Dark theme with brand color accents
+**Note:** This section reflects early design inspiration from Sablier. The actual implementation has evolved significantly based on zkSalaria's unique privacy-first payroll requirements.
 
-**What's unique to zkSalaria:**
-- 🔐 Privacy-focused cards (encrypted balances, ZK proofs)
-- 🤖 ZKML verification features (not in Sablier)
-- 🏦 Compliance & audit emphasis (not in Sablier)
-- 💼 Company-centric (vs Sablier's DAO/vesting focus)
-- 🌙 Midnight Network branding (vs multi-chain)
-- ⚡ Quick actions floating panel (more actions than Sablier)
+**Initial Concept Borrowed from Sablier:**
+- Clean dashboard layout with stat cards
+- Network selector in navigation
+- Alert banners for feature announcements
+- Dark theme aesthetic
 
-**Visual differentiation:**
-- Sablier: Orange accents (#FF8B3D)
-- zkSalaria: Cyan (#00D9FF) for privacy + Purple (#7B61FF) for ZKML
-- Sablier: 3D gift/lock illustrations
-- zkSalaria: 3D shield/circuit/brain illustrations emphasizing privacy/AI
+**zkSalaria's Unique Implementation:**
+- 🔐 **Privacy-first architecture:** All balances encrypted on-chain, local decryption
+- 🤖 **ZKML proof generation:** 4 proof types for income verification without revealing amounts
+- 💼 **Dual-role system:** Companies and employees use the same app with different views
+- 🔄 **Role switcher:** Seamless toggle for users with both roles
+- 📊 **Modal-based workflows:** All actions (pay, withdraw, proof generation) use modals for better UX
+- 🌙 **Midnight Network integration:** Compact smart contracts, Lace wallet, zero-knowledge proofs
+- 📦 **On-chain recovery:** Employee and recurring payment data recoverable from blockchain
+
+**Current Status (November 2025):**
+The actual implementation has diverged significantly from the original wireframe. This document now serves as a living specification that reflects the built product, not the initial concept.

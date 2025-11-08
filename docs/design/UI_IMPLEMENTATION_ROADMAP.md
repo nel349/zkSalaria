@@ -341,17 +341,38 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** ✅ `withdrawEmployeeSalary()`, `update_timestamp()`
 - **Complexity:** 🟡 Medium (1 day)
 
-#### 2.7 Generate Proof Modal (Employee)
+#### 2.7 Generate Proof Modal (Employee) ✅ **COMPLETED**
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 2)
-- **Components:**
-  - Proof type dropdown (4 types)
-  - Threshold inputs
-  - Options checkboxes (include employment, company name)
-  - Expiration dropdown
-  - Processing state (10-30s)
-  - Success modal with share link
-- **Backend API:** `submitIncomeProof()`
+- **Status:** ✅ Shipped November 8, 2025
+- **Implementation:**
+  - Modal-based ZKML proof generation interface
+  - **Four proof types from contract:**
+    - Income Above Threshold - "Prove I earn at least $X/month"
+    - Income Range - "Prove I earn between $X and $Y/month"
+    - Average Income - "Prove my average income is at least $X/month"
+    - Payment Consistency Score - "Prove my payment history score is at least X"
+  - **Dynamic threshold inputs** based on selected proof type
+  - **Options checkboxes:** Include employment status, include company name
+  - **Expiration selection:** 7 days, 30 days, 60 days, 90 days, or no expiration
+  - **Verifier field:** Optional email/wallet address for proof recipient
+  - **Proof preview:** Real-time statement preview showing what will be proven
+  - **Processing state:** 15-second simulated ZKML proof generation with progress bar and percentage
+  - **Success modal:** Displays proof ID, expiration date, shareable link
+  - **Share options:** Copy link, email, download PDF buttons
+  - **Dark mode styling:** Proper checkbox visibility with explicit SVG icon colors
+  - **Integration:** Accessible from PaymentDetailModal (employee only, non-withdrawal) and PaymentHistorySection actions menu
+- **Components Built:**
+  - GenerateProofModal.tsx (670 lines, full three-state modal: form → processing → success)
+  - Integrated into PaymentDetailModal.tsx ("Generate Proof" button for employees)
+  - Integrated into PaymentHistorySection.tsx (actions menu)
+- **Backend API:** ✅ `submitIncomeProof()` (mocked for now, ready for ZKML service integration)
+- **Dependencies:** react-hot-toast for notifications
 - **Complexity:** 🔴 High (2 days)
+- **Notes:**
+  - Mock implementation simulates 15-second ZKML proof generation process
+  - Uses contract proof types (0=INCOME_ABOVE_THRESHOLD, 1=INCOME_RANGE, 2=AVERAGE_INCOME, 3=CREDIT_SCORE)
+  - Ready for ZKML verifier service integration (merkleRoot, attestationHash, txids currently mocked)
+  - Only shown for employee role and non-withdrawal transactions
 
 #### 2.8 Download Receipt Modal ✅ **COMPLETED**
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 3)
@@ -384,13 +405,13 @@ All Phase 1 API integrations have been successfully completed:
 - ✅ Add employee flow (modal-based)
 - ✅ One-time payment (modal-based)
 - ✅ Recurring payment setup (modal-based)
-- ⏳ Batch payroll
+- ⏳ Batch payroll (marked as "coming soon")
 - ✅ Recurring payment management (with on-chain recovery)
 - ✅ Withdraw salary (employee)
-- ⏳ Generate ZK proof (employee)
+- ✅ Generate ZK proof (employee)
 - ✅ Download receipt
 
-**Current Status:** 6/8 completed (75%)
+**Current Status:** 7/8 completed (87.5%) - 1 deferred
 **Total Effort:** 2 weeks (2 developers)
 
 ### Phase 2 Type System (Completed)
@@ -1182,12 +1203,13 @@ Multiply all estimates by 1.5x for single developer.
 
 **Current Progress (as of November 8, 2025):**
 - ✅ Phase 1: **Complete** (5/5 screens - 100%)
-- ⏳ Phase 2: **In Progress** (6/8 screens - 75%)
+- ✅ Phase 2: **Nearly Complete** (7/8 screens - 87.5%, 1 deferred)
 - ✅ Phase 3: **Complete** (7/8 screens - 87.5%, 1 postponed)
 - ⏳ Phase 4: **Not Started** (0/7 screens - 0%)
 - ⏳ Phase 5: **Not Started** (0/6 features - 0%)
 
 **Recent Completions (November 8, 2025):**
+- ✅ **Generate Proof Modal (Phase 2.7)** - ZKML income proof generation with 4 proof types, dynamic threshold inputs, processing simulation, and shareable proof links
 - ✅ **Withdraw Salary Modal (Phase 2.6)** - Employee withdrawal with full/custom amount selection, timestamp updates, and withdrawal transaction display
 - ✅ **Download Receipt Modal (Phase 2.8)** - Multi-format receipt export (PDF, CSV, JSON) with customizable details and privacy options
 - ✅ **Setup Recurring Payment Modal** - Full recurring payment creation with frequency selection
