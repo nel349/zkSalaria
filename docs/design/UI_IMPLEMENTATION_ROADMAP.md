@@ -1,8 +1,8 @@
 # zkSalaria UI Implementation Roadmap
 
-**Version:** 1.0
-**Date:** 2025-11-04
-**Status:** Ready to Implement
+**Version:** 1.1
+**Date:** 2025-11-07
+**Status:** Phase 3 In Progress
 **Backend Coverage:** 96% Complete ✅
 
 ---
@@ -58,19 +58,26 @@ This document provides a **complete implementation roadmap** for the zkSalaria U
 
 #### 1.2 Connect Wallet Page (`/connect`) ✅ **COMPLETED**
 - **File Reference:** `AUTHENTICATION_ONBOARDING_WIREFRAMES.md` (Page 2)
-- **Status:** ✅ Shipped November 5, 2025
+- **Status:** ✅ Shipped November 5, 2025 (Updated November 7, 2025)
 - **Implementation:**
   - Wallet detection (Midnight Lace installed check)
   - Connection flow with loading states
   - Error handling (not installed, timeout, rejected)
-  - Auto-reconnect on page reload (localStorage persistence)
+  - **Auto-reconnect on page reload** using Lace `isEnabled()` API (no localStorage flags needed)
+  - Wallet stays connected across page refreshes (matches bank-ui pattern)
+  - WalletConnectionPrompt reusable component for non-connected state
   - Theme-aware UI with glass morphism
 - **Components Built:**
   - ConnectWalletPage.tsx (fully themed)
-  - PayrollWalletContext.tsx (state management)
+  - PayrollWalletContext.tsx (state management + auto-reconnect)
+  - WalletConnectionPrompt.tsx (reusable prompt component)
   - connectToWallet.ts (wallet SDK integration)
+- **Auto-Connect Logic:**
+  - On mount, checks `window.midnight.mnLace.isEnabled()` to detect previous authorization
+  - If authorized and not connected, silently reconnects in background
+  - No race conditions - dashboard waits for connection before showing content
 - **Backend:** Midnight Lace Wallet SDK integration ✅
-- **Critical:** ✅ Wallet connection working
+- **Critical:** ✅ Wallet connection working with persistent sessions
 
 #### 1.3 Network Validation & Role Detection (`/loading`) ✅ **COMPLETED**
 - **File Reference:** `AUTH_ONBOARDING_FLOW.md` (Pages 4-5)
@@ -213,25 +220,42 @@ All Phase 1 API integrations have been successfully completed:
 
 ### Screens to Build
 
-#### 2.1 Add Employee Page (Integration with modal)
+#### 2.1 Add Employee Modal ✅ **COMPLETED**
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 1)
-- **Components:**
-  - Employee info form (name, wallet, email, role, salary)
-  - Validation
-  - Success modal
-- **Backend API:** `addEmployee()`
+- **Status:** ✅ Shipped November 7, 2025
+- **Implementation:**
+  - Modal-based employee addition (not separate route)
+  - Form with fields: name, wallet address, email, role (optional), base salary (optional)
+  - Real-time validation (name min 2 chars, valid email format, wallet address required, salary must be positive)
+  - Duplicate employee check via `getEmployeeInfo()` API
+  - Success/error toast notifications
+  - Stores employee metadata in localStorage with proper TypeScript types
+  - Integrated into CompanyDashboard quick actions
+- **Components Built:**
+  - AddEmployeeModal.tsx (full validation + API integration)
+  - EmployeeMetadata type (src/types/payment.ts)
+- **Backend API:** ✅ `addEmployee()`, `getEmployeeInfo()`
 - **Complexity:** 🟢 Low (0.5 day)
 
-#### 2.2 Pay Employee (One-Time) (Integration with modal)
+#### 2.2 Pay Employee Modal (One-Time) ✅ **COMPLETED**
 - **File Reference:** `PAYROLL_PAGES_WIREFRAMES.md` (Page 2)
-- **Components:**
-  - Employee dropdown (searchable)
-  - Amount selection (base salary vs custom)
-  - Payment type dropdown
-  - Memo field
-  - Summary section
-  - Success modal
-- **Backend API:** `payEmployee()`
+- **Status:** ✅ Shipped November 7, 2025
+- **Implementation:**
+  - Modal-based payment interface (integrated into dashboard)
+  - Employee autocomplete with search (shows name, role, base salary)
+  - Amount selection: radio buttons for base salary vs custom amount
+  - Custom amount field with autoFocus for better UX
+  - Payment type dropdown: Regular Salary, Bonus, Commission, Reimbursement, Advance, Adjustment
+  - Memo field (optional, internal notes)
+  - Summary section showing employee, amount, type, gas fee, total cost
+  - Success/error toast notifications
+  - Stores payment metadata in localStorage with PaymentMetadata TypeScript type
+  - Payment metadata includes: employeeId, employeeName, amount, paymentType, memo, timestamp, companyId
+- **Components Built:**
+  - PayEmployeeModal.tsx (full form + API integration)
+  - PaymentMetadata type (src/types/payment.ts)
+  - ToastNotification component for feedback
+- **Backend API:** ✅ `payEmployee(companyId, employeeId, amount, paymentType)`
 - **Complexity:** 🟡 Medium (1 day)
 
 #### 2.3 Setup Recurring Payment (Integration with modal)
@@ -303,16 +327,36 @@ All Phase 1 API integrations have been successfully completed:
 - **Complexity:** 🟡 Medium (1 day)
 
 ### Phase 2 Deliverables
-- ✅ Add employee flow
-- ✅ One-time payment
-- ✅ Recurring payment setup
-- ✅ Batch payroll
-- ✅ Recurring payment management
-- ✅ Withdraw salary (employee)
-- ✅ Generate ZK proof (employee)
-- ✅ Download receipt
+- ✅ Add employee flow (modal-based)
+- ✅ One-time payment (modal-based)
+- ⏳ Recurring payment setup
+- ⏳ Batch payroll
+- ⏳ Recurring payment management
+- ⏳ Withdraw salary (employee)
+- ⏳ Generate ZK proof (employee)
+- ⏳ Download receipt
 
+**Current Status:** 2/8 completed (25%)
 **Total Effort:** 2 weeks (2 developers)
+
+### Phase 2 Type System (Completed)
+- **PaymentMetadata interface** (`src/types/payment.ts`):
+  - employeeId: string (wallet address)
+  - employeeName: string
+  - amount: number (dollars, plaintext)
+  - paymentType: string ('Regular Salary' | 'Bonus' | 'Advance' | etc.)
+  - memo: string (optional internal note)
+  - timestamp: number (milliseconds since epoch)
+  - companyId: string (contract address)
+- **EmployeeMetadata interface** (`src/types/payment.ts`):
+  - employeeId: string (wallet address)
+  - name: string
+  - email: string
+  - role?: string (optional)
+  - baseSalary?: string (optional)
+  - addedAt: string (ISO timestamp)
+  - companyContractAddress: string
+- **Export:** Centralized in `src/types/index.ts` for reusable imports
 
 ---
 
@@ -396,11 +440,14 @@ All Phase 1 API integrations have been successfully completed:
   - Encrypted balance decryption and payment history queries deferred to Phase 4
 
 #### 3.3 Payment History Section (Dashboard Integration) ✅ **COMPLETED**
-- **Status:** ✅ Implemented November 6, 2025
+- **Status:** ✅ Implemented November 7, 2025
 - **Implementation:**
   - **Embedded in dashboard** (not a separate route - better UX)
   - PaymentHistorySection component integrated into both Company and Employee dashboards
   - Payment table with columns: Status, Employee/Company, Amount, Date, Type, Actions
+  - **Index-based matching:** Payment history from contract matched to localStorage metadata by chronological index (no timestamp fuzzy matching)
+  - Payment amounts retrieved from localStorage PaymentMetadata (plaintext for company view)
+  - Dates displayed from localStorage timestamp (actual submission time) until contract timestamp issues resolved
   - Encrypted amount display with individual decrypt/encrypt toggle buttons (employee view)
   - Privacy banner with "Decrypt All Amounts" button (employee view, dismissible)
   - Actions dropdown: View Details, Generate Proof, Download Receipt
@@ -408,16 +455,21 @@ All Phase 1 API integrations have been successfully completed:
   - Status badges (Completed ✓, Pending ⏳, Failed ✗)
   - Type badges (Salary, Bonus, Advance, Withdrawal)
   - Hover effects with border highlighting
-  - Shows recent 5 payments on dashboard (configurable maxRows)
+  - Shows recent payments on dashboard (configurable maxRows, default 10)
   - Compact table design optimized for dashboard view
 - **Components Built:**
   - PaymentHistorySection.tsx (reusable component)
   - Integrated into CompanyDashboard.tsx
-  - Integrated into EmployeeDashboard.tsx
+  - Uses PaymentMetadata and EmployeeMetadata TypeScript types
 - **Routing:** No separate route - embedded in `/dashboard`
-- **Backend API:** Mock data (ready for Phase 4 `getPaymentHistory()` integration)
+- **Backend API:** ✅ `state$` observable, `getEmployeePaymentHistory()`, uses reactive contract state
+- **Data Matching Logic:**
+  - Contract returns payment records (payment_id, timestamp, payment_type, status) via `contractState.paymentHistory`
+  - localStorage stores payment metadata (amount, memo, employeeName, etc.)
+  - Matching: Sort metadata by timestamp, match contract payment at index N with metadata at index N
+  - Unique ID: `employeeId-paymentIndex` (deterministic, no timestamp issues)
 - **Complexity:** 🟡 Medium (1 day)
-- **Notes:** Dashboard-integrated approach provides better UX than separate page
+- **Notes:** Index-based matching solves timestamp synchronization issues between client and contract
 
 #### 3.4 Payment Detail Page (Dashboard integration)
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md`
@@ -451,13 +503,16 @@ All Phase 1 API integrations have been successfully completed:
 - **Complexity:** 🟢 Low (0.5 day)
 
 ### Phase 3 Deliverables
-- ✅ Company dashboard
-- ✅ Employee dashboard
-- ✅ Payment list view (table with filters)
-- ✅ Payment detail page
-- ✅ Notification center
-- ✅ Role switcher (dual role support)
+- ✅ Company dashboard (with live contract state)
+- ✅ Employee dashboard (basic stats)
+- ✅ Account selector (unified company/employer view)
+- ✅ Employee list/management page (full CRUD + CSV export)
+- ✅ Payment history section (index-based matching, embedded in dashboard)
+- ⏳ Payment detail page
+- ⏳ Notification center
+- ⏳ Role switcher (dual role support)
 
+**Current Status:** 5/8 completed (62.5%)
 **Total Effort:** 1.5 weeks (2 developers)
 
 ---
@@ -1042,13 +1097,28 @@ Multiply all estimates by 1.5x for single developer.
 - **96% backend coverage** (ready for UI)
 - **6-8 weeks** timeline (2 developers)
 
+**Current Progress (as of November 7, 2025):**
+- ✅ Phase 1: **Complete** (5/5 screens - 100%)
+- ⏳ Phase 2: **In Progress** (2/8 screens - 25%)
+- ⏳ Phase 3: **In Progress** (5/8 screens - 62.5%)
+- ⏳ Phase 4: **Not Started** (0/7 screens - 0%)
+- ⏳ Phase 5: **Not Started** (0/6 features - 0%)
+
+**Recent Completions:**
+- ✅ AddEmployeeModal with full validation + API integration
+- ✅ PayEmployeeModal with payment type support
+- ✅ Payment history with index-based matching (solves timestamp sync issues)
+- ✅ TypeScript type system (PaymentMetadata, EmployeeMetadata)
+- ✅ Auto-reconnect wallet on page refresh (bank-ui pattern)
+- ✅ WalletConnectionPrompt reusable component
+
 **Critical Path:**
-Landing → Connect Wallet → Role Detection → Onboarding → Dashboard → Payments → Settings → Polish
+Landing → Connect Wallet → Role Detection → Onboarding → Dashboard → **[Current: Payments]** → Settings → Polish
 
 **Backend Readiness:** ✅ All critical APIs implemented, minimal gaps (payment type, withdrawal history addressed)
 
-**Recommendation:** **Start Phase 1 immediately** - no backend blockers remaining.
+**Next Steps:** Complete Phase 2 (recurring payments, batch payroll, withdrawals, proofs) and Phase 3 (payment detail, notifications, role switcher)
 
 ---
 
-*Generated: November 4, 2025 | zkSalaria v1.0 MVP*
+*Generated: November 4, 2025 | Updated: November 7, 2025 | zkSalaria v1.1*
