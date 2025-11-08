@@ -200,7 +200,12 @@ export const PayEmployeeModal: React.FC<PayEmployeeModalProps> = ({
       onSuccess?.();
     } catch (err) {
       console.error('[PayEmployeeModal] Payment failed:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to process payment';
+      let errorMessage = err instanceof Error ? err.message : 'Failed to process payment';
+
+      // Check for insufficient gas token error
+      if (errorMessage.includes('Insufficient balance for token')) {
+        errorMessage = 'Insufficient gas tokens in your wallet. Please add tokens to your wallet to pay for transaction fees, then try again.';
+      }
 
       // Show error toast
       setToastMessage(errorMessage);

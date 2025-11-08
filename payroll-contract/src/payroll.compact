@@ -210,6 +210,31 @@ export circuit withdraw_employee_salary(
   // Decrease total supply (company treasury balance decreases)
   assert(total_supply >= disclose(amount), "Accounting error: withdrawal exceeds supply");
   total_supply = (total_supply - disclose(amount)) as Uint<64>;
+
+  // Create withdrawal payment record for history tracking
+  // Use NEGATIVE amount to indicate withdrawal (money leaving balance)
+  const withdrawal_payment_id = PC_generate_payment_id(company_id, disclose(employee_id), current_timestamp);
+
+  // Encrypt withdrawal amount (same encryption as incoming payments)
+  const encrypted_withdrawal_amount = encrypt_balance(disclose(amount), employee_key);
+  value_decryption_map.insert(encrypted_withdrawal_amount, disclose(amount));
+
+  const withdrawal_record = PC_create_payment_record(
+    withdrawal_payment_id,
+    current_timestamp,
+    encrypted_withdrawal_amount,
+    company_id,
+    PC_PAYMENT_TYPE_WITHDRAWAL(),  // Type 6 = WITHDRAWAL
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  // Append withdrawal to payment history
+  const history = employee_payment_history.lookup(disclose(employee_id));
+  const updated_history = PC_append_to_history(history, withdrawal_record);
+  employee_payment_history.insert(disclose(employee_id), updated_history);
+
+  // Increment payment counter (withdrawals count as payment records)
+  total_payments.increment(1);
 }
 
 // ========================================

@@ -171,7 +171,9 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
         // Get employee's payment history from contract state
         const employeeIdBytes = await utils.walletAddressToEmployeeId(employee.employeeId);
         const history = contractState.paymentHistory.member(employeeIdBytes)
-          ? contractState.paymentHistory.lookup(employeeIdBytes).filter((r: any) => r.timestamp > 0)
+          ? contractState.paymentHistory.lookup(employeeIdBytes).filter((r: any) =>
+              r.timestamp > 0 && r.payment_type !== 6n  // Exclude withdrawals (type 6) from company view
+            )
           : [];
 
         console.log(`[CompanyDashboard] Employee ${employee.name}: ${history.length} payments from contract`);
@@ -209,7 +211,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
           const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 
           // Map blockchain payment_type to display string
-          // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT
+          // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT, 6=WITHDRAWAL
           const getPaymentTypeLabel = (type: bigint): string => {
             switch (Number(type)) {
               case 0: return 'regularsalary';
@@ -218,11 +220,12 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
               case 3: return 'commission';
               case 4: return 'reimbursement';
               case 5: return 'adjustment';
+              case 6: return 'withdrawal';
               default: return 'salary';
             }
           };
 
-          // Use blockchain payment type (now supports all 6 types)
+          // Use blockchain payment type (now supports all 7 types: 0-6)
           // Metadata is only used for backward compatibility with old payments
           const paymentType = metadata?.paymentType
             ? metadata.paymentType.toLowerCase().replace(/\s+/g, '')

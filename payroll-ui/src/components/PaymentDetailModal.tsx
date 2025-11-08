@@ -90,13 +90,16 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
 
   if (!payment) return null;
 
+  const isWithdrawal = payment.type.toLowerCase() === 'withdrawal';
+
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setCurrentTab(newValue);
   };
 
-  const formatAmount = (amount: number | bigint): string => {
+  const formatAmount = (amount: number | bigint, showSign = false): string => {
     const numAmount = typeof amount === 'bigint' ? Number(amount) / 100 : amount;
-    return `$${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const sign = showSign && isWithdrawal ? '-' : '';
+    return `${sign}$${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatDate = (dateString: string): string => {
@@ -169,7 +172,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
             <ReceiptLongIcon sx={{ fontSize: 28, color: theme.colors.primary[500] }} />
             <Box>
               <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
-                Payment Details
+                {isWithdrawal ? 'Withdrawal Details' : 'Payment Details'}
               </Typography>
               <Typography variant="caption" color={theme.colors.text.secondary}>
                 Transaction #{payment.transactionId}
@@ -214,7 +217,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                 <Stack direction="row" alignItems="center" spacing={1}>
                   {getStatusIcon()}
                   <Chip
-                    label={payment.status.toUpperCase()}
+                    label={<Typography>{payment.status.toUpperCase()}</Typography>}
                     size="small"
                     sx={{
                       bgcolor: 'rgba(255, 255, 255, 0.2)',
@@ -229,8 +232,12 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
               </Stack>
 
               <Box>
-                <Typography variant="h3" fontWeight={theme.typography.fontWeight.bold}>
-                  {payment.isEncrypted ? '********' : formatAmount(payment.amount)}
+                <Typography
+                  variant="h3"
+                  fontWeight={theme.typography.fontWeight.bold}
+                  sx={{ color: isWithdrawal ? '#ffcccc' : '#FFFFFF' }}
+                >
+                  {payment.isEncrypted ? '********' : formatAmount(payment.amount, true)}
                 </Typography>
                 <Typography variant="body1" sx={{ mt: 0.5, opacity: 0.9 }}>
                   {getTypeLabel(payment.type)}
@@ -240,10 +247,13 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Stack>
                   <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                    {userRole === 'company' ? 'Employee' : 'Company'}
+                    {isWithdrawal ? 'Destination' : (userRole === 'company' ? 'Employee' : 'From')}
                   </Typography>
                   <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
-                    {userRole === 'company' ? payment.employeeName : (payment.companyName || 'N/A')}
+                    {isWithdrawal
+                      ? 'Your Wallet'
+                      : (userRole === 'company' ? payment.employeeName : (payment.companyName || 'N/A'))
+                    }
                   </Typography>
                 </Stack>
                 <AccountBalanceWalletIcon sx={{ fontSize: 32, opacity: 0.3 }} />
@@ -286,16 +296,20 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                     }}
                   >
                     <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-                      <PersonIcon sx={{ fontSize: 20, color: theme.colors.text.secondary }} />
+                      {isWithdrawal ? (
+                        <AccountBalanceWalletIcon sx={{ fontSize: 20, color: theme.colors.text.secondary }} />
+                      ) : (
+                        <PersonIcon sx={{ fontSize: 20, color: theme.colors.text.secondary }} />
+                      )}
                       <Typography variant="caption" color={theme.colors.text.secondary}>
-                        {userRole === 'company' ? 'Employee' : 'Recipient'}
+                        {isWithdrawal ? 'Destination' : (userRole === 'company' ? 'Employee' : 'From')}
                       </Typography>
                     </Stack>
                     <Typography variant="body1" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
-                      {payment.employeeName}
+                      {isWithdrawal ? 'Your Wallet' : payment.employeeName}
                     </Typography>
                     <Typography variant="caption" color={theme.colors.text.disabled}>
-                      {payment.employeeId.substring(0, 12)}...
+                      {isWithdrawal ? 'Transferred to connected wallet' : `${payment.employeeId.substring(0, 12)}...`}
                     </Typography>
                   </Paper>
                 </Grid>
@@ -313,7 +327,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                     <Stack direction="row" alignItems="center" spacing={1} mb={1}>
                       <CalendarTodayIcon sx={{ fontSize: 20, color: theme.colors.text.secondary }} />
                       <Typography variant="caption" color={theme.colors.text.secondary}>
-                        Payment Date
+                        {isWithdrawal ? 'Withdrawal Date' : 'Payment Date'}
                       </Typography>
                     </Stack>
                     <Typography variant="body1" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
@@ -338,7 +352,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                     <Stack direction="row" alignItems="center" spacing={1} mb={1}>
                       <VerifiedUserIcon sx={{ fontSize: 20, color: theme.colors.success[500] }} />
                       <Typography variant="caption" color={theme.colors.text.secondary}>
-                        Payment Status
+                        {isWithdrawal ? 'Withdrawal Status' : 'Payment Status'}
                       </Typography>
                     </Stack>
                     <Chip
@@ -349,7 +363,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                     />
                     {payment.status === 'completed' && (
                       <Typography variant="caption" color={theme.colors.text.secondary} sx={{ ml: 2 }}>
-                        Payment successfully processed
+                        {isWithdrawal ? 'Withdrawal successfully processed' : 'Payment successfully processed'}
                       </Typography>
                     )}
                   </Paper>
@@ -371,7 +385,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                   </TableRow>
                   <TableRow>
                     <TableCell sx={{ color: theme.colors.text.secondary, border: 'none' }}>
-                      Payment Type
+                      {isWithdrawal ? 'Transaction Type' : 'Payment Type'}
                     </TableCell>
                     <TableCell sx={{ border: 'none', color: theme.colors.text.primary }}>
                       {getTypeLabel(payment.type)}
@@ -388,8 +402,11 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                           <Chip label="Encrypted" size="small" color="warning" />
                         </Stack>
                       ) : (
-                        <Typography fontWeight={theme.typography.fontWeight.bold}>
-                          {formatAmount(payment.amount)}
+                        <Typography
+                          fontWeight={theme.typography.fontWeight.bold}
+                          sx={{ color: isWithdrawal ? theme.colors.error[500] : theme.colors.text.primary }}
+                        >
+                          {formatAmount(payment.amount, true)}
                         </Typography>
                       )}
                     </TableCell>
@@ -419,7 +436,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
               <Stack spacing={2}>
                 <Box>
                   <Typography variant="body2" color={theme.colors.text.secondary} mb={2}>
-                    Payment Timeline
+                    {isWithdrawal ? 'Withdrawal Timeline' : 'Payment Timeline'}
                   </Typography>
                   <Stack spacing={2}>
                     <Box
@@ -433,14 +450,20 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                     >
                       <Stack direction="row" alignItems="center" justifyContent="space-between">
                         <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
-                          Payment {payment.status === 'completed' ? 'Completed' : 'Initiated'}
+                          {isWithdrawal
+                            ? `Withdrawal ${payment.status === 'completed' ? 'Completed' : 'Initiated'}`
+                            : `Payment ${payment.status === 'completed' ? 'Completed' : 'Initiated'}`
+                          }
                         </Typography>
                         <Typography variant="caption" color={theme.colors.text.disabled}>
                           {formatDate(payment.date)}
                         </Typography>
                       </Stack>
                       <Typography variant="caption" color={theme.colors.text.secondary} sx={{ mt: 0.5 }}>
-                        Transaction processed on Midnight Network
+                        {isWithdrawal
+                          ? 'Funds transferred to your wallet on Midnight Network'
+                          : 'Transaction processed on Midnight Network'
+                        }
                       </Typography>
                     </Box>
                   </Stack>

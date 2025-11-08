@@ -12,9 +12,6 @@ import {
   Alert,
   IconButton,
   InputAdornment,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
   Divider,
   CircularProgress,
   Paper,
@@ -50,8 +47,7 @@ export const WithdrawSalaryModal: React.FC<WithdrawSalaryModalProps> = ({
   const theme = useThemeValues();
 
   // Form state
-  const [withdrawType, setWithdrawType] = useState<'all' | 'custom'>('all');
-  const [customAmount, setCustomAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -59,23 +55,25 @@ export const WithdrawSalaryModal: React.FC<WithdrawSalaryModalProps> = ({
   // Gas estimate (fixed for now)
   const GAS_FEE = 0.01; // $0.01
 
-  // Reset form when modal closes
+  // Reset form when modal opens (set to full balance)
   useEffect(() => {
-    if (!open) {
-      setWithdrawType('all');
-      setCustomAmount('');
+    if (open) {
+      const balanceInDollars = (Number(currentBalance) / 100).toFixed(2);
+      setWithdrawAmount(balanceInDollars);
       setError(null);
       setShowSuccess(false);
     }
-  }, [open]);
+  }, [open, currentBalance]);
+
+  // Set to max balance
+  const handleSetMax = () => {
+    const balanceInDollars = (Number(currentBalance) / 100).toFixed(2);
+    setWithdrawAmount(balanceInDollars);
+  };
 
   // Calculate withdrawal amount
   const getWithdrawalAmount = (): number => {
-    const balanceInDollars = Number(currentBalance) / 100;
-    if (withdrawType === 'all') {
-      return balanceInDollars;
-    }
-    return parseFloat(customAmount) || 0;
+    return parseFloat(withdrawAmount) || 0;
   };
 
   // Calculate total cost
@@ -130,7 +128,13 @@ export const WithdrawSalaryModal: React.FC<WithdrawSalaryModalProps> = ({
       }, 2000);
     } catch (err) {
       console.error('[WithdrawSalaryModal] Withdrawal failed:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to withdraw salary';
+      let errorMessage = err instanceof Error ? err.message : 'Failed to withdraw salary';
+
+      // Check for insufficient gas token error
+      if (errorMessage.includes('Insufficient balance for token')) {
+        errorMessage = 'Insufficient gas tokens in your wallet. Please add tokens to your wallet to pay for transaction fees, then try again.';
+      }
+
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -233,61 +237,48 @@ export const WithdrawSalaryModal: React.FC<WithdrawSalaryModalProps> = ({
             </Typography>
           </Paper>
 
-          {/* Withdraw Type Selection */}
+          {/* Withdrawal Amount Input */}
           <Box>
-            <Typography variant="body2" color={theme.colors.text.primary} sx={{ mb: 1.5 }}>
+            <Typography variant="body2" color={theme.colors.text.primary} sx={{ mb: 1 }}>
               Withdrawal Amount
             </Typography>
-            <RadioGroup
-              value={withdrawType}
-              onChange={(e) => setWithdrawType(e.target.value as 'all' | 'custom')}
-            >
-              <FormControlLabel
-                value="all"
-                control={<Radio />}
-                label={
-                  <Stack>
-                    <Typography variant="body2" color={theme.colors.text.primary}>
-                      Withdraw Full Balance
-                    </Typography>
-                    <Typography variant="caption" color={theme.colors.text.secondary}>
-                      {formatBalance(currentBalance)}
-                    </Typography>
-                  </Stack>
-                }
-              />
-              <FormControlLabel
-                value="custom"
-                control={<Radio />}
-                label={
-                  <Typography variant="body2" color={theme.colors.text.primary}>
-                    Custom Amount
-                  </Typography>
-                }
-              />
-            </RadioGroup>
-          </Box>
-
-          {/* Custom Amount Input */}
-          {withdrawType === 'custom' && (
             <TextField
               fullWidth
-              label="Amount"
               type="number"
-              value={customAmount}
-              onChange={(e) => setCustomAmount(e.target.value)}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(e.target.value)}
               placeholder="0.00"
               InputProps={{
                 startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Button
+                      size="small"
+                      onClick={handleSetMax}
+                      sx={{
+                        minWidth: 'auto',
+                        px: 1.5,
+                        py: 0.5,
+                        fontSize: '0.75rem',
+                        textTransform: 'uppercase',
+                        fontWeight: theme.typography.fontWeight.semibold,
+                      }}
+                    >
+                      Max
+                    </Button>
+                  </InputAdornment>
+                ),
               }}
               inputProps={{
                 min: 0,
                 max: Number(currentBalance) / 100,
                 step: 0.01,
               }}
-              helperText={`Maximum: ${formatBalance(currentBalance)}`}
+              helperText={`Available: ${formatBalance(currentBalance)}`}
+              disabled={isSubmitting}
+              autoFocus
             />
-          )}
+          </Box>
 
           {/* Destination Wallet */}
           <Box>

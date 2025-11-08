@@ -85,12 +85,14 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
   }, [payments, maxRows]);
 
   // Format amount
-  const formatAmount = (amount: bigint, paymentId: string, isEncrypted: boolean): string => {
+  const formatAmount = (amount: bigint, paymentId: string, isEncrypted: boolean, paymentType: string): string => {
     if (isEncrypted && !decryptedAmounts.has(paymentId)) {
       return '••••••';
     }
     const actualAmount = decryptedAmounts.get(paymentId) || amount;
-    return `$${(Number(actualAmount) / 100).toLocaleString('en-US', {
+    const isWithdrawal = paymentType.toLowerCase() === 'withdrawal';
+    const sign = isWithdrawal ? '-' : '';
+    return `${sign}$${(Number(actualAmount) / 100).toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -183,13 +185,17 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
       adjustment: 'Adjustment',
     };
     const label = typeLabels[type.toLowerCase()] || type;
+    const isWithdrawal = type.toLowerCase() === 'withdrawal';
+
     return (
       <Chip
         label={<Typography>{label}</Typography>}
         size="small"
         sx={{
-          bgcolor: mode === 'dark' ? theme.colors.primary[900] : theme.colors.primary[100],
-          color: theme.colors.primary[500],
+          bgcolor: isWithdrawal
+            ? (mode === 'dark' ? theme.colors.error[900] : theme.colors.error[100])
+            : (mode === 'dark' ? theme.colors.primary[900] : theme.colors.primary[100]),
+          color: isWithdrawal ? theme.colors.error[500] : theme.colors.primary[500],
         }}
       />
     );
@@ -294,7 +300,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
             >
               <TableCell sx={{ fontWeight: theme.typography.fontWeight.bold }}>Status</TableCell>
               <TableCell sx={{ fontWeight: theme.typography.fontWeight.bold }}>
-                {userRole === 'company' ? 'Employee' : 'Company'}
+                {userRole === 'company' ? 'Employee' : 'Description'}
               </TableCell>
               <TableCell sx={{ fontWeight: theme.typography.fontWeight.bold }}>Amount</TableCell>
               <TableCell sx={{ fontWeight: theme.typography.fontWeight.bold }}>Date</TableCell>
@@ -318,21 +324,39 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
               >
                 <TableCell>{renderStatusBadge(payment.status)}</TableCell>
                 <TableCell>
-                  <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
-                    {userRole === 'company' ? payment.employeeName : payment.companyName}
-                  </Typography>
-                  { userRole === 'company' && <Typography
-                    variant="caption"
-                    color={theme.colors.text.disabled}
-                    sx={{ fontFamily: 'monospace' }}
-                  >
-                    {payment.employeeId.slice(0, 8)}...
-                  </Typography>}
+                  {userRole === 'company' ? (
+                    <>
+                      <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
+                        {payment.employeeName}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color={theme.colors.text.disabled}
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {payment.employeeId.slice(0, 8)}...
+                      </Typography>
+                    </>
+                  ) : (
+                    <Typography variant="body2" color={theme.colors.text.secondary}>
+                      {payment.type.toLowerCase() === 'withdrawal'
+                        ? 'Withdrawal to wallet'
+                        : `Payment from ${payment.companyName}`}
+                    </Typography>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
-                      {formatAmount(payment.amount, payment.id, payment.isEncrypted)}
+                    <Typography
+                      variant="body2"
+                      fontWeight={theme.typography.fontWeight.semibold}
+                      sx={{
+                        color: payment.type.toLowerCase() === 'withdrawal'
+                          ? theme.colors.error[500]
+                          : theme.colors.text.primary
+                      }}
+                    >
+                      {formatAmount(payment.amount, payment.id, payment.isEncrypted, payment.type)}
                     </Typography>
                     {payment.isEncrypted && (
                       <Tooltip title={decryptedAmounts.has(payment.id) ? 'Encrypt' : 'Decrypt'}>

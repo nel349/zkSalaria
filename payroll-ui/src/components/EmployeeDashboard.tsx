@@ -195,7 +195,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 
         // Map blockchain payment_type to display string
-        // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT
+        // 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT, 6=WITHDRAWAL
         const getPaymentTypeLabel = (type: bigint): string => {
           switch (Number(type)) {
             case 0: return 'regularsalary';
@@ -204,6 +204,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             case 3: return 'commission';
             case 4: return 'reimbursement';
             case 5: return 'adjustment';
+            case 6: return 'withdrawal';
             default: return 'salary';
           }
         };

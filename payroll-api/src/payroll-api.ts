@@ -419,6 +419,10 @@ export class PayrollAPI implements DeployedPayrollAPI {
       cancelledTransaction: undefined,
     });
 
+    // Update contract timestamp to current time before withdrawal
+    const currentTimestamp = Math.floor(Date.now() / 1000); // Convert to Unix timestamp (seconds)
+    await this.circuits.update_timestamp(BigInt(currentTimestamp));
+
     await this.circuits.withdraw_employee_salary(employeeIdBytes, withdrawalAmount);
 
     // Get updated balance after withdrawal
