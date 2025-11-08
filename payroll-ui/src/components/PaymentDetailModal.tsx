@@ -32,6 +32,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import PersonIcon from '@mui/icons-material/Person';
 import BusinessIcon from '@mui/icons-material/Business';
 import { useTheme, useThemeValues } from '../theme';
+import { DownloadReceiptModal } from './DownloadReceiptModal';
 
 interface PaymentDetailModalProps {
   open: boolean;
@@ -87,6 +88,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
   const { mode } = useTheme();
   const theme = useThemeValues();
   const [currentTab, setCurrentTab] = useState(0);
+  const [downloadReceiptOpen, setDownloadReceiptOpen] = useState(false);
 
   if (!payment) return null;
 
@@ -480,15 +482,20 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
         <Button
           variant="outlined"
           startIcon={<DownloadIcon />}
-          onClick={() => {
-            // TODO: Implement download receipt functionality (Phase 2.8)
-            console.log('[PaymentDetail] Download receipt for payment:', payment.id);
-          }}
+          onClick={() => setDownloadReceiptOpen(true)}
         >
           Download Receipt
         </Button>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+
+      {/* Download Receipt Modal */}
+      <DownloadReceiptModal
+        open={downloadReceiptOpen}
+        onClose={() => setDownloadReceiptOpen(false)}
+        payment={payment}
+        userRole={userRole}
+      />
     </Dialog>
   );
 };

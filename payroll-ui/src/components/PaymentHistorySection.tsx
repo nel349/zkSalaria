@@ -31,6 +31,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import { useTheme, useThemeValues } from '../theme';
 import { PaymentDetailModal } from './PaymentDetailModal';
+import { DownloadReceiptModal } from './DownloadReceiptModal';
 
 type PaymentStatus = 'completed' | 'pending' | 'failed';
 type PaymentType = 'salary' | 'bonus' | 'advance' | 'withdrawal';
@@ -76,6 +77,9 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
 
   // Payment detail modal (Phase 3.4)
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+
+  // Download receipt modal (Phase 2.8)
+  const [downloadReceiptOpen, setDownloadReceiptOpen] = useState(false);
 
   // Get recent payments (limited by maxRows)
   const recentPayments = useMemo(() => {
@@ -224,8 +228,7 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
 
   const handleDownloadReceipt = () => {
     handleCloseMenu();
-    // TODO: Phase 4 - Download receipt
-    console.log('[PaymentHistory] Download receipt:', selectedPayment?.id);
+    setDownloadReceiptOpen(true);
   };
 
   if (recentPayments.length === 0) {
@@ -410,6 +413,14 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
       <PaymentDetailModal
         open={detailModalOpen}
         onClose={() => setDetailModalOpen(false)}
+        payment={selectedPayment}
+        userRole={userRole}
+      />
+
+      {/* Download Receipt Modal (Phase 2.8) */}
+      <DownloadReceiptModal
+        open={downloadReceiptOpen}
+        onClose={() => setDownloadReceiptOpen(false)}
         payment={selectedPayment}
         userRole={userRole}
       />

@@ -320,14 +320,25 @@ All Phase 1 API integrations have been successfully completed:
   - Leverages new Compact List types (`recurring_payment_ids: List<Bytes<32>>`) with TypeScript iteration
   - On-chain data includes: employee_id, frequency, start_date, next_payment_date, status, encrypted_amount
 
-#### 2.6 Withdraw Salary Modal (Employee)
+#### 2.6 Withdraw Salary Modal (Employee) ✅ **COMPLETED**
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 1)
-- **Components:**
-  - Amount input (withdraw all vs custom)
-  - Destination wallet input
-  - Summary with gas estimate
-  - Success modal
-- **Backend API:** `withdrawEmployeeSalary()`
+- **Status:** ✅ Shipped November 8, 2025
+- **Implementation:**
+  - Modal-based withdrawal interface (integrated into employee dashboard)
+  - Amount selection: radio buttons for full balance vs custom amount
+  - Custom amount input with validation (max = available balance)
+  - Destination display (user's connected wallet)
+  - Summary section showing withdrawal amount, gas fee, total
+  - Success/error toast notifications
+  - Timestamp update before withdrawal to ensure accurate on-chain time
+  - Integration with PaymentHistorySection to show withdrawals
+  - Withdrawal transactions display with negative amounts and red coloring
+- **Components Built:**
+  - WithdrawSalaryModal.tsx (full form + API integration)
+  - Integrated into EmployeeDashboard.tsx Quick Actions
+  - Updated PaymentHistorySection.tsx to show withdrawals
+  - Updated PaymentDetailModal.tsx with withdrawal-specific labels
+- **Backend API:** ✅ `withdrawEmployeeSalary()`, `update_timestamp()`
 - **Complexity:** 🟡 Medium (1 day)
 
 #### 2.7 Generate Proof Modal (Employee)
@@ -342,15 +353,32 @@ All Phase 1 API integrations have been successfully completed:
 - **Backend API:** `submitIncomeProof()`
 - **Complexity:** 🔴 High (2 days)
 
-#### 2.8 Download Receipt Modal
+#### 2.8 Download Receipt Modal ✅ **COMPLETED**
 - **File Reference:** `PAYMENT_DETAIL_PAGE_WIREFRAME.md` (Modal 3)
-- **Components:**
-  - Format selection (PDF, CSV, JSON)
-  - Detail checkboxes
-  - Privacy options (encrypted vs plaintext)
-  - PDF generator
-- **Backend API:** None (frontend generates PDF)
+- **Status:** ✅ Shipped November 8, 2025
+- **Implementation:**
+  - Modal-based receipt download interface
+  - **Three export formats:** PDF (professional layout), CSV (spreadsheet), JSON (structured data)
+  - **Format selection:** Radio buttons with format descriptions and icons
+  - **Customizable details:** 7 checkboxes to include/exclude fields (Transaction ID, Date & Time, Amount, Payment Type, Status, Employee Info, Company Info)
+  - **Privacy options:** Radio buttons for showing plaintext amounts vs encrypted (••••••••)
+  - **PDF generation:** jsPDF library with professional formatting, branding, and footer
+  - **CSV export:** Comma-separated values with proper escaping
+  - **JSON export:** Structured data with nested objects for integration
+  - **Withdrawal support:** Contextual labels and formatting for withdrawal transactions
+  - **Dark mode styling:** Explicit SVG icon styling for radio buttons and checkboxes
+  - **Download UX:** Loading state with spinner during generation, auto-close after download
+  - **Integration:** Accessible from PaymentDetailModal and PaymentHistorySection actions menu
+- **Components Built:**
+  - DownloadReceiptModal.tsx (530 lines, full implementation)
+  - Integrated into PaymentDetailModal.tsx
+  - Integrated into PaymentHistorySection.tsx (actions menu)
+- **Backend API:** None (client-side PDF/CSV/JSON generation)
+- **Dependencies:** jsPDF library for PDF generation
 - **Complexity:** 🟡 Medium (1 day)
+- **Notes:**
+  - Radio button and checkbox visibility in dark mode required explicit `.MuiSvgIcon-root` styling
+  - All 5 radio buttons and 7 checkboxes have proper unchecked (70% white) and checked (primary color) states
 
 ### Phase 2 Deliverables
 - ✅ Add employee flow (modal-based)
@@ -358,11 +386,11 @@ All Phase 1 API integrations have been successfully completed:
 - ✅ Recurring payment setup (modal-based)
 - ⏳ Batch payroll
 - ✅ Recurring payment management (with on-chain recovery)
-- ⏳ Withdraw salary (employee)
+- ✅ Withdraw salary (employee)
 - ⏳ Generate ZK proof (employee)
-- ⏳ Download receipt
+- ✅ Download receipt
 
-**Current Status:** 4/8 completed (50%)
+**Current Status:** 6/8 completed (75%)
 **Total Effort:** 2 weeks (2 developers)
 
 ### Phase 2 Type System (Completed)
@@ -1154,12 +1182,14 @@ Multiply all estimates by 1.5x for single developer.
 
 **Current Progress (as of November 8, 2025):**
 - ✅ Phase 1: **Complete** (5/5 screens - 100%)
-- ⏳ Phase 2: **In Progress** (4/8 screens - 50%)
+- ⏳ Phase 2: **In Progress** (6/8 screens - 75%)
 - ✅ Phase 3: **Complete** (7/8 screens - 87.5%, 1 postponed)
 - ⏳ Phase 4: **Not Started** (0/7 screens - 0%)
 - ⏳ Phase 5: **Not Started** (0/6 features - 0%)
 
 **Recent Completions (November 8, 2025):**
+- ✅ **Withdraw Salary Modal (Phase 2.6)** - Employee withdrawal with full/custom amount selection, timestamp updates, and withdrawal transaction display
+- ✅ **Download Receipt Modal (Phase 2.8)** - Multi-format receipt export (PDF, CSV, JSON) with customizable details and privacy options
 - ✅ **Setup Recurring Payment Modal** - Full recurring payment creation with frequency selection
 - ✅ **Payment Detail Modal** - 3-tab interface with Overview, Transaction Details, and History
 - ✅ **Role Switcher** - Toggle between Company and Employee views for dual-role users
