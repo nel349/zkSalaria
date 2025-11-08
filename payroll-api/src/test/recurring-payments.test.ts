@@ -101,7 +101,9 @@ describe('Advanced Payments API - Phase 1.6', () => {
     logger.info('METHOD 7: Querying recurring payment by employee...');
     const paymentByEmployee = await api.getRecurringPaymentByEmployee(employeeId);
     expect(paymentByEmployee).not.toBeNull();
-    expect(paymentByEmployee!.employee_id).toEqual(utils.stringToBytes32(employeeId));
+    // NOTE: employee_id is now SHA-256 hashed, so we need to hash the employeeId before comparing
+    const hashedEmployeeId = await api.hashEmployeeId(employeeId);
+    expect(paymentByEmployee!.employee_id).toEqual(hashedEmployeeId);
     logger.info('✅ Method 7 PASSED: getRecurringPaymentByEmployee()');
 
     // METHOD 4: Edit recurring payment amount

@@ -220,12 +220,6 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
     setDetailModalOpen(true);
   };
 
-  const handleGenerateProof = () => {
-    handleCloseMenu();
-    // TODO: Phase 4 - Open proof generation
-    console.log('[PaymentHistory] Generate proof:', selectedPayment?.id);
-  };
-
   const handleDownloadReceipt = () => {
     handleCloseMenu();
     setDownloadReceiptOpen(true);
@@ -398,10 +392,6 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
         <MenuItem onClick={handleViewDetails}>
           <VisibilityIcon sx={{ mr: 1, fontSize: 18 }} />
           View Details
-        </MenuItem>
-        <MenuItem onClick={handleGenerateProof}>
-          <VerifiedIcon sx={{ mr: 1, fontSize: 18 }} />
-          Generate Proof
         </MenuItem>
         <MenuItem onClick={handleDownloadReceipt}>
           <DownloadIcon sx={{ mr: 1, fontSize: 18 }} />

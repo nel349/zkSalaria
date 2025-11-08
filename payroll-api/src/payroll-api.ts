@@ -46,6 +46,7 @@ export interface DeployedPayrollAPI {
   getCompanyInfo(companyId: string): Promise<CompanyInfo>;
 
   // Employee operations
+  hashEmployeeId(walletAddress: string): Promise<Uint8Array>;
   addEmployee(companyId: string, employeeWalletAddress: string): Promise<void>;
   withdrawEmployeeSalary(employeeWalletAddress: string, amount: string): Promise<void>;
   getEmployeeInfo(employeeWalletAddress: string): Promise<EmployeeInfo>;
@@ -354,6 +355,16 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // ========================================
   // EMPLOYEE OPERATIONS
   // ========================================
+
+  /**
+   * Hash employee wallet address to get employee ID (SHA-256)
+   * This is used internally by addEmployee and other methods to convert wallet addresses to employee IDs
+   * @param walletAddress - Employee wallet address
+   * @returns Hashed employee ID as Uint8Array (32 bytes)
+   */
+  async hashEmployeeId(walletAddress: string): Promise<Uint8Array> {
+    return await utils.walletAddressToEmployeeId(walletAddress);
+  }
 
   async addEmployee(companyId: string, employeeWalletAddress: string): Promise<void> {
     this.logger?.info({ addEmployee: { companyId, employeeWalletAddress } });
@@ -892,7 +903,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
   ): Promise<void> {
     this.logger?.info({ grantIncomeDisclosure: { employeeId, lenderId, minThreshold, expiresIn } });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    // Hash employee wallet address to get employee ID (must match add_employee hashing)
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
     const lenderIdBytes = utils.stringToBytes32(lenderId);
 
     await this.circuits.grant_income_disclosure(
@@ -910,7 +922,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
   ): Promise<void> {
     this.logger?.info({ grantEmploymentDisclosure: { employeeId, verifierId, expiresIn } });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    // Hash employee wallet address to get employee ID (must match add_employee hashing)
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
     const verifierIdBytes = utils.stringToBytes32(verifierId);
 
     await this.circuits.grant_employment_disclosure(
@@ -940,7 +953,12 @@ export class PayrollAPI implements DeployedPayrollAPI {
   ): Promise<void> {
     this.logger?.info({ revokeDisclosure: { grantorId, granteeId, permissionType } });
 
-    const grantorIdBytes = utils.stringToBytes32(grantorId);
+    // Hash grantorId if it's an employee (INCOME_RANGE=0 or EMPLOYMENT=1)
+    // Don't hash if it's a company (AUDIT=3)
+    const isEmployeeDisclosure = permissionType === 0n || permissionType === 1n;
+    const grantorIdBytes = isEmployeeDisclosure
+      ? await utils.walletAddressToEmployeeId(grantorId)
+      : utils.stringToBytes32(grantorId);
     const granteeIdBytes = utils.stringToBytes32(granteeId);
 
     await this.circuits.revoke_disclosure(
@@ -957,7 +975,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async updateEmploymentStatus(employeeId: string, newStatus: bigint): Promise<void> {
     this.logger?.info({ updateEmploymentStatus: { employeeId, newStatus } });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    // Hash employee wallet address to get employee ID (must match add_employee hashing)
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
 
     await this.circuits.update_employment_status(
       employeeIdBytes,
@@ -968,7 +987,8 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async verifyEmployment(employeeId: string, verifierId: string): Promise<boolean> {
     this.logger?.info({ verifyEmployment: { employeeId, verifierId } });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    // Hash employee wallet address to get employee ID (must match add_employee hashing)
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
     const verifierIdBytes = utils.stringToBytes32(verifierId);
 
     const result = await this.circuits.verify_employment(

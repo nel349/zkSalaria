@@ -26,6 +26,7 @@ import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { PaymentHistorySection } from './PaymentHistorySection';
 import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import { WithdrawSalaryModal } from './WithdrawSalaryModal';
+import { GenerateProofModal } from './GenerateProofModal';
 import pino from 'pino';
 
 const logger = pino({
@@ -83,6 +84,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [generateProofOpen, setGenerateProofOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -528,9 +530,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                   variant="contained"
                   fullWidth
                   startIcon={<VerifiedIcon />}
-                  onClick={() => {
-                    /* TODO: Navigate to proof generation */
-                  }}
+                  onClick={() => setGenerateProofOpen(true)}
                   sx={{
                     py: 1.5,
                     bgcolor: theme.colors.secondary[500],
@@ -603,6 +603,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             });
           }
         }}
+      />
+
+      {/* Generate Proof Modal (Phase 2.7 - Employee ZKML Income Verification) */}
+      <GenerateProofModal
+        open={generateProofOpen}
+        onClose={() => setGenerateProofOpen(false)}
+        employeeId={walletAddress || ''}
+        employeeName={walletAddress ? `${walletAddress.substring(0, 12)}...` : 'Employee'}
+        companyName={stats.companyName}
       />
     </Box>
   );
