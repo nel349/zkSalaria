@@ -369,6 +369,10 @@ export class PayrollAPI implements DeployedPayrollAPI {
       bytesLength: employeeIdBytes.length,
     });
 
+    // Update contract timestamp to current time before adding employee
+    const currentTimestamp = Math.floor(Date.now() / 1000); // Convert to Unix timestamp (seconds)
+    await this.circuits.update_timestamp(BigInt(currentTimestamp));
+
     this.transactions$.next({
       transaction: {
         type: 'add_employee',
@@ -524,6 +528,10 @@ export class PayrollAPI implements DeployedPayrollAPI {
     // Hash wallet address to get employee ID
     const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
 
+    // Update contract timestamp to current time before making payment
+    const currentTimestamp = Math.floor(Date.now() / 1000); // Convert to Unix timestamp (seconds)
+    await this.circuits.update_timestamp(BigInt(currentTimestamp));
+
     this.transactions$.next({
       transaction: {
         type: 'pay_salary',
@@ -537,7 +545,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     // Note: pay_employee circuit signature: (employee_id, salary_amount, payment_type)
     // CompanyId comes from contract ledger state (one contract per company)
-    // payment_type: 0=SALARY, 1=ADVANCE, 2=BONUS
+    // payment_type: 0=SALARY, 1=ADVANCE, 2=BONUS, 3=COMMISSION, 4=REIMBURSEMENT, 5=ADJUSTMENT
     await this.circuits.pay_employee(employeeIdBytes, utils.parseAmount(amount), BigInt(paymentType));
   }
 
@@ -599,6 +607,37 @@ export class PayrollAPI implements DeployedPayrollAPI {
       });
 
     return decryptedHistory;
+  }
+
+  /**
+   * Get employee's decrypted balance
+   * Uses the value_decryption_map to decrypt the encrypted balance
+   */
+  async getEmployeeBalance(employeeWalletAddress: string): Promise<bigint> {
+    // Hash wallet address to get employee ID
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
+
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      return 0n;
+    }
+
+    const ledgerState = ledger(state.data);
+
+    // Check if employee has a balance entry
+    if (!ledgerState.encrypted_employee_balances.member(employeeIdBytes)) {
+      return 0n;
+    }
+
+    // Get encrypted balance
+    const encryptedBalance = ledgerState.encrypted_employee_balances.lookup(employeeIdBytes);
+
+    // Decrypt using value_decryption_map
+    const decryptedBalance = ledgerState.value_decryption_map.member(encryptedBalance)
+      ? ledgerState.value_decryption_map.lookup(encryptedBalance)
+      : 0n;
+
+    return decryptedBalance;
   }
 
   // ========================================

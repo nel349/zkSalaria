@@ -25,6 +25,7 @@ import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { PaymentHistorySection } from './PaymentHistorySection';
 import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
+import { WithdrawSalaryModal } from './WithdrawSalaryModal';
 import pino from 'pino';
 
 const logger = pino({
@@ -81,6 +82,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -97,22 +99,27 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         setApi(connectedApi);
 
         // Subscribe to contract state
-        const subscription = connectedApi.state$.subscribe((state) => {
+        const subscription = connectedApi.state$.subscribe(async (state) => {
           console.log('[EmployeeDashboard] State updated:', state);
 
-          // TODO: Implement encrypted balance decryption (Phase 4)
-          // TODO: Implement payment history queries (Phase 4)
-          // For now, use placeholder values
-          const employeeBalance = 0n;
+          // Get decrypted balance from blockchain
+          let employeeBalance = 0n;
+          if (walletAddress) {
+            try {
+              employeeBalance = await connectedApi.getEmployeeBalance(walletAddress);
+              console.log('[EmployeeDashboard] Employee balance:', employeeBalance);
+            } catch (err) {
+              console.error('[EmployeeDashboard] Failed to get balance:', err);
+            }
+          }
 
-          setStats({
+          setStats((prev) => ({
+            ...prev,
             currentBalance: employeeBalance,
-            lastPaymentAmount: 0n,
-            lastPaymentDate: null,
             totalPaymentsThisYear: state.totalPayments,
             employmentStatus: 'Active',
             companyName: companyName,
-          });
+          }));
           setLoading(false);
         });
 
@@ -174,6 +181,16 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
 
         // Use blockchain timestamp (convert from seconds to milliseconds)
         const timestamp = Number(record.timestamp) * 1000;
+        const dateStr = new Date(timestamp).toISOString();
+
+        console.log(`[EmployeeDashboard] Payment ${index} timestamp:`, {
+          rawTimestamp: record.timestamp,
+          timestampType: typeof record.timestamp,
+          timestampNumber: Number(record.timestamp),
+          timestampMs: timestamp,
+          dateISO: dateStr,
+          dateObject: new Date(timestamp),
+        });
 
         const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 
@@ -210,7 +227,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
           amount: amount, // Already in base units from blockchain
           encryptedAmount: record.encrypted_amount,
           isEncrypted: false, // Showing decrypted amounts from blockchain
-          date: new Date(timestamp).toISOString(),
+          date: dateStr,
           type: paymentType,
           transactionId: Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 12),
           companyName: companyName,
@@ -219,6 +236,24 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
 
       setPayments(uiPayments);
       console.log(`[EmployeeDashboard] Loaded ${uiPayments.length} payments from blockchain`);
+
+      // Update stats with last payment info (most recent payment)
+      if (uiPayments.length > 0) {
+        // Sort by date descending to get most recent first
+        const sortedPayments = [...uiPayments].sort((a, b) =>
+          new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        const lastPayment = sortedPayments[0];
+        setStats((prev) => ({
+          ...prev,
+          lastPaymentAmount: lastPayment.amount,
+          lastPaymentDate: lastPayment.date,
+        }));
+        console.log(`[EmployeeDashboard] Last payment:`, {
+          amount: lastPayment.amount,
+          date: lastPayment.date,
+        });
+      }
     } catch (err) {
       console.error('[EmployeeDashboard] Failed to load payment history:', err);
     }
@@ -475,9 +510,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                   variant="contained"
                   fullWidth
                   startIcon={<MonetizationOnIcon />}
-                  onClick={() => {
-                    /* TODO: Open withdraw modal */
-                  }}
+                  onClick={() => setWithdrawModalOpen(true)}
+                  disabled={stats.currentBalance === 0n}
                   sx={{
                     py: 1.5,
                     bgcolor: theme.colors.warning[500],
@@ -552,6 +586,23 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
           </Box>
         </Stack>
       </Container>
+
+      {/* Withdraw Salary Modal */}
+      <WithdrawSalaryModal
+        open={withdrawModalOpen}
+        onClose={() => setWithdrawModalOpen(false)}
+        api={api}
+        walletAddress={walletAddress}
+        currentBalance={stats.currentBalance}
+        onSuccess={() => {
+          // Reload balance after successful withdrawal
+          if (api && walletAddress) {
+            api.getEmployeeBalance(walletAddress).then((balance) => {
+              setStats((prev) => ({ ...prev, currentBalance: balance }));
+            });
+          }
+        }}
+      />
     </Box>
   );
 };

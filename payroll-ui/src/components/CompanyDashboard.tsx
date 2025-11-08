@@ -195,6 +195,16 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
 
           // Use blockchain timestamp (convert from seconds to milliseconds)
           const timestamp = Number(record.timestamp) * 1000;
+          const dateStr = new Date(timestamp).toISOString();
+
+          console.log(`[CompanyDashboard] Payment ${i} timestamp:`, {
+            employeeId: employee.employeeId,
+            rawTimestamp: record.timestamp,
+            timestampType: typeof record.timestamp,
+            timestampNumber: Number(record.timestamp),
+            timestampMs: timestamp,
+            dateISO: dateStr,
+          });
 
           const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 
@@ -227,7 +237,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
             employeeId: employee.employeeId,
             amount: BigInt(Math.round(amount * 100)),
             isEncrypted: false,
-            date: new Date(timestamp).toISOString(), // timestamp is already in milliseconds
+            date: dateStr,
             type: paymentType,
             transactionId: paymentId,
             companyName: currentCompany.name, // Add company name for employee view

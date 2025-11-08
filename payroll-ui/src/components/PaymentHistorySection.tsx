@@ -319,15 +319,15 @@ export const PaymentHistorySection: React.FC<PaymentHistorySectionProps> = ({
                 <TableCell>{renderStatusBadge(payment.status)}</TableCell>
                 <TableCell>
                   <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold}>
-                    {payment.employeeName}
+                    {userRole === 'company' ? payment.employeeName : payment.companyName}
                   </Typography>
-                  <Typography
+                  { userRole === 'company' && <Typography
                     variant="caption"
                     color={theme.colors.text.disabled}
                     sx={{ fontFamily: 'monospace' }}
                   >
                     {payment.employeeId.slice(0, 8)}...
-                  </Typography>
+                  </Typography>}
                 </TableCell>
                 <TableCell>
                   <Stack direction="row" alignItems="center" spacing={0.5}>
