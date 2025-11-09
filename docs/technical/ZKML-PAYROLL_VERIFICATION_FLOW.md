@@ -97,10 +97,12 @@
      └─ "Does the submitted commitment match the employee's actual payment history?"
      └─ Prevents employees from submitting proofs based on fake data
 
-  3. ✅ Replay Prevention
-     └─ Check if income_proofs.member(employee_id)
-     └─ "Has this employee already submitted a proof?"
-     └─ income_proofs.insert(employee_id, proof_data)
+  3. ✅ Replay Prevention (Attestation Hash Tracking)
+     └─ Check if used_attestations.member(attestation_hash)
+     └─ "Has this specific attestation_hash been used before?"
+     └─ used_attestations.insert(attestation_hash, 1)
+     └─ Note: Employees CAN submit multiple proofs (overwrites previous in income_proofs)
+     └─ Note: Each unique attestation_hash can only be used ONCE
 
   4. ✅ Timestamp Freshness
      └─ assert(timestamp <= current_timestamp)
@@ -109,8 +111,8 @@
 
   Result: Contract trusts the attestation because:
   - The verifier is trusted
-  - The attestation hasn't been used before
-  - The attestation is fresh
+  - This specific attestation_hash hasn't been used before
+  - The attestation is fresh (within 1 hour)
 
   Phase 4: Application Logic (Payroll Operations)
 
@@ -165,6 +167,86 @@
   4. No Secrets On-Chain: Smart contract doesn't need the secret (trust model)
   5. Replay Protected: Each attestation can only be used once
   6. Verifier Accountability: Bad verifiers can be removed from trusted set
+
+  ---
+
+  📦 Storage Model & Optimization Considerations
+
+  Current Storage Architecture:
+
+  1. **income_proofs Map** (employee_id → PC_IncomeProof)
+     - Stores the most recent proof for each employee
+     - OLD proofs are OVERWRITTEN when employee submits new proof
+     - ✅ Bounded growth: Max 1 proof per employee
+     - ✅ Privacy-preserving: No historical income data accumulation
+
+  2. **used_attestations Set** (attestation_hash → Uint<1>)
+     - Tracks every attestation_hash ever used (replay protection)
+     - ⚠️ UNBOUNDED GROWTH: Grows forever with each submission
+     - Current size: O(total_proofs_submitted_ever)
+
+  Storage Growth Analysis:
+
+  ```
+  Scenario: 1000 employees, each updates proof monthly
+
+  Month 1:  1,000 attestations tracked
+  Month 6:  6,000 attestations tracked
+  Year 1:   12,000 attestations tracked
+  Year 5:   60,000 attestations tracked ⚠️
+  ```
+
+  ## ⚙️ Future Optimization: Cleanup Mechanism
+
+  **Problem:**
+  - Attestations expire after 1 hour (timestamp validation)
+  - Expired attestation_hashes can NEVER be reused (timestamp fails)
+  - Yet they remain in `used_attestations` forever (wasting storage)
+
+  **Proposed Solution (v2.0):**
+
+  Add a `cleanup_expired_attestations` circuit:
+
+  ```compact
+  export circuit cleanup_expired_attestations(
+    attestation_hashes: Vector<100, Bytes<32>>,  // Batch cleanup
+    timestamps: Vector<100, Uint<64>>
+  ): Uint<32> {
+    let cleaned_count = 0 as Uint<32>;
+    const current_time = current_timestamp as Uint<64>;
+
+    for (let i = 0; i < 100; i++) {
+      const hash = attestation_hashes[i];
+      const timestamp = timestamps[i];
+
+      // Only remove if expired (>1 hour old) AND exists in set
+      if (timestamp < (current_time - 3600 as Uint<64>)) {
+        if (used_attestations.member(disclose(hash))) {
+          used_attestations.remove(disclose(hash));
+          cleaned_count = cleaned_count + (1 as Uint<32>);
+        }
+      }
+    }
+
+    return cleaned_count;  // Return number cleaned for monitoring
+  }
+  ```
+
+  **Benefits:**
+  - Bounded storage: Only tracks attestations from last hour
+  - Gas cost reduction: Smaller Set = cheaper operations
+  - No security impact: Expired attestations already unusable
+  - Batch cleanup: Process 100 attestations per call
+
+  **Implementation Strategy:**
+  - **Option A:** Automated cleanup (every N proofs submitted)
+  - **Option B:** Manual cleanup (company/verifier calls periodically)
+  - **Option C:** Incentivized cleanup (reward callers with small fee)
+
+  **For Hackathon/MVP:**
+  - Current implementation is FINE (unbounded growth acceptable for demo)
+  - Production deployment would benefit from cleanup mechanism
+  - Alternative: Use off-chain tracking with periodic Merkle proof verification
 
   ---
   📊 Data Flow Summary
