@@ -137,7 +137,7 @@ export class ProofGenerator {
     switch (proofType) {
       case ProofType.INCOME_ABOVE_THRESHOLD:
       case ProofType.AVERAGE_INCOME:
-      case ProofType.CREDIT_SCORE:
+      case ProofType.FIRST_TIME_LOAN_ELIGIBILITY:
         return [...payments, thresholdMin];
 
       case ProofType.INCOME_RANGE:

@@ -583,7 +583,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                 Payment History
               </Typography>
             </Stack>
-            <PaymentHistorySection userRole="employee" payments={payments} maxRows={5} />
+            <PaymentHistorySection userRole="employee" payments={payments} maxRows={20} />
           </Box>
         </Stack>
       </Container>

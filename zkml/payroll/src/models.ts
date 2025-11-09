@@ -59,10 +59,12 @@ export class ModelManager {
 }
 
 /**
- * Calculate expected credit score for given payments
- * (Matches the simplified ONNX model formula)
+ * Calculate first-time loan eligibility based on payment consistency
+ * (Matches the ONNX model formula)
+ *
+ * Returns average salary if consistent (range < 25%), otherwise 0
  */
-export function calculateCreditScore(payments: number[]): number {
+export function calculateFirstTimeLoanEligibility(payments: number[], threshold: number = 0.25): number {
   if (payments.length !== 12) {
     throw new Error('Exactly 12 payments required');
   }
@@ -70,9 +72,14 @@ export function calculateCreditScore(payments: number[]): number {
   const total = payments.reduce((sum, p) => sum + p, 0);
   const avg = total / 12;
 
-  // Simplified formula: 300 + (avg * 0.05)
-  // Range: 300-800
-  return 300 + (avg * 0.05);
+  // Calculate range-based consistency
+  const max = Math.max(...payments);
+  const min = Math.min(...payments);
+  const range = max - min;
+  const rangeRatio = range / avg;
+
+  // Return average if consistent, 0 otherwise
+  return rangeRatio < threshold ? avg : 0;
 }
 
 /**

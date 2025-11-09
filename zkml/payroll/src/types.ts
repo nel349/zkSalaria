@@ -6,7 +6,7 @@ export enum ProofType {
   INCOME_ABOVE_THRESHOLD = 1,
   INCOME_RANGE = 2,
   AVERAGE_INCOME = 3,
-  CREDIT_SCORE = 4
+  FIRST_TIME_LOAN_ELIGIBILITY = 4
 }
 
 export interface ProofInput {
@@ -75,11 +75,11 @@ export const MODEL_CONFIGS: Record<ProofType, ModelPaths> = {
     vk: join(PAYROLL_DIR, 'generated/average_income/average_income_vk.key'),
     settings: join(PAYROLL_DIR, 'generated/average_income/average_income_settings.json')
   },
-  [ProofType.CREDIT_SCORE]: {
-    onnx: join(PAYROLL_DIR, 'generated/credit_score/credit_score.onnx'),
-    compiled: join(PAYROLL_DIR, 'generated/credit_score/credit_score.compiled'),
-    pk: join(PAYROLL_DIR, 'generated/credit_score/credit_score_pk.key'),
-    vk: join(PAYROLL_DIR, 'generated/credit_score/credit_score_vk.key'),
-    settings: join(PAYROLL_DIR, 'generated/credit_score/credit_score_settings.json')
+  [ProofType.FIRST_TIME_LOAN_ELIGIBILITY]: {
+    onnx: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan.onnx'),
+    compiled: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan.compiled'),
+    pk: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan_pk.key'),
+    vk: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan_vk.key'),
+    settings: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan_settings.json')
   }
 };

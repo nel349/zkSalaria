@@ -73,10 +73,10 @@ const TEST_CASES: TestCase[] = [
     expectedSuccess: true
   },
   {
-    name: 'Type 4: CREDIT_SCORE',
+    name: 'Type 4: FIRST_TIME_LOAN_ELIGIBILITY',
     proof_type: 4,
-    payments: [8000, 6000, 10000, 7000, 9000, 8500, 7500, 8000, 9500, 8000, 8500, 9000],
-    threshold_min: 600,
+    payments: [8000, 8200, 8100, 8300, 8400, 8500, 8200, 8100, 8300, 8200, 8100, 8400],
+    threshold_min: 0.25,  // 25% range threshold
     expectedSuccess: true
   }
 ];
@@ -219,7 +219,7 @@ describe('ZKML Proof Generation E2E Tests', () => {
     logger.info(`  ✅ ${testCase.name} proof validated`);
   }, 30_000);
 
-  test('should generate proof for Type 4: CREDIT_SCORE', async () => {
+  test('should generate proof for Type 4: FIRST_TIME_LOAN_ELIGIBILITY', async () => {
     const testCase = TEST_CASES[3];
     logger.info(`Testing ${testCase.name}...`);
 

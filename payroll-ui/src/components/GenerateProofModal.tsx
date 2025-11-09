@@ -41,7 +41,7 @@ interface GenerateProofModalProps {
   api: DeployedPayrollAPI | null;
 }
 
-type ProofType = 'income_above' | 'income_range' | 'average_income' | 'credit_score';
+type ProofType = 'income_above' | 'income_range' | 'average_income' | 'first_time_loan';
 
 // Verifier service configuration
 const VERIFIER_SERVICE_URL = import.meta.env.VITE_VERIFIER_SERVICE_URL || 'http://localhost:3002';
@@ -114,10 +114,10 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       example: 'My average income is at least $11,000/month',
     },
     {
-      value: 'credit_score' as ProofType,
-      label: 'Payment Consistency Score',
-      description: 'Prove your payment history score (ZKML)',
-      example: 'My payment consistency score is at least 600',
+      value: 'first_time_loan' as ProofType,
+      label: 'First-Time Loan Eligibility',
+      description: 'Prove salary consistency for first loan (ZKML)',
+      example: 'I have 12 months of consistent salary → eligible for loan',
     },
   ];
 
@@ -142,8 +142,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         return `${employeeName} earns between $${Number(minThreshold).toLocaleString()} and $${Number(maxThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
       case 'average_income':
         return `${employeeName}'s average income is at least $${Number(minThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
-      case 'credit_score':
-        return `${employeeName}'s payment consistency score is at least ${minThreshold}${employmentText}${companyText}.`;
+      case 'first_time_loan':
+        return `${employeeName} has 12 consecutive months of consistent salary (within ${Number(minThreshold) * 100}% range)${employmentText}${companyText}.`;
       default:
         return '';
     }
@@ -193,7 +193,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         proofType === 'income_above' ? 1n :
         proofType === 'income_range' ? 2n :
         proofType === 'average_income' ? 3n :
-        4n; // credit_score
+        4n; // first_time_loan
 
       // Fetch employee payment history with decrypted amounts
       console.log('[GenerateProof] Fetching payment history...');
@@ -596,15 +596,15 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
             </Typography>
 
             <Stack spacing={2}>
-              {proofType === 'credit_score' ? (
+              {proofType === 'first_time_loan' ? (
                 <TextField
                   fullWidth
-                  label="Minimum Score"
+                  label="Consistency Threshold"
                   type="number"
                   value={minThreshold}
                   onChange={(e) => setMinThreshold(e.target.value)}
-                  helperText="Prove your payment consistency score is at least this value (0-1000)"
-                  inputProps={{ min: 0, max: 1000 }}
+                  helperText="Maximum salary variation allowed (0.25 = 25% range between highest and lowest payment)"
+                  inputProps={{ min: 0, max: 1, step: 0.01 }}
                 />
               ) : (
                 <>
