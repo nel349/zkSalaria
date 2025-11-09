@@ -612,6 +612,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         employeeId={walletAddress || ''}
         employeeName={walletAddress ? `${walletAddress.substring(0, 12)}...` : 'Employee'}
         companyName={stats.companyName}
+        api={api}
       />
     </Box>
   );

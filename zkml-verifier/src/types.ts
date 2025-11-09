@@ -7,11 +7,37 @@ export interface EZKLProof {
   instances: string[][];
 }
 
+export enum ProofType {
+  INCOME_ABOVE_THRESHOLD = 1,
+  INCOME_RANGE = 2,
+  AVERAGE_INCOME = 3,
+  CREDIT_SCORE = 4
+}
+
 export interface ProofPublicInputs {
   employee_id: string;
   threshold: number;
   txids: string[];
   history_commitment: string;
+}
+
+export interface GenerateProofRequest {
+  proof_type: ProofType;
+  payments: number[];  // 12 monthly payments
+  threshold_min: number;
+  threshold_max?: number;  // Only for INCOME_RANGE
+  employee_id: string;
+  txids: string[];
+  history_commitment: string;
+}
+
+export interface GenerateProofResponse {
+  success: boolean;
+  proof_json?: string;  // The actual EZKL proof
+  attestation?: Attestation;
+  error?: string;
+  message?: string;
+  duration?: number;
 }
 
 export interface VerifyProofRequest {

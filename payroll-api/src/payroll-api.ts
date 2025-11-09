@@ -56,6 +56,7 @@ export interface DeployedPayrollAPI {
   // Payment operations
   payEmployee(companyId: string, employeeWalletAddress: string, amount: string, paymentType?: number): Promise<void>;
   getEmployeePaymentHistory(employeeWalletAddress: string): Promise<PaymentRecord[]>;
+  getEmployeePaymentHistoryDecrypted(employeeWalletAddress: string): Promise<Array<PaymentRecord & { decrypted_amount: bigint }>>;
 
   // Withdrawal history (API-layer storage)
   getWithdrawalHistory(): Promise<import('./common-types.js').DetailedWithdrawalTransaction[]>;

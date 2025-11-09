@@ -7,7 +7,10 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:verify": "tsx test-verify.ts",
+    "test:generate": "tsx test-generate-proof.ts",
+    "test": "npm run test:generate"
   },
   "keywords": ["zkml", "ezkl", "zero-knowledge", "verification"],
   "author": "zkSalaria",
@@ -16,7 +19,8 @@
     "fastify": "^4.25.2",
     "@fastify/cors": "^8.5.0",
     "pino": "^8.17.2",
-    "pino-pretty": "^10.3.1"
+    "pino-pretty": "^10.3.1",
+    "@zksalaria/zkml-payroll": "file:../zkml/payroll"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",

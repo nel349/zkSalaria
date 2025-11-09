@@ -30,6 +30,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ShareIcon from '@mui/icons-material/Share';
 import { useTheme, useThemeValues } from '../theme';
 import { toast } from 'react-hot-toast';
+import { type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
 
 interface GenerateProofModalProps {
   open: boolean;
@@ -37,9 +38,30 @@ interface GenerateProofModalProps {
   employeeId: string;
   employeeName: string;
   companyName?: string;
+  api: DeployedPayrollAPI | null;
 }
 
 type ProofType = 'income_above' | 'income_range' | 'average_income' | 'credit_score';
+
+// Verifier service configuration
+const VERIFIER_SERVICE_URL = import.meta.env.VITE_VERIFIER_SERVICE_URL || 'http://localhost:3002';
+
+interface AttestationResponse {
+  success: boolean;
+  proof_json?: string;  // The actual EZKL proof
+  attestation?: {
+    employee_id: string;
+    threshold: string;
+    txids: string[];
+    history_commitment: string;
+    timestamp: number;
+    attestation_hash: string;
+    verifier_pubkey: string;
+  };
+  duration?: number;
+  error?: string;
+  message?: string;
+}
 
 /**
  * Generate Proof Modal (Phase 2.7)
@@ -51,6 +73,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
   employeeId,
   employeeName,
   companyName,
+  api,
 }) => {
   const { mode } = useTheme();
   const theme = useThemeValues();
@@ -128,6 +151,11 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
   const handleGenerateProof = async () => {
     // Validation
+    if (!api) {
+      toast.error('API not available. Please connect your wallet.');
+      return;
+    }
+
     if (!minThreshold || Number(minThreshold) <= 0) {
       toast.error('Please enter a valid threshold');
       return;
@@ -141,7 +169,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     setIsGenerating(true);
     setProgress(0);
 
-    // Simulate ZKML proof generation (10-30 seconds)
+    // Progress simulation for UX (runs in background while API calls execute)
     const duration = 15000; // 15 seconds for demo
     const interval = 100;
     const increment = (interval / duration) * 100;
@@ -158,35 +186,113 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     }, interval);
 
     try {
-      // TODO: Call actual API when ZKML service is integrated
-      // const proofTypeNum = proofType === 'income_above' ? 0n : proofType === 'income_range' ? 1n : proofType === 'average_income' ? 2n : 3n;
-      // await api.submitIncomeProof(
-      //   employeeId,
-      //   proofTypeNum,
-      //   minThreshold,
-      //   maxThreshold || '0',
-      //   [], // txids (mock for now)
-      //   '0x0000000000000000000000000000000000000000000000000000000000000000', // historyCommitment (mock)
-      //   '0x0000000000000000000000000000000000000000000000000000000000000000', // attestationHash (mock)
-      //   verifierEmail || '0x0000000000000000000000000000000000000000000000000000000000000000', // verifierPubkey
-      //   BigInt(Math.floor(Date.now() / 1000)),
-      //   Number(expirationDays) * 24 * 60 * 60
-      // );
+      console.log('[GenerateProof] Starting real proof generation...');
 
-      await new Promise(resolve => setTimeout(resolve, duration));
+      // Map UI proof types to contract types (1-4)
+      const proofTypeNum =
+        proofType === 'income_above' ? 1n :
+        proofType === 'income_range' ? 2n :
+        proofType === 'average_income' ? 3n :
+        4n; // credit_score
 
-      // Generate proof ID and link
-      const proofId = `PROOF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      // Fetch employee payment history with decrypted amounts
+      console.log('[GenerateProof] Fetching payment history...');
+      const paymentHistory = await api.getEmployeePaymentHistoryDecrypted(employeeId);
+      const txids = paymentHistory.map(p => Buffer.from(p.payment_id).toString('hex'));
+      console.log(`[GenerateProof] Found ${txids.length} payments`);
+
+      // Extract payment amounts (need exactly 12 for ZKML)
+      if (paymentHistory.length < 12) {
+        throw new Error(`Need at least 12 payments for ZK proof. Found: ${paymentHistory.length}`);
+      }
+
+      // Get the last 12 payments and extract amounts
+      const last12Payments = paymentHistory.slice(-12);
+      const paymentAmounts = last12Payments.map(p => Number(p.decrypted_amount) / 100); // Convert from atomic units to dollars
+
+      console.log(`[GenerateProof] Payment amounts (last 12): [$${paymentAmounts[0]}, ..., $${paymentAmounts[11]}]`);
+
+      // Compute history commitment
+      console.log('[GenerateProof] Computing history commitment...');
+      const historyCommitment = await api.computeHistoryCommitment(employeeId);
+      console.log(`[GenerateProof] History commitment: ${historyCommitment}`);
+
+      // Parse thresholds
+      const thresholdMinParsed = utils.parseAmount(minThreshold);
+      const thresholdMaxParsed = maxThreshold ? utils.parseAmount(maxThreshold) : undefined;
+
+      // Call verifier service to generate ZKML proof + attestation
+      console.log('[GenerateProof] Generating ZKML proof (this may take 10-30 seconds)...');
+      const proofResponse = await fetch(`${VERIFIER_SERVICE_URL}/api/zkml/generate-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          proof_type: Number(proofTypeNum),
+          payments: paymentAmounts,
+          threshold_min: Number(thresholdMinParsed),
+          threshold_max: thresholdMaxParsed ? Number(thresholdMaxParsed) : undefined,
+          employee_id: employeeId,
+          txids: txids,
+          history_commitment: historyCommitment
+        })
+      });
+
+      if (!proofResponse.ok) {
+        throw new Error(`Verifier service error: ${proofResponse.statusText}`);
+      }
+
+      const proofData: AttestationResponse = await proofResponse.json();
+
+      if (!proofData.success || !proofData.attestation) {
+        throw new Error(proofData.message || 'Failed to generate proof');
+      }
+
+      const { attestation_hash, verifier_pubkey, timestamp, threshold: thresholdStr } = proofData.attestation;
+      const attestationHash = '0x' + attestation_hash;
+      const verifierPubkey = '0x' + verifier_pubkey;
+
+      console.log('[GenerateProof] ✅ ZKML Proof generated successfully!');
+      console.log(`  - Attestation Hash: ${attestationHash.substring(0, 18)}...`);
+      console.log(`  - Verifier Pubkey: ${verifierPubkey.substring(0, 18)}...`);
+      console.log(`  - Duration: ${proofData.duration}ms`);
+
+      console.log('[GenerateProof] Submitting income proof to contract...');
+      const expiresInSeconds = expirationDays === '0' ? 0 : Number(expirationDays) * 24 * 60 * 60;
+
+      const submitted = await api.submitIncomeProof(
+        employeeId,
+        proofTypeNum,
+        thresholdStr, // Use threshold from attestation (already parsed)
+        maxThreshold || '0',
+        txids,
+        historyCommitment,
+        attestationHash,
+        verifierPubkey,
+        BigInt(timestamp),
+        expiresInSeconds
+      );
+
+      if (!submitted) {
+        throw new Error('Proof submission failed - contract returned false');
+      }
+
+      console.log('[GenerateProof] Proof submitted successfully!');
+      clearInterval(progressInterval);
+      setProgress(100);
+
+      // Generate proof ID from attestation hash (first 6 chars)
+      const proofId = `PROOF-${attestationHash.substring(2, 8).toUpperCase()}`;
       const link = `https://zksalaria.app/verify/${proofId}`;
 
       setGeneratedProofId(proofId);
       setProofLink(link);
       setShowSuccess(true);
 
-      toast.success('Proof generated successfully!');
+      toast.success('Proof generated and submitted successfully!');
     } catch (error) {
       console.error('[GenerateProof] Failed:', error);
-      toast.error('Failed to generate proof. Please try again.');
+      clearInterval(progressInterval);
+      toast.error(`Failed to generate proof: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsGenerating(false);
       setProgress(0);
     }
@@ -386,10 +492,13 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
             <Box textAlign="center">
               <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary} sx={{ mb: 1 }}>
-                Generating ZK Proof...
+                Generating ZKML Proof...
               </Typography>
               <Typography variant="body2" color={theme.colors.text.secondary}>
-                This may take 10-30 seconds. Please don't close this window.
+                Creating zero-knowledge proof of your income. This may take 15-45 seconds.
+              </Typography>
+              <Typography variant="caption" color={theme.colors.text.secondary} sx={{ display: 'block', mt: 1 }}>
+                Please don't close this window.
               </Typography>
             </Box>
 

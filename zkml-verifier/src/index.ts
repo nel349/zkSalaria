@@ -56,7 +56,9 @@ fastify.get('/', async () => {
     endpoints: {
       health: 'GET /health',
       status: 'GET /api/zkml/status',
-      verify: 'POST /api/zkml/verify-proof'
+      verify: 'POST /api/zkml/verify-proof',
+      generateProof: 'POST /api/zkml/generate-proof',
+      createAttestation: 'POST /api/zkml/create-attestation (dev mode - no proof)'
     }
   };
 });
@@ -87,7 +89,9 @@ const start = async () => {
     console.log(`\n📚 API Endpoints:`);
     console.log(`   GET  /health`);
     console.log(`   GET  /api/zkml/status`);
-    console.log(`   POST /api/zkml/verify-proof`);
+    console.log(`   POST /api/zkml/verify-proof (verify existing proof)`);
+    console.log(`   POST /api/zkml/generate-proof (generate ZK proof + attestation)`);
+    console.log(`   POST /api/zkml/create-attestation (dev mode - attestation only)`);
     console.log('\n' + '='.repeat(60) + '\n');
 
   } catch (err) {

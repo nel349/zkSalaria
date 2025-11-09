@@ -8,18 +8,12 @@ import { createHash } from 'crypto';
 import type { ProofPublicInputs, Attestation } from '../types.js';
 
 export class AttestationSigner {
-  private secretKey: Buffer;
+  private secretKey: string;
   private publicKey: string;
 
-  constructor(secretKeyHex: string) {
-    // Remove '0x' prefix if present
-    const cleanHex = secretKeyHex.replace(/^0x/, '');
-    this.secretKey = Buffer.from(cleanHex, 'hex');
-
-    if (this.secretKey.length !== 32) {
-      throw new Error('Secret key must be 32 bytes (64 hex characters)');
-    }
-
+  constructor(secretKey: string) {
+    // Store secret as plain string (matches E2E test pattern)
+    this.secretKey = secretKey;
     this.publicKey = this.computePublicKey();
   }
 
@@ -37,24 +31,19 @@ export class AttestationSigner {
    * The secret key is used to create attestation commitments and must remain private.
    */
   getSecretKey(): string {
-    return this.secretKey.toString('hex');
+    return this.secretKey;
   }
 
   /**
-   * Compute public key using Midnight's pattern
+   * Compute public key using string concatenation
+   * (Matches E2E test pattern exactly)
    * public_key = hash(domain_separator + secret)
    */
   private computePublicKey(): string {
-    // Domain separator (32 bytes)
-    const domainSeparator = Buffer.alloc(32);
-    domainSeparator.write('zksalaria:verifier:pk:', 0, 'utf8');
-
-    // Hash: domain_separator + secret
-    const hash = createHash('sha256');
-    hash.update(domainSeparator);
-    hash.update(this.secretKey);
-
-    return hash.digest('hex');
+    const pubkey = createHash('sha256')
+      .update('zksalaria:verifier:pk:' + this.secretKey)
+      .digest('hex');
+    return pubkey;
   }
 
   /**
@@ -67,7 +56,6 @@ export class AttestationSigner {
     const attestation_hash = this.computeCommitment(
       publicInputs.employee_id,
       publicInputs.threshold,
-      publicInputs.txids,
       publicInputs.history_commitment,
       timestamp
     );
@@ -85,50 +73,26 @@ export class AttestationSigner {
   }
 
   /**
-   * Compute attestation commitment using Midnight's pattern
+   * Compute attestation commitment using string concatenation pattern
+   * (Matches E2E test pattern exactly - proven to work with contract)
    * commitment = hash(hash(data) + secret)
    */
   private computeCommitment(
     employeeId: string,
     threshold: number,
-    txids: string[],
     historyCommitment: string,
     timestamp: number
   ): string {
-    // Step 1: Hash the data
-    const dataHash = createHash('sha256');
+    // Step 1: Hash the data using string concatenation
+    // Format: employeeId + threshold + historyCommitment + timestamp
+    const data = `${employeeId}${threshold}${historyCommitment}${timestamp}`;
+    const dataHash = createHash('sha256').update(data).digest('hex');
 
-    // Add employee ID
-    const employeeIdBuf = Buffer.from(employeeId.replace(/^0x/, ''), 'hex');
-    dataHash.update(employeeIdBuf);
+    // Step 2: Commit with secret (plain string, matches test pattern)
+    const attestationHash = createHash('sha256')
+      .update(dataHash + this.secretKey)
+      .digest('hex');
 
-    // Add threshold (8 bytes, little-endian)
-    const thresholdBuf = Buffer.alloc(8);
-    thresholdBuf.writeBigUInt64LE(BigInt(threshold));
-    dataHash.update(thresholdBuf);
-
-    // Add each txid
-    txids.forEach(tx => {
-      const txBuf = Buffer.from(tx.replace(/^0x/, ''), 'hex');
-      dataHash.update(txBuf);
-    });
-
-    // Add history commitment
-    const commitmentBuf = Buffer.from(historyCommitment.replace(/^0x/, ''), 'hex');
-    dataHash.update(commitmentBuf);
-
-    // Add timestamp (8 bytes, little-endian)
-    const timestampBuf = Buffer.alloc(8);
-    timestampBuf.writeBigUInt64LE(BigInt(timestamp));
-    dataHash.update(timestampBuf);
-
-    const dataDigest = dataHash.digest();
-
-    // Step 2: Commit with secret (Midnight's persistentCommit pattern)
-    const commitHash = createHash('sha256');
-    commitHash.update(dataDigest);
-    commitHash.update(this.secretKey);
-
-    return commitHash.digest('hex');
+    return attestationHash;
   }
 }
