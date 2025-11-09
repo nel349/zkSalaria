@@ -16,7 +16,7 @@
 
   2. Employee prepares input data (payroll-input.json)
      └─ Private: [6000, 7000, 8000, 5000]
-     └─ Public: employee_id, threshold, txids, merkle_root
+     └─ Public: employee_id, threshold, history_commitment
 
   3. Employee runs EZKL proof generation
      └─ Command: npx tsx generate-payroll-proof.ts
@@ -37,7 +37,7 @@
 
   Employee sends to zkml-verifier service (localhost:3002):
   - proof.json
-  - publicInputs: {employee_id, threshold, txids, merkle_root}
+  - publicInputs: {employee_id, threshold, history_commitment}
 
   Verifier Service processes:
 
@@ -47,9 +47,9 @@
      └─ Does NOT see individual payment amounts!
 
   2. Creates Midnight-Style Attestation
-     
+
      a. Compute data_hash:
-        hash(employee_id + threshold + txids + merkle_root + timestamp)
+        hash(employee_id + threshold + history_commitment + timestamp)
 
      b. Compute attestation_hash (commitment):
         hash(data_hash + verifier_secret)  // Secret NEVER leaves server!
@@ -61,8 +61,7 @@
      {
        employee_id: "0x742d35...",
        threshold: "5000",
-       txids: ["0xTX001...", "0xTX002...", ...],
-       merkle_root: "0xMERKLE...",
+       history_commitment: "0xHASH123...",  // persistentHash of payment history
        timestamp: 1762212909,
        attestation_hash: "ec8a4ef5...",  // Cryptographic commitment
        verifier_pubkey: "a0cb1aac..."    // Identifies the verifier
@@ -73,14 +72,17 @@
 
   Employee submits attestation to payroll contract:
 
-  Contract: verify_attestation(
+  Contract: submit_income_proof(
     employee_id,
-    threshold,
-    txids,
-    merkle_root,
-    timestamp,
+    proof_type,              // 1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE
+    threshold_min,
+    threshold_max,
+    txids,                   // Transaction IDs from payment history (for ZKML proof)
+    history_commitment,      // persistentHash<Vector<12, PC_PaymentRecord>>
     attestation_hash,
-    verifier_pubkey  // NOT the secret!
+    verifier_pubkey,
+    timestamp,
+    expires_in
   )
 
   Smart Contract Checks:
@@ -89,18 +91,21 @@
      └─ assert(trusted_verifiers.member(verifier_pubkey))
      └─ "Is this verifier in our trusted set?"
 
-  2. ✅ Replay Prevention
-     └─ assert(!used_attestations.member(attestation_hash))
-     └─ "Has this attestation been used before?"
-     └─ used_attestations.insert(attestation_hash, 1)
+  2. ✅ Payment History Validation (Critical!)
+     └─ const computed = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history)
+     └─ assert(computed == history_commitment)
+     └─ "Does the submitted commitment match the employee's actual payment history?"
+     └─ Prevents employees from submitting proofs based on fake data
 
-  3. ✅ Timestamp Freshness
-     └─ assert(timestamp > current_time - 1_hour)
-     └─ assert(timestamp <= current_time)
-     └─ "Is this attestation recent?"
+  3. ✅ Replay Prevention
+     └─ Check if income_proofs.member(employee_id)
+     └─ "Has this employee already submitted a proof?"
+     └─ income_proofs.insert(employee_id, proof_data)
 
-  4. ✅ Mark as Used
-     └─ Prevents the same attestation from being reused
+  4. ✅ Timestamp Freshness
+     └─ assert(timestamp <= current_timestamp)
+     └─ assert(timestamp >= current_timestamp - 3600)
+     └─ "Is this attestation recent (within 1 hour)?"
 
   Result: Contract trusts the attestation because:
   - The verifier is trusted
@@ -170,7 +175,7 @@
     proof.json (ZK proof of average > 5000)
 
   PUBLIC DATA (Sent to Verifier):
-    proof.json + {employee_id, threshold, txids, merkle_root}
+    proof.json + {employee_id, threshold, txids, history_commitment}
               ↓ Verifier Service
     attestation {hash, pubkey, metadata}
 

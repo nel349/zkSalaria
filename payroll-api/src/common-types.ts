@@ -68,7 +68,7 @@ export interface PayrollCircuitCalls {
     thresholdMin: bigint,
     thresholdMax: bigint,
     txids: Uint8Array[],
-    merkleRoot: Uint8Array,
+    historyCommitment: Uint8Array,
     attestationHash: Uint8Array,
     verifierPubkey: Uint8Array,
     timestamp: bigint,
@@ -76,6 +76,7 @@ export interface PayrollCircuitCalls {
   ): Promise<CircuitResults<PayrollPrivateState, boolean>>;
   verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<CircuitResults<PayrollPrivateState, boolean>>;
   update_timestamp(newTimestamp: bigint): Promise<void>;
+  compute_history_commitment(employeeId: Uint8Array): Promise<CircuitResults<PayrollPrivateState, Uint8Array>>;
 }
 
 // Auto-derive circuit keys from contract (bank-api pattern)

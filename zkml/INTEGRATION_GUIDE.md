@@ -205,7 +205,7 @@ export class ZKMLProofGenerator {
     const txids = payments.map(p => p.payment_id);
 
     // Step 3: Create Merkle root (binds txids together)
-    const merkleRoot = this.computeMerkleRoot(txids);
+    const historyCommitment = this.computeMerkleRoot(txids);
 
     // Step 4: Prepare witness (SAME AS EXAMPLE 1)
     const witness = {
@@ -228,7 +228,7 @@ export class ZKMLProofGenerator {
       proof: proof.proof,
       publicInputs: {
         txids,
-        merkleRoot,
+        historyCommitment,
         threshold,
         modelHash: await this.getModelHash()
       }
@@ -307,7 +307,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     const tx = await this.deployedContract.contract.callTx.verify_credit_proof(
       proof.proof,
       proof.publicInputs.txids,
-      proof.publicInputs.merkleRoot,
+      proof.publicInputs.historyCommitment,
       proof.publicInputs.threshold,
       proof.publicInputs.modelHash
     );
@@ -341,7 +341,7 @@ struct ModelMetadata {
 struct CreditApproval {
   employee_id: Bytes<32>,
   threshold: Uint<64>,
-  txids_merkle_root: Bytes<32>,
+  txids_history_commitment: Bytes<32>,
   timestamp: Uint<32>,
   expires_at: Uint<32>
 }
@@ -351,7 +351,7 @@ export circuit verify_credit_proof(
   proof: Bytes<512>,
   employee_id: Bytes<32>,
   txids: Vector<6, Bytes<32>>,
-  merkle_root: Bytes<32>,
+  history_commitment: Bytes<32>,
   threshold: Uint<64>,
   model_hash: Bytes<32>
 ): Boolean {
@@ -374,8 +374,8 @@ export circuit verify_credit_proof(
 
   // STEP 2: Verify Merkle root
   // This ensures txids form a consistent set
-  const computed_root = compute_merkle_root(txids);
-  assert(computed_root == merkle_root, "Merkle mismatch");
+  const computed_root = compute_history_commitment(txids);
+  assert(computed_root == history_commitment, "Merkle mismatch");
 
   // STEP 3: Verify ZK proof
   // This proves ML model was executed correctly
@@ -384,7 +384,7 @@ export circuit verify_credit_proof(
 
   const proof_valid = midnight_verify_zkproof(
     proof,
-    [txids, merkle_root, threshold, model_hash],
+    [txids, history_commitment, threshold, model_hash],
     model.data.verification_key
   );
 
@@ -394,7 +394,7 @@ export circuit verify_credit_proof(
   const approval = CreditApproval {
     employee_id: employee_id,
     threshold: threshold,
-    txids_merkle_root: merkle_root,
+    txids_history_commitment: history_commitment,
     timestamp: current_timestamp,
     expires_at: current_timestamp + 2592000u32  // 30 days
   };
@@ -408,7 +408,7 @@ export circuit verify_credit_proof(
 }
 
 // Helper: Compute Merkle root from transaction IDs
-pure circuit compute_merkle_root(txids: Vector<6, Bytes<32>>): Bytes<32> {
+pure circuit compute_history_commitment(txids: Vector<6, Bytes<32>>): Bytes<32> {
   // Simple Merkle tree implementation
   // Hash pairs of txids until we get single root
   // (Implementation details...)
@@ -547,7 +547,7 @@ console.log(approval);
 - [ ] `credit_models` ledger
 - [ ] `credit_approvals` ledger
 - [ ] `verify_credit_proof()` circuit
-- [ ] `compute_merkle_root()` helper
+- [ ] `compute_history_commitment()` helper
 - [ ] `register_model()` circuit (for admins)
 
 #### 4. ML Models (ZKML artifacts)

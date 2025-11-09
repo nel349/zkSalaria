@@ -72,16 +72,15 @@ Alice now knows her score (745), but no one else does.
 - Alice's private key (to decrypt transaction amounts) ← SECRET
 
 **Public Inputs (visible to verifier):**
-- Transaction IDs: [0xTX001, 0xTX002, 0xTX003, 0xTX004, 0xTX005, 0xTX006]
-- Merkle root: 0xMerkleRoot123 (commitment to these txids)
+- Employee ID: 0xAlice (hashed wallet address)
 - Threshold: 680
+- History commitment: 0xHASH123 (persistentHash of payment history)
 - Model hash: 0xModelABC (identifies which ML model)
-- Alice's wallet address: 0xAlice
 
 **What the ZK circuit proves:**
 ```
-"I executed ML model 0xModelABC on payment amounts
-decrypted from transactions [0xTX001, 0xTX002, ...],
+"I executed ML model 0xModelABC on my payment history
+(committed to by history_commitment 0xHASH123),
 and the output was a number greater than 680.
 
 I'm not telling you:
@@ -95,13 +94,12 @@ But I'm cryptographically proving this statement is TRUE."
 **Output of proof generation:**
 ```javascript
 proof = {
-  zkproof: 0x1a2b3c4d5e6f... (cryptographic proof, 256-512 bytes),
+  zkproof: 0x1a2b3c4d5e6f... (cryptographic proof, ~17KB),
   public_inputs: {
-    txids: [0xTX001, 0xTX002, 0xTX003, 0xTX004, 0xTX005, 0xTX006],
-    merkle_root: 0xMerkleRoot123,
+    employee_id: 0xAlice,
     threshold: 680,
-    model_hash: 0xModelABC,
-    employee_wallet: 0xAlice
+    history_commitment: 0xHASH123,
+    model_hash: 0xModelABC
   }
 }
 ```
@@ -110,100 +108,125 @@ proof = {
 
 ---
 
-#### Step 3: Submit Proof to Smart Contract (On Midnight)
+#### Step 3: Submit Proof to Verifier Service (Off-Chain)
 
-Alice submits to zkSalaria smart contract:
+Alice submits to zkml-verifier service (localhost:3002):
 
 ```javascript
-Transaction to Midnight blockchain:
+POST /verify-proof
 {
-  function: "verify_credit_proof",
-  proof: 0x1a2b3c4d5e6f...,
-  public_inputs: {
-    txids: [0xTX001, 0xTX002, ...],
-    merkle_root: 0xMerkleRoot123,
+  proof: proof.json,
+  publicInputs: {
+    employee_id: 0xAlice,
     threshold: 680,
-    model_hash: 0xModelABC,
-    employee_wallet: 0xAlice
+    history_commitment: 0xHASH123
   }
 }
 ```
 
-**What's on the blockchain:**
-- ✅ Transaction IDs (public, verifiable)
-- ✅ Merkle root (commitment to payment history)
-- ✅ Threshold (what's being proven)
-- ✅ Model hash (which model was used)
+**Verifier Service Response (Attestation):**
+```javascript
+{
+  employee_id: "0xAlice",
+  threshold: "680",
+  history_commitment: "0xHASH123",
+  timestamp: 1762212909,
+  attestation_hash: "ec8a4ef5...",  // hash(data + verifier_secret)
+  verifier_pubkey: "a0cb1aac..."    // Identifies trusted verifier
+}
+```
+
+**What's in the attestation:**
+- ✅ Employee ID (public)
+- ✅ Threshold (what was proven)
+- ✅ History commitment (payment history hash)
+- ✅ Attestation hash (cryptographic commitment)
+- ✅ Verifier pubkey (identifies verifier)
 - ❌ NOT the actual credit score
 - ❌ NOT the payment amounts
-- ❌ NOT any private data
+- ❌ NOT the verifier secret (stays on server)
 
 ---
 
-#### Step 4: Smart Contract Verification (Midnight Network)
+#### Step 4: Submit Attestation to Smart Contract (On-Chain)
 
-The smart contract performs multiple verification steps:
+Alice submits the attestation from the verifier to the zkSalaria smart contract:
 
 ```compact
-export circuit verify_credit_proof(
-  proof: Bytes<512>,
-  employee_wallet: Bytes<32>,
-  txids: Vector<6, Bytes<32>>,
-  merkle_root: Bytes<32>,
-  threshold: Uint<64>,
-  model_hash: Bytes<32>
+export circuit submit_income_proof(
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,              // 1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  txids: Vector<12, Bytes<32>>,     // Payment history transaction IDs (for reference)
+  history_commitment: Bytes<32>,    // persistentHash<Vector<12, PC_PaymentRecord>>
+  attestation_hash: Bytes<32>,      // hash(data + verifier_secret)
+  verifier_pubkey: Bytes<32>,       // Identifies the verifier
+  timestamp: Uint<64>,
+  expires_in: Uint<64>
 ): Boolean {
 
   // ============================================
-  // STEP 1: Verify transactions exist on-chain
+  // STEP 1: Verify Verifier is Trusted
   // ============================================
-  for txid in txids {
-    // Query Midnight blockchain
-    const tx_exists = midnight_blockchain.transaction_exists(txid);
-    assert(tx_exists, "Transaction doesn't exist");
-
-    // Verify transaction was sent TO this employee
-    const recipient = midnight_blockchain.get_recipient(txid);
-    assert(recipient == employee_wallet, "Not your transaction");
-  }
-
-  // ============================================
-  // STEP 2: Verify Merkle root
-  // ============================================
-  // This ensures the txids form a consistent set
-  const computed_root = compute_merkle_root(txids);
-  assert(computed_root == merkle_root, "Merkle root mismatch");
-
-  // ============================================
-  // STEP 3: Verify ZK proof
-  // ============================================
-  // This proves:
-  // - ML model 0xModelABC was executed correctly
-  // - Input was amounts decrypted from these specific txids
-  // - Output exceeded threshold
-  const proof_valid = midnight_verify_zkproof(
-    proof,
-    [txids, merkle_root, threshold, model_hash],
-    verification_key_for_model_0xModelABC
+  assert(
+    trusted_verifiers.member(verifier_pubkey),
+    "Verifier not trusted"
   );
 
-  assert(proof_valid, "ZK proof invalid");
+  // ============================================
+  // STEP 2: Verify Payment History Commitment
+  // ============================================
+  // Get employee's actual payment history from ledger
+  const payment_history = employee_payment_history.lookup(employee_id);
+
+  // Compute the hash of actual payment history
+  const computed_commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+
+  // Verify submitted commitment matches actual history
+  assert(
+    computed_commitment == history_commitment,
+    "Payment history mismatch - proof not based on real data"
+  );
+
+  // ============================================
+  // STEP 3: Replay Protection
+  // ============================================
+  assert(
+    !income_proofs.member(employee_id),
+    "Proof already submitted"
+  );
+
+  // ============================================
+  // STEP 4: Timestamp Freshness Check
+  // ============================================
+  const current_time = current_timestamp();
+  assert(timestamp <= current_time, "Future timestamp");
+  assert(timestamp >= current_time - 3600, "Attestation expired (>1 hour old)");
 
   // ============================================
   // ALL CHECKS PASSED
   // ============================================
-  // We now know cryptographically that:
-  // ✓ Transactions exist on blockchain
-  // ✓ Transactions were paid to this employee
-  // ✓ ML model was run correctly
-  // ✓ Input was from these specific blockchain payments
-  // ✓ Output exceeded threshold
+  // We now know that:
+  // ✓ Verifier is in our trusted set
+  // ✓ Verifier cryptographically verified the ZK proof off-chain
+  // ✓ Payment history commitment matches actual on-chain data
+  // ✓ Attestation is fresh and hasn't been used before
+  // ✓ Employee cannot submit proofs based on fake data
 
-  // Store approval
-  credit_approvals.insert(
-    disclose(employee_wallet),
-    disclose(threshold)
-  );
+  // Store the income proof
+  const proof_data = IncomeProof {
+    proof_type: proof_type,
+    threshold_min: threshold_min,
+    threshold_max: threshold_max,
+    history_commitment: history_commitment,
+    attestation_hash: attestation_hash,
+    verifier_pubkey: verifier_pubkey,
+    verified_at: timestamp,
+    expires_at: timestamp + expires_in
+  };
+
+  income_proofs.insert(employee_id, proof_data);
 
   return true;
 }
@@ -381,7 +404,7 @@ Company Wallet (on-chain)
 
 > "How does on-chain verification match the off-chain ZKML proof?"
 
-**Answer:** Merkle proofs + ZK circuit constraints
+**Answer:** Payment history commitments + Trusted verifier attestations
 
 ---
 
@@ -449,45 +472,35 @@ Alice now has:
 
 ---
 
-#### Part 3: Create Merkle Tree (Binds Data to Blockchain)
+#### Part 3: Compute Payment History Commitment (Binds Data to Blockchain)
 
 ```
-Alice creates Merkle tree from transaction IDs:
+Alice's payment history is stored on-chain in the contract ledger:
 
-                ROOT: 0xMerkleRoot123
-                  /                    \
-         Hash(TX001+TX002)         Hash(TX003+TX004)
-            /         \                /          \
-         TX001       TX002          TX003        TX004
+employee_payment_history: Map<Bytes<32>, Vector<12, PC_PaymentRecord>>
 
-                     ... (continues for TX005, TX006)
+Each PC_PaymentRecord contains:
+- Payment amount (encrypted)
+- Timestamp
+- Payment type
 
-Merkle Root: 0xMerkleRoot123
+The contract computes a cryptographic commitment:
+history_commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history)
 
-This root is:
-- Computed from on-chain transaction IDs
-- Commits to a specific set of transactions
-- Can be verified by anyone
-- Changes if any txid is modified
+Result: 0xHASH123 (32-byte commitment)
+
+This commitment is:
+- Deterministic (same history → same hash)
+- Binding (can't claim different history without changing hash)
+- Verifiable on-chain (contract can recompute and compare)
+- Changes if any payment is modified
 ```
 
-**Merkle proof properties:**
-- Binds together a specific set of transactions
-- Can prove "txid X is in this set" efficiently
-- Can't be faked (cryptographic hash function)
-- Verifiable without revealing all transactions
-
-**Optional (for extra security):**
-```
-Post Merkle root on-chain:
-
-Alice's wallet state on Midnight:
-{
-  wallet: 0xAlice,
-  payment_history_commitment: 0xMerkleRoot123,
-  last_updated: Nov 1, 2025
-}
-```
+**History commitment properties:**
+- Binds to exact payment history on the blockchain
+- Contract can verify submitted commitment matches actual data
+- Prevents employees from submitting proofs based on fake data
+- Employee can't manipulate which payments are included
 
 ---
 
@@ -496,10 +509,15 @@ Alice's wallet state on Midnight:
 ```
 ML Model input preparation:
 
+Alice decrypts her payment history locally:
+- Payment 1: $7,500 (decrypted with private key)
+- Payment 2: $7,500
+- Payment 3: $7,200
+- Payment 4: $7,800
+- Payment 5: $7,500
+- Payment 6: $7,500
+
 payment_amounts = [7500, 7500, 7200, 7800, 7500, 7500]
-                   ↑      ↑      ↑      ↑      ↑      ↑
-                   |      |      |      |      |      |
-              from TX001 TX002 TX003 TX004 TX005 TX006
 
 ML Model execution:
 Input: [7500, 7500, 7200, 7800, 7500, 7500]
@@ -526,23 +544,23 @@ PRIVATE INPUTS (witness - never revealed):
 - Actual credit score: 745
 
 PUBLIC INPUTS (verifiable by anyone):
-- txids: [0xTX001, 0xTX002, 0xTX003, 0xTX004, 0xTX005, 0xTX006]
-- merkle_root: 0xMerkleRoot123
+- employee_id: 0xAlice
 - threshold: 680
+- history_commitment: 0xHASH123
 - model_hash: 0xModelABC
-- employee_wallet: 0xAlice
 
 ZK CIRCUIT CONSTRAINTS (all must be satisfied):
 
-Constraint 1: Merkle Proof
-  "These txids produce merkle_root 0xMerkleRoot123"
-  → Binds proof to specific transaction set
+Constraint 1: Payment History Commitment
+  "My payment history hashes to 0xHASH123"
+  → Binds proof to specific payment history
+  → This hash will be verified on-chain against actual ledger data
 
-Constraint 2: Transaction Decryption
-  "I decrypted amounts from these txids using my private key"
+Constraint 2: Payment Decryption
+  "I decrypted my payment amounts using my private key"
   → Proves access to actual payment data
   → Can't claim arbitrary amounts
-  → Must use amounts from blockchain
+  → Must use amounts from my encrypted payment history
 
 Constraint 3: Model Execution
   "I ran ML model 0xModelABC on these amounts"
@@ -563,134 +581,129 @@ Can't fake any part without breaking cryptography
 **The proof cryptographically proves:**
 ```
 "I have private key for wallet 0xAlice" AND
-"Transactions [TX001...TX006] were sent to 0xAlice" AND
-"I decrypted amounts from these transactions" AND
-"These amounts form Merkle root 0xMerkleRoot123" AND
+"I decrypted amounts from my payment history" AND
+"My payment history hashes to 0xHASH123" AND
 "I ran model 0xModelABC on these amounts" AND
 "The output exceeded 680"
 
 All without revealing:
-- The amounts
+- The payment amounts
 - The exact score
 - The private key
 ```
 
 ---
 
-#### Part 6: On-Chain Verification (Midnight Smart Contract)
+#### Part 6: Attestation-Based Verification (Verifier Service + Smart Contract)
 
-**Full verification process:**
+**The verification happens in two stages:**
+
+**Stage 1: Off-Chain ZK Proof Verification (Verifier Service)**
+
+```typescript
+// zkml-verifier service receives proof from employee
+POST /verify-proof
+{
+  proof: proof.json,  // The actual ZK proof (~17KB)
+  publicInputs: {
+    employee_id: 0xAlice,
+    threshold: 680,
+    history_commitment: 0xHASH123
+  }
+}
+
+// Verifier service validates the ZK proof using EZKL
+const proofValid = await ezkl.verify(
+  proof,
+  verification_key,
+  public_inputs
+);
+
+if (!proofValid) {
+  return { error: "Invalid proof" };
+}
+
+// Create cryptographic attestation
+const data_hash = hash(employee_id + threshold + history_commitment + timestamp);
+const attestation_hash = hash(data_hash + verifier_secret);  // Secret never exposed!
+const verifier_pubkey = hash("zksalaria:verifier:pk:" + verifier_secret);
+
+return {
+  employee_id,
+  threshold,
+  history_commitment,
+  timestamp,
+  attestation_hash,    // Cryptographic commitment
+  verifier_pubkey      // Identifies this verifier
+};
+```
+
+**Stage 2: On-Chain Trust-Based Verification (Smart Contract)**
 
 ```compact
-export circuit verify_credit_proof(
-  proof: Bytes<512>,
-  employee_wallet: Bytes<32>,
-  txids: Vector<6, Bytes<32>>,
-  merkle_root: Bytes<32>,
-  threshold: Uint<64>,
-  model_hash: Bytes<32>
+export circuit submit_income_proof(
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  txids: Vector<12, Bytes<32>>,
+  history_commitment: Bytes<32>,
+  attestation_hash: Bytes<32>,
+  verifier_pubkey: Bytes<32>,
+  timestamp: Uint<64>,
+  expires_in: Uint<64>
 ): Boolean {
 
-  // =============================================
-  // VERIFICATION STEP 1: Check Blockchain State
-  // =============================================
-  // Verify these transactions actually exist on Midnight
+  // ============================================
+  // STEP 1: Verify Verifier is Trusted
+  // ============================================
+  assert(trusted_verifiers.member(verifier_pubkey), "Verifier not trusted");
 
-  for txid in txids {
-    // Query blockchain: Does this transaction exist?
-    const tx_exists = midnight_blockchain.transaction_exists(txid);
-    assert(tx_exists, "Transaction not found on blockchain");
+  // ============================================
+  // STEP 2: Verify Payment History Commitment
+  // ============================================
+  const payment_history = employee_payment_history.lookup(employee_id);
+  const computed = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+  assert(computed == history_commitment, "History mismatch");
 
-    // Query blockchain: Who received this payment?
-    const recipient = midnight_blockchain.get_recipient(txid);
-    assert(recipient == employee_wallet, "Transaction not sent to this wallet");
+  // ============================================
+  // STEP 3: Replay Protection
+  // ============================================
+  assert(!income_proofs.member(employee_id), "Already submitted");
 
-    // Query blockchain: Was this a valid payment transaction?
-    const tx_type = midnight_blockchain.get_transaction_type(txid);
-    assert(tx_type == "PAYMENT", "Not a payment transaction");
-  }
+  // ============================================
+  // STEP 4: Freshness Check
+  // ============================================
+  assert(timestamp <= current_timestamp(), "Future timestamp");
+  assert(timestamp >= current_timestamp() - 3600, "Expired");
 
-  // If we reach here:
-  // ✓ All transactions exist on blockchain
-  // ✓ All were sent to this employee's wallet
-  // ✓ All are legitimate payment transactions
+  // ============================================
+  // ALL CHECKS PASSED
+  // ============================================
 
-  // =============================================
-  // VERIFICATION STEP 2: Check Merkle Consistency
-  // =============================================
-  // Verify the txids form the claimed Merkle root
-
-  const computed_merkle = compute_merkle_root(txids);
-  assert(computed_merkle == merkle_root, "Merkle root doesn't match");
-
-  // If we reach here:
-  // ✓ The transaction set is consistent
-  // ✓ No transactions were swapped or modified
-  // ✓ This is the exact set used in computation
-
-  // =============================================
-  // VERIFICATION STEP 3: Verify ZK Proof
-  // =============================================
-  // This is the cryptographic verification
-
-  const proof_valid = midnight_verify_zkproof(
-    proof,                    // The ZK proof bytes
-    [                         // Public inputs
-      txids,
-      merkle_root,
-      threshold,
-      model_hash,
-      employee_wallet
-    ],
-    verification_key          // Key for model 0xModelABC
-  );
-
-  assert(proof_valid, "ZK proof verification failed");
-
-  // If we reach here:
-  // ✓ The proof is mathematically valid
-  // ✓ Model 0xModelABC was executed correctly
-  // ✓ Input was amounts from these specific transactions
-  // ✓ Output exceeded threshold
-
-  // =============================================
-  // ALL VERIFICATIONS PASSED
-  // =============================================
-
-  // Store the approval
-  credit_approvals.insert(
-    disclose(employee_wallet),
-    disclose({
-      threshold: threshold,
-      timestamp: current_timestamp(),
-      txids_hash: merkle_root
-    })
-  );
-
-  // Emit event
-  emit CreditApproved(employee_wallet, threshold);
-
+  income_proofs.insert(employee_id, proof_data);
   return true;
 }
 ```
 
 **What was verified:**
 
-✅ **On-chain verification:**
-- Transactions exist on Midnight blockchain
-- Transactions were sent to this specific employee
-- Transactions are legitimate payments
+✅ **Off-chain cryptographic verification (Verifier Service):**
+- ZK proof is mathematically valid (EZKL verification)
+- Model was executed correctly
+- Computation matched the history_commitment
+- Output exceeded threshold
 
-✅ **Cryptographic verification:**
-- Merkle proof ensures transaction set consistency
-- ZK proof ensures correct model execution
-- ZK proof binds computation to these specific transactions
-- ZK proof proves output exceeded threshold
+✅ **On-chain trust-based verification (Smart Contract):**
+- Verifier is in the trusted set (whitelist)
+- Payment history commitment matches actual on-chain data
+- Attestation is fresh (within 1 hour)
+- Attestation hasn't been used before (replay protection)
 
 ✅ **Complete chain of trust:**
-- Company → Blockchain → Employee → ML Model → Proof → Verifier
-- Every link is cryptographically secured
-- No trust assumptions except blockchain consensus
+- Company → Blockchain Payments → Employee → ML Model → ZK Proof → Trusted Verifier → Attestation → Smart Contract
+- Cryptographic security (ZK proof) + Trust model (whitelisted verifiers)
+- Payment history binding prevents fake data
 
 ---
 
@@ -698,153 +711,152 @@ export circuit verify_credit_proof(
 
 ### Attack Scenarios and Why They Fail
 
-#### Attack 1: "I'll Use Fake Transaction IDs"
+#### Attack 1: "I'll Use Fake Payment History"
 
 ```
 Attacker strategy:
-- Create fake txids: 0xFAKE001, 0xFAKE002, ...
-- Generate ZK proof claiming high credit score
+- Create fake payment history: [$100k, $100k, $100k, ...]
+- Generate ZK proof with fake data
+- Compute fake history_commitment
+- Get verifier attestation
 - Submit to smart contract
 
 Execution:
-↓ Submit proof with fake txids
+↓ Submit attestation with fake history_commitment
 ↓ Smart contract runs verification
 
-Verification Step 1:
-for txid in [0xFAKE001, 0xFAKE002, ...] {
-  tx_exists = blockchain.transaction_exists(txid);
-  // Query Midnight blockchain...
-}
+Verification Step 2 (Payment History Validation):
+const payment_history = employee_payment_history.lookup(employee_id);
+const computed = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+// Computes hash of ACTUAL on-chain payment history
+
+assert(computed == submitted_history_commitment);
+// Checks: Does REAL hash == FAKE hash?
+// Answer: NO
 
 Result:
 ❌ ATTACK FAILS
 
 Why:
-- Midnight blockchain doesn't have transactions with these IDs
-- tx_exists returns FALSE
+- Contract has actual payment history on-chain
+- Contract recomputes the commitment from real data
+- Attacker's fake commitment doesn't match
 - Smart contract rejects proof immediately
-- Attack stopped at Step 1, never reaches ZK verification
 ```
 
-**Lesson:** Can't fake blockchain state. Transactions either exist or they don't.
+**Lesson:** Can't fake payment history. Contract validates against actual on-chain data.
 
 ---
 
-#### Attack 2: "I'll Use Someone Else's Transactions"
+#### Attack 2: "I'll Use Someone Else's Payment History"
 
 ```
 Attacker strategy:
-- Find rich person's wallet: 0xRichPerson
-- Query their transactions: [0xRICH001, 0xRICH002, ...]
-- These show high payments ($50,000/month)
-- Generate ZK proof using their txids
-- Claim these are MY payments
+- Find rich person's employee_id: 0xRichPerson
+- They have high payment history ($50k/month)
+- Compute THEIR history_commitment
+- Generate ZK proof claiming I have that history
+- Submit proof with their commitment
 
 Execution:
-↓ Submit proof with rich person's txids
-↓ Smart contract runs verification
-
-Verification Step 1:
-for txid in [0xRICH001, 0xRICH002, ...] {
-  tx_exists = blockchain.transaction_exists(txid);
-  ✓ TRUE (these transactions exist)
-
-  recipient = blockchain.get_recipient(txid);
-  // Returns: 0xRichPerson
-
-  assert(recipient == employee_wallet);
-  // Checks: Does 0xRichPerson == 0xAttacker?
-  // Answer: NO
-}
-
-Result:
-❌ ATTACK FAILS
-
-Why:
-- Transactions exist (✓ pass Step 1a)
-- But recipient is 0xRichPerson, not 0xAttacker
-- Recipient check fails
-- Smart contract rejects proof
-- Can't claim other people's transactions
-```
-
-**Lesson:** Blockchain records WHO received each payment. Can't steal credit for someone else's income.
-
----
-
-#### Attack 3: "I'll Create My Own Merkle Root"
-
-```
-Attacker strategy:
-- Use real transactions that belong to me: [0xMY001, 0xMY002, ...]
-- These are small payments ($500/month)
-- Create FAKE Merkle root claiming different transactions
-- Submit fake root: 0xFAKEROOT
-
-Execution:
-↓ Submit proof with fake Merkle root
+↓ Submit attestation with rich person's history_commitment
 ↓ Smart contract runs verification
 
 Verification Step 2:
-computed_root = compute_merkle_root([0xMY001, 0xMY002, ...]);
-// Smart contract recomputes root from actual txids
-// Result: 0xREALROOT123
+const payment_history = employee_payment_history.lookup(attacker_employee_id);
+// Looks up ATTACKER's actual payment history (not rich person's)
 
-assert(computed_root == claimed_merkle_root);
-// Checks: Does 0xREALROOT123 == 0xFAKEROOT?
+const computed = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+// Hashes ATTACKER's real (low) payment history
+
+assert(computed == rich_person_commitment);
+// Checks: Does ATTACKER's hash == RICH PERSON's hash?
 // Answer: NO
 
 Result:
 ❌ ATTACK FAILS
 
 Why:
-- Smart contract recomputes Merkle root from txids
-- Attacker's fake root doesn't match
-- Merkle mismatch detected
-- Can't claim different transaction set than reality
+- Contract looks up payment history by employee_id
+- Each employee_id maps to their OWN payment history
+- Can't use someone else's history_commitment
+- Attacker's real history doesn't match claimed commitment
 ```
 
-**Lesson:** Merkle roots are deterministic. Can't claim a different root for the same transactions.
+**Lesson:** Payment history is tied to employee_id. Can't steal credit for someone else's income.
 
 ---
 
-#### Attack 4: "I'll Fake the Transaction Amounts"
+#### Attack 3: "I'll Bypass the Verifier Service"
 
 ```
 Attacker strategy:
-- Use real txids that belong to me: [0xMY001, 0xMY002, ...]
-- Real amounts: [$500, $500, $500, ...] (low income)
-- In ML computation, CLAIM amounts are: [$7,500, $7,500, ...]
-- Generate ZK proof with fake amounts
+- Generate fake attestation without verifier
+- Create fake attestation_hash
+- Create fake verifier_pubkey
+- Submit directly to smart contract
 
 Execution:
-↓ Try to generate ZK proof
-↓ ZK circuit execution
+↓ Submit fake attestation to smart contract
+↓ Smart contract runs verification
 
-ZK Circuit Constraint 2 (Transaction Decryption):
-"I decrypted amounts from these txids using my private key"
-
-Circuit computes:
-amount[0] = decrypt(0xMY001, my_private_key)
-// Decryption returns: $500 (real amount from blockchain)
-
-Circuit checks:
-assert(amount[0] == claimed_amount[0])
-// Checks: Does $500 == $7,500?
+Verification Step 1 (Trust Check):
+assert(trusted_verifiers.member(fake_verifier_pubkey));
+// Checks: Is fake_verifier_pubkey in the trusted whitelist?
 // Answer: NO
 
 Result:
-❌ ATTACK FAILS at proof generation (never reaches verification)
+❌ ATTACK FAILS
 
 Why:
-- ZK circuit requires decrypting actual on-chain data
-- Decryption is deterministic (private key → exact amount)
-- Can't claim amounts different from blockchain
-- Proof generation fails before submission
-- Cryptography prevents this attack
+- Contract only trusts pre-approved verifiers
+- Attacker's fake verifier is not in the whitelist
+- Can't create attestations without trusted verifier
+- Verification stops immediately
 ```
 
-**Lesson:** Can't fake encrypted data. Decryption with private key gives exact amount from blockchain.
+**Lesson:** Only whitelisted verifiers can issue attestations. Can't bypass the trust model.
+
+---
+
+#### Attack 4: "I'll Fake the Payment Amounts in the ZK Proof"
+
+```
+Attacker strategy:
+- Use real payment history that belongs to me
+- Real amounts: [$500, $500, $500, ...] (low income)
+- In ML computation, CLAIM amounts are: [$7,500, $7,500, ...]
+- Generate ZK proof with fake amounts
+- Compute history_commitment from fake data
+
+Execution:
+↓ Try to generate ZK proof with fake amounts
+↓ Proof succeeds (based on fake data)
+↓ Compute fake_history_commitment from fake amounts
+↓ Get verifier attestation
+↓ Submit to smart contract
+
+Smart Contract Verification Step 2:
+const real_payment_history = employee_payment_history.lookup(employee_id);
+const real_commitment = persistentHash<Vector<12, PC_PaymentRecord>>(real_payment_history);
+// Computes hash from ACTUAL on-chain payment history ($500 each)
+
+assert(real_commitment == fake_history_commitment);
+// Checks: Does REAL hash ($500 amounts) == FAKE hash ($7,500 amounts)?
+// Answer: NO
+
+Result:
+❌ ATTACK FAILS at on-chain validation
+
+Why:
+- Contract has the actual payment history on-chain
+- Real amounts are $500 (encrypted but stored)
+- history_commitment from real data ≠ history_commitment from fake data
+- Smart contract detects the mismatch
+- Proof is rejected
+```
+
+**Lesson:** Can't fake payment amounts. Contract validates history_commitment against actual on-chain data.
 
 ---
 
@@ -947,36 +959,42 @@ Why:
 
 **The binding works because:**
 
-1. **On-chain state is immutable**
-   - Transactions on Midnight can't be faked
+1. **On-chain payment history is immutable**
+   - Payment records stored on Midnight blockchain
+   - Contract ledger maintains employee_payment_history
    - Blockchain consensus ensures integrity
 
-2. **Merkle proofs are deterministic**
-   - Same transactions → same Merkle root
-   - Different transactions → different root
-   - Can't claim different set
+2. **History commitments are deterministic**
+   - Same payment history → same persistentHash
+   - Different payments → different commitment
+   - Contract can recompute and verify
 
-3. **Decryption is deterministic**
-   - Private key + encrypted amount → exact value
-   - Can't claim different amounts
-   - Cryptography enforces this
+3. **Trusted verifier model**
+   - Only whitelisted verifiers can issue attestations
+   - Bad verifiers can be removed from trusted set
+   - Verifiers stake their reputation
 
 4. **Verification keys are specific**
    - One model → one verification key
    - Different model → verification fails
-   - Mathematical binding
+   - Mathematical binding (EZKL)
 
 5. **ZK circuits enforce completeness**
    - All constraints must be satisfied
    - Can't skip operations
    - Can't modify computation
 
-**All five mechanisms together create an unbreakable chain:**
+6. **Replay protection and freshness**
+   - Each attestation used only once
+   - Time-limited validity (1 hour)
+   - Prevents reuse attacks
+
+**All six mechanisms together create a secure chain:**
 ```
-Blockchain State → Merkle Proof → Decryption → ML Computation → ZK Proof
+Blockchain Payments → Payment History → history_commitment → ZK Proof → Verifier Attestation → Smart Contract
 
 If ANY link is broken → verification fails
-Must be honest at EVERY step to generate valid proof
+Must be honest at EVERY step to submit valid proof
 ```
 
 ---
@@ -1190,79 +1208,77 @@ submit_to_midnight(
 
 **Contract Structure:**
 ```compact
-// PayrollRegistry.compact
-export ledger companies: Map<Bytes<32>, Company>;
-export ledger employees: Map<Bytes<32>, Employee>;
-export ledger payments: Map<Bytes<32>, Payment>;
+// Payroll.compact
+export ledger employee_payment_history: Map<Bytes<32>, Vector<12, PC_PaymentRecord>>;
+export ledger income_proofs: Map<Bytes<32>, IncomeProof>;
+export ledger trusted_verifiers: Set<Bytes<32>>;
 
-// CreditScoring.compact
-export ledger credit_models: Map<Bytes<32>, ModelMetadata>;
-export ledger credit_approvals: Map<Bytes<32>, CreditApproval>;
-
-struct ModelMetadata {
-  model_hash: Bytes<32>,
-  verification_key: Bytes<512>,
-  name: String,
-  version: String,
-  published_date: Uint<32>
+struct PC_PaymentRecord {
+  amount: EncryptedAmount,
+  timestamp: Uint<64>,
+  payment_type: Uint<8>
 }
 
-struct CreditApproval {
-  employee_wallet: Bytes<32>,
-  threshold: Uint<64>,
-  txids_merkle_root: Bytes<32>,
-  timestamp: Uint<32>,
-  expires_at: Uint<32>
+struct IncomeProof {
+  proof_type: Uint<8>,           // 1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  history_commitment: Bytes<32>, // persistentHash of payment history
+  attestation_hash: Bytes<32>,   // Verifier's cryptographic commitment
+  verifier_pubkey: Bytes<32>,    // Identifies the verifier
+  verified_at: Uint<64>,
+  expires_at: Uint<64>
 }
 ```
 
-**Verification Circuit:**
+**Income Proof Submission Circuit:**
 ```compact
-export circuit verify_credit_proof(
-  proof: Bytes<512>,
-  employee_wallet: Bytes<32>,
-  txids: Vector<6, Bytes<32>>,
-  merkle_root: Bytes<32>,
-  threshold: Uint<64>,
-  model_hash: Bytes<32>
+export circuit submit_income_proof(
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,              // 1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  txids: Vector<12, Bytes<32>>,     // Payment transaction IDs (reference only)
+  history_commitment: Bytes<32>,    // persistentHash<Vector<12, PC_PaymentRecord>>
+  attestation_hash: Bytes<32>,      // hash(data + verifier_secret)
+  verifier_pubkey: Bytes<32>,       // Identifies the verifier
+  timestamp: Uint<64>,
+  expires_in: Uint<64>
 ): Boolean {
 
-  // Get model metadata
-  const model = credit_models.lookup(disclose(model_hash));
-  assert(model.exists, "Model not registered");
+  // Verify verifier is trusted
+  assert(trusted_verifiers.member(verifier_pubkey), "Verifier not trusted");
 
-  // Verify transactions
-  for txid in txids {
-    const tx_valid = verify_transaction(txid, employee_wallet);
-    assert(tx_valid, "Invalid transaction");
-  }
+  // Get employee's actual payment history
+  const payment_history = employee_payment_history.lookup(employee_id);
 
-  // Verify Merkle root
-  const computed_root = compute_merkle_root(txids);
-  assert(computed_root == merkle_root, "Merkle mismatch");
+  // Compute commitment from actual payment history
+  const computed_commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
 
-  // Verify ZK proof
-  const proof_valid = midnight_verify_zkproof(
-    proof,
-    [txids, merkle_root, threshold, model_hash],
-    model.verification_key
-  );
+  // Verify submitted commitment matches actual history
+  assert(computed_commitment == history_commitment, "Payment history mismatch");
 
-  assert(proof_valid, "Proof invalid");
+  // Replay protection
+  assert(!income_proofs.member(employee_id), "Proof already submitted");
 
-  // Store approval
-  const approval = CreditApproval {
-    employee_wallet: employee_wallet,
-    threshold: threshold,
-    txids_merkle_root: merkle_root,
-    timestamp: current_timestamp(),
-    expires_at: current_timestamp() + 2592000  // 30 days
+  // Freshness check
+  const current_time = current_timestamp();
+  assert(timestamp <= current_time, "Future timestamp");
+  assert(timestamp >= current_time - 3600, "Attestation expired");
+
+  // Store income proof
+  const proof_data = IncomeProof {
+    proof_type: proof_type,
+    threshold_min: threshold_min,
+    threshold_max: threshold_max,
+    history_commitment: history_commitment,
+    attestation_hash: attestation_hash,
+    verifier_pubkey: verifier_pubkey,
+    verified_at: timestamp,
+    expires_at: timestamp + expires_in
   };
 
-  credit_approvals.insert(
-    disclose(employee_wallet),
-    disclose(approval)
-  );
+  income_proofs.insert(employee_id, proof_data);
 
   return true;
 }
@@ -1307,7 +1323,7 @@ zkSalaria's ZKML system provides:
 ✅ **Decentralization:** No trusted third parties
 
 **The key innovation:**
-> Binding off-chain ML computation to on-chain blockchain data through Merkle proofs and ZK circuits, creating a complete chain of cryptographic trust.
+> Binding off-chain ML computation to on-chain blockchain data through payment history commitments and trusted verifier attestations, creating a complete chain of cryptographic and trust-based verification.
 
 This enables insights (credit scoring, fairness analysis, fraud detection) that are legally impossible with traditional systems, while maintaining stronger privacy guarantees than centralized alternatives.
 

@@ -68,7 +68,7 @@ export class AttestationSigner {
       publicInputs.employee_id,
       publicInputs.threshold,
       publicInputs.txids,
-      publicInputs.merkle_root,
+      publicInputs.history_commitment,
       timestamp
     );
 
@@ -76,7 +76,7 @@ export class AttestationSigner {
       employee_id: publicInputs.employee_id,
       threshold: publicInputs.threshold.toString(),
       txids: publicInputs.txids,
-      merkle_root: publicInputs.merkle_root,
+      history_commitment: publicInputs.history_commitment,
       timestamp: timestamp,
       attestation_hash: attestation_hash,
       // verifier_secret is NEVER exposed - it stays on the server for security
@@ -92,7 +92,7 @@ export class AttestationSigner {
     employeeId: string,
     threshold: number,
     txids: string[],
-    merkleRoot: string,
+    historyCommitment: string,
     timestamp: number
   ): string {
     // Step 1: Hash the data
@@ -113,9 +113,9 @@ export class AttestationSigner {
       dataHash.update(txBuf);
     });
 
-    // Add merkle root
-    const merkleBuf = Buffer.from(merkleRoot.replace(/^0x/, ''), 'hex');
-    dataHash.update(merkleBuf);
+    // Add history commitment
+    const commitmentBuf = Buffer.from(historyCommitment.replace(/^0x/, ''), 'hex');
+    dataHash.update(commitmentBuf);
 
     // Add timestamp (8 bytes, little-endian)
     const timestampBuf = Buffer.alloc(8);

@@ -26,7 +26,7 @@ async function testVerifier() {
         employee_id: '0x1234567890abcdef',
         threshold: 5000,
         txids: ['0xTX001', '0xTX002', '0xTX003'],
-        merkle_root: '0xMERKLEROOT123456'
+        history_commitment: '0xHISTORY_COMMITMENT_123456'
       }
     };
     console.log('✅ Request created with public inputs');
@@ -55,7 +55,7 @@ async function testVerifier() {
       console.log(`   Employee ID: ${result.attestation.employee_id}`);
       console.log(`   Threshold: ${result.attestation.threshold}`);
       console.log(`   TxIDs: ${result.attestation.txids.join(', ')}`);
-      console.log(`   Merkle Root: ${result.attestation.merkle_root}`);
+      console.log(`   History Commitment: ${result.attestation.history_commitment}`);
       console.log(`   Timestamp: ${result.attestation.timestamp}`);
       console.log(`   Attestation Hash: ${result.attestation.attestation_hash.substring(0, 16)}...`);
       console.log(`   Verifier PubKey: ${result.attestation.verifier_pubkey.substring(0, 16)}...`);

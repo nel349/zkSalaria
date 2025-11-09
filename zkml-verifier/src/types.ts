@@ -11,7 +11,7 @@ export interface ProofPublicInputs {
   employee_id: string;
   threshold: number;
   txids: string[];
-  merkle_root: string;
+  history_commitment: string;
 }
 
 export interface VerifyProofRequest {
@@ -23,7 +23,7 @@ export interface Attestation {
   employee_id: string;
   threshold: string;
   txids: string[];
-  merkle_root: string;
+  history_commitment: string;
   timestamp: number;
   attestation_hash: string;
   // verifier_secret is NEVER exposed - removed for security

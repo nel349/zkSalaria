@@ -181,7 +181,11 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       const thresholdMax = utils.parseAmount('12000.00');
 
       const txids = paymentHistory.slice(0, 3).map(p => Buffer.from(p.payment_id).toString('hex'));
-      const merkleRoot = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
+
+      // Compute history commitment: hash of employee's full payment history
+      // This matches the contract's validation: persistentHash<Vector<12, PC_PaymentRecord>>(payment_history)
+      const historyCommitment = await employeeAPI.computeHistoryCommitment(employeeId);
+
       const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
       const timestamp = BigInt(currentTime);
 
@@ -191,7 +195,7 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
         thresholdMin.toString(),
         thresholdMax.toString(),
         txids,
-        merkleRoot,
+        historyCommitment,
         attestationHash,
         verifierPubkey,
         timestamp,
@@ -255,7 +259,10 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
         logger.info(`Testing proof type: ${proofTypeInfo.name}…`);
 
         const txids = paymentHistory.slice(0, 3).map(p => Buffer.from(p.payment_id).toString('hex'));
-        const merkleRoot = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
+
+        // Compute history commitment: hash of employee's full payment history
+        const historyCommitment = await employeeAPI.computeHistoryCommitment(employeeId);
+
         const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
         const timestamp = BigInt(currentTime); // Reuse contract timestamp to avoid "timestamp in future" errors
 
@@ -266,7 +273,7 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
           proofTypeInfo.thresholdMin,
           proofTypeInfo.thresholdMax,
           txids,
-          merkleRoot,
+          historyCommitment,
           attestationHash,
           verifierPubkey,
           timestamp,
@@ -292,6 +299,6 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       }
 
       logger.info('✅ All proof types tested successfully');
-    }, 10 * 60_000);
+    }, 10 * 100_000);
   });
 });

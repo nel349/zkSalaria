@@ -35,9 +35,11 @@ export const stringToBytes64 = (str: string): Uint8Array => {
 
 // Convert hex string to Bytes<32>
 export const hexToBytes32 = (hex: string): Uint8Array => {
+  // Strip '0x' prefix if present
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
   const bytes = new Uint8Array(32);
-  for (let i = 0; i < Math.min(hex.length, 64); i += 2) {
-    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  for (let i = 0; i < Math.min(cleanHex.length, 64); i += 2) {
+    bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
   }
   return bytes;
 };
@@ -58,6 +60,13 @@ export const randomBytes = (size: number): Uint8Array => {
     out[i] = Math.floor(Math.random() * 256);
   }
   return out;
+};
+
+// Convert bytes to hex string with '0x' prefix
+export const bytesToHex = (bytes: Uint8Array): string => {
+  return '0x' + Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 };
 
 /**

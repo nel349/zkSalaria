@@ -17,7 +17,7 @@ import {
   ModelManager,
   calculateCreditScore,
   calculateAverageIncome
-} from '../../../zkml/payroll/src/index.js';
+} from '../../../zkml/payroll/src/index';
 
 describe('zkSalaria Comprehensive ZKML Integration', () => {
   let payroll: PayrollMultiPartyTestSetup;
@@ -71,11 +71,23 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       const THRESHOLD_MIN = 5000n;
       const THRESHOLD_MAX = 10000n;
       const TXIDS = Array(12).fill(0).map((_, i) => `0xTX00${i + 1}`.padEnd(64, '0'));
-      const MERKLE_ROOT = '0xMERKLE_ROOT_PAYMENT_HISTORY'.padEnd(64, '0');
       const ATTESTATION_HASH = 'ec8a4ef5e5b0e8c6c7f8e9f0e1e2e3e4e5e6e7e8e9e0e1e2e3e4e5e6e7e8e9e0';
+      let HISTORY_COMMITMENT: string;
 
       beforeEach(() => {
         payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
+
+        // Setup: Add employee and create payment history (required for history_commitment verification)
+        payroll.addEmployee(EMPLOYEE_ID);
+        payroll.depositCompanyFunds(200000n);
+
+        // Create payment history (12 payments to fill the rolling window)
+        for (let i = 0; i < 12; i++) {
+          payroll.payEmployee(EMPLOYEE_ID, 5000n + BigInt(i * 100), 0); // SALARY payments
+        }
+
+        // Compute history commitment from actual payment history
+        HISTORY_COMMITMENT = payroll.computeHistoryCommitment(EMPLOYEE_ID);
       });
 
       test('should submit INCOME_ABOVE_THRESHOLD proof (type 1)', () => {
@@ -90,7 +102,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n, // threshold_max not used for type 1
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH,
           VERIFIER_PUBKEY,
           timestamp,
@@ -117,7 +129,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           THRESHOLD_MAX,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH,
           VERIFIER_PUBKEY,
           timestamp,
@@ -145,7 +157,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH + '1', // Different hash
           VERIFIER_PUBKEY,
           timestamp,
@@ -172,7 +184,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           creditScoreThreshold,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH + '2', // Different hash
           VERIFIER_PUBKEY,
           timestamp,
@@ -198,7 +210,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH,
           VERIFIER_PUBKEY,
           timestamp,
@@ -224,7 +236,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH,
           untrustedVerifier,
           timestamp,
@@ -249,7 +261,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH,
           VERIFIER_PUBKEY,
           timestamp,
@@ -265,7 +277,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH, // Same attestation hash
           VERIFIER_PUBKEY,
           timestamp,
@@ -290,7 +302,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           THRESHOLD_MIN, // threshold_max == threshold_min (invalid)
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           ATTESTATION_HASH,
           VERIFIER_PUBKEY,
           timestamp,
@@ -310,10 +322,22 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       const THRESHOLD_MIN = 5000n;
       const THRESHOLD_MAX = 10000n;
       const TXIDS = Array(12).fill(0).map((_, i) => `0xTX00${i + 1}`.padEnd(64, '0'));
-      const MERKLE_ROOT = '0xMERKLE_ROOT_PAYMENT_HISTORY'.padEnd(64, '0');
+      let HISTORY_COMMITMENT: string;
 
       beforeEach(() => {
         payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
+
+        // Setup: Add employee and create payment history (required for history_commitment verification)
+        payroll.addEmployee(EMPLOYEE_ID);
+        payroll.depositCompanyFunds(200000n);
+
+        // Create payment history (12 payments to fill the rolling window)
+        for (let i = 0; i < 12; i++) {
+          payroll.payEmployee(EMPLOYEE_ID, 5000n + BigInt(i * 100), 0); // SALARY payments
+        }
+
+        // Compute history commitment from actual payment history
+        HISTORY_COMMITMENT = payroll.computeHistoryCommitment(EMPLOYEE_ID);
       });
 
       test('should verify INCOME_ABOVE_THRESHOLD when threshold is met', () => {
@@ -327,7 +351,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN, // Employee proved $5000
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash001',
           VERIFIER_PUBKEY,
           timestamp,
@@ -352,7 +376,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN, // Employee proved $5000
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash002',
           VERIFIER_PUBKEY,
           timestamp,
@@ -377,7 +401,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN, // $5000
           THRESHOLD_MAX, // $10000
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash003',
           VERIFIER_PUBKEY,
           timestamp,
@@ -402,7 +426,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN, // $5000
           THRESHOLD_MAX, // $10000
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash004',
           VERIFIER_PUBKEY,
           timestamp,
@@ -427,7 +451,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash005',
           VERIFIER_PUBKEY,
           timestamp,
@@ -451,7 +475,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           700n, // Credit score 700
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash006',
           VERIFIER_PUBKEY,
           timestamp,
@@ -476,7 +500,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash007',
           VERIFIER_PUBKEY,
           timestamp,
@@ -502,7 +526,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
           THRESHOLD_MIN,
           0n,
           TXIDS,
-          MERKLE_ROOT,
+          HISTORY_COMMITMENT,
           'hash008',
           VERIFIER_PUBKEY,
           timestamp,
@@ -570,8 +594,16 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
 
       const employeeId = 'EMP_REAL_001';
+
+      // Setup: Add employee and create payment history (required for history_commitment verification)
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(200000n);
+      for (let i = 0; i < 12; i++) {
+        payroll.payEmployee(employeeId, BigInt(payments[i]), 0); // Use actual payment amounts from proof
+      }
+
       const txids = Array(12).fill(0).map((_, i) => `0xTX_REAL_${i + 1}`.padEnd(64, '0'));
-      const merkleRoot = '0xMERKLE_ROOT_REAL'.padEnd(64, '0');
+      const historyCommitment = payroll.computeHistoryCommitment(employeeId); // Compute actual hash
       const attestationHash = 'real_attestation_hash_001'.padEnd(64, '0');
       const timestamp = BigInt(payroll.getCurrentTimestamp());
 
@@ -581,7 +613,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         BigInt(threshold),
         0n,
         txids,
-        merkleRoot,
+        historyCommitment,
         attestationHash,
         VERIFIER_PUBKEY,
         timestamp,
@@ -627,7 +659,17 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
       const employeeId = 'EMP_REAL_002';
+
+      // Setup: Add employee and create payment history
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(300000n);
+      for (let i = 0; i < 12; i++) {
+        payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
+      }
+
       const timestamp = BigInt(payroll.getCurrentTimestamp());
+
+      const historyCommitmentEmp2 = payroll.computeHistoryCommitment(employeeId); // Compute actual hash
 
       payroll.submitIncomeProof(
         employeeId,
@@ -635,7 +677,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         BigInt(thresholdMin),
         BigInt(thresholdMax),
         Array(12).fill('0x').map((_, i) => `${_}TX${i}`.padEnd(64, '0')),
-        '0xMERKLE'.padEnd(64, '0'),
+        historyCommitmentEmp2,
         'attestation_002'.padEnd(64, '0'),
         VERIFIER_PUBKEY,
         timestamp,
@@ -674,7 +716,16 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
       const employeeId = 'EMP_REAL_003';
+
+      // Setup: Add employee and create payment history
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(500000n);
+      for (let i = 0; i < 12; i++) {
+        payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
+      }
+
       const timestamp = BigInt(payroll.getCurrentTimestamp());
+      const historyCommitmentEmp3 = payroll.computeHistoryCommitment(employeeId); // Compute actual hash
 
       payroll.submitIncomeProof(
         employeeId,
@@ -682,7 +733,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         BigInt(threshold),
         0n,
         Array(12).fill('0x').map((_, i) => `${_}TX${i}`.padEnd(64, '0')),
-        '0xMERKLE'.padEnd(64, '0'),
+        historyCommitmentEmp3,
         'attestation_003'.padEnd(64, '0'),
         VERIFIER_PUBKEY,
         timestamp,
@@ -721,7 +772,16 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       payroll.registerTrustedVerifier(VERIFIER_PUBKEY);
       const employeeId = 'EMP_REAL_004';
+
+      // Setup: Add employee and create payment history
+      payroll.addEmployee(employeeId);
+      payroll.depositCompanyFunds(250000n);
+      for (let i = 0; i < 12; i++) {
+        payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
+      }
+
       const timestamp = BigInt(payroll.getCurrentTimestamp());
+      const historyCommitmentEmp4 = payroll.computeHistoryCommitment(employeeId); // Compute actual hash
 
       payroll.submitIncomeProof(
         employeeId,
@@ -729,7 +789,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         BigInt(Math.floor(creditScore)),
         0n,
         Array(12).fill('0x').map((_, i) => `${_}TX${i}`.padEnd(64, '0')),
-        '0xMERKLE'.padEnd(64, '0'),
+        historyCommitmentEmp4,
         'attestation_004'.padEnd(64, '0'),
         VERIFIER_PUBKEY,
         timestamp,
@@ -751,8 +811,18 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Employee 1: Junior dev with INCOME_ABOVE_THRESHOLD
       console.log('\n👤 Employee 1: Junior Developer (INCOME_ABOVE_THRESHOLD)');
       const emp1Payments = [5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100];
+
+      // Setup EMP_JUNIOR with payment history
+      payroll.addEmployee('EMP_JUNIOR');
+      payroll.depositCompanyFunds(300000n);
+      for (let i = 0; i < 12; i++) {
+        payroll.payEmployee('EMP_JUNIOR', BigInt(emp1Payments[i]), 0);
+      }
+
       const emp1Proof = await generateIncomeProof(ProofType.INCOME_ABOVE_THRESHOLD, emp1Payments, 4500);
       expect(emp1Proof.success).toBe(true);
+
+      const historyCommitmentJunior = payroll.computeHistoryCommitment('EMP_JUNIOR');
 
       payroll.submitIncomeProof(
         'EMP_JUNIOR',
@@ -760,7 +830,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         4500n,
         0n,
         Array(12).fill('0x').map((_, i) => `${_}J${i}`.padEnd(64, '0')),
-        '0xJUNIOR'.padEnd(64, '0'),
+        historyCommitmentJunior,
         'att_junior'.padEnd(64, '0'),
         VERIFIER_PUBKEY,
         BigInt(payroll.getCurrentTimestamp()),
@@ -770,8 +840,17 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Employee 2: Mid-level with INCOME_RANGE
       console.log('👤 Employee 2: Mid-Level (INCOME_RANGE)');
       const emp2Payments = [7000, 7200, 7400, 7600, 7800, 8000, 8200, 8400, 8600, 8800, 9000, 9200];
+
+      // Setup EMP_MID with payment history
+      payroll.addEmployee('EMP_MID');
+      for (let i = 0; i < 12; i++) {
+        payroll.payEmployee('EMP_MID', BigInt(emp2Payments[i]), 0);
+      }
+
       const emp2Proof = await generateIncomeProof(ProofType.INCOME_RANGE, emp2Payments, 7000, 9500);
       expect(emp2Proof.success).toBe(true);
+
+      const historyCommitmentMid = payroll.computeHistoryCommitment('EMP_MID');
 
       payroll.submitIncomeProof(
         'EMP_MID',
@@ -779,7 +858,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         7000n,
         9500n,
         Array(12).fill('0x').map((_, i) => `${_}M${i}`.padEnd(64, '0')),
-        '0xMID'.padEnd(64, '0'),
+        historyCommitmentMid,
         'att_mid'.padEnd(64, '0'),
         VERIFIER_PUBKEY,
         BigInt(payroll.getCurrentTimestamp()),

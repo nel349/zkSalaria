@@ -166,7 +166,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       //   minThreshold,
       //   maxThreshold || '0',
       //   [], // txids (mock for now)
-      //   '0x0000000000000000000000000000000000000000000000000000000000000000', // merkleRoot (mock)
+      //   '0x0000000000000000000000000000000000000000000000000000000000000000', // historyCommitment (mock)
       //   '0x0000000000000000000000000000000000000000000000000000000000000000', // attestationHash (mock)
       //   verifierEmail || '0x0000000000000000000000000000000000000000000000000000000000000000', // verifierPubkey
       //   BigInt(Math.floor(Date.now() / 1000)),

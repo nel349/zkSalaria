@@ -1064,7 +1064,7 @@ export circuit submit_income_proof(
   threshold_min: Uint<64>,
   threshold_max: Uint<64>,
   txids: Vector<12, Bytes<32>>,
-  merkle_root: Bytes<32>,
+  history_commitment: Bytes<32>,
   attestation_hash: Bytes<32>,
   verifier_pubkey: Bytes<32>,
   timestamp: Uint<64>,
@@ -1104,17 +1104,32 @@ export circuit submit_income_proof(
     }
   }
 
-  // Step 6: Calculate expiration time
+  // Step 6: Verify history commitment matches employee's payment history
+  // This critical step ensures the ZKML proof was generated using actual on-chain payment data
+  // and prevents attacks where someone generates proofs using fake high salaries
+  // NOTE: history_commitment is a hash of the payment history vector, not a true Merkle tree
+  if (!employee_payment_history.member(disclose(employee_id))) {
+    return false; // Employee has no payment history
+  }
+
+  const payment_history = employee_payment_history.lookup(disclose(employee_id));
+  const computed_commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+
+  if (disclose(history_commitment) != computed_commitment) {
+    return false; // History commitment doesn't match on-chain payment history - possible fraud!
+  }
+
+  // Step 7: Calculate expiration time
   const expiration_time = (current_timestamp + disclose(expires_in)) as Uint<32>;
 
-  // Step 7: Store income proof in ledger
+  // Step 8: Store income proof in ledger
   const income_proof = PC_IncomeProof {
     employee_id: disclose(employee_id),
     proof_type: disclose(proof_type),
     threshold_min: disclose(threshold_min),
     threshold_max: disclose(threshold_max),
     txids: disclose(txids),
-    merkle_root: disclose(merkle_root),
+    history_commitment: disclose(history_commitment),
     attestation_hash: disclose(attestation_hash),
     verifier_pubkey: disclose(verifier_pubkey),
     submitted_at: current_timestamp,
@@ -1189,4 +1204,18 @@ export circuit verify_income_proof(
 export circuit update_timestamp(new_timestamp: Uint<32>): [] {
   assert(new_timestamp > current_timestamp, "Timestamp must be in the future");
   current_timestamp = disclose(new_timestamp);
+}
+
+// Helper circuit to compute history commitment for an employee
+// Returns the persistentHash of the employee's payment history
+// This is used by tests and API to compute the correct history_commitment value
+export circuit compute_history_commitment(employee_id: Bytes<32>): Bytes<32> {
+  if (!employee_payment_history.member(disclose(employee_id))) {
+    return 0x0000000000000000000000000000000000000000000000000000000000000000 as Bytes<32>; // Return zero hash if no payment history
+  }
+
+  const payment_history = employee_payment_history.lookup(disclose(employee_id));
+  const commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+
+  return commitment as Bytes<32>;
 }

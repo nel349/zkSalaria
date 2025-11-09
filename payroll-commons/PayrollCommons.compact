@@ -109,7 +109,7 @@ module PayrollCommons {
     threshold_min: Uint<64>;          // Minimum threshold proven (e.g., "income > $5000")
     threshold_max: Uint<64>;          // Maximum threshold (0 for non-range proofs)
     txids: Vector<12, Bytes<32>>;     // Transaction IDs used in proof (12 months max)
-    merkle_root: Bytes<32>;           // Merkle root of payment history
+    history_commitment: Bytes<32>;    // Commitment hash of payment history (binds proof to on-chain data)
     attestation_hash: Bytes<32>;      // Hash of the ZKML proof
     verifier_pubkey: Bytes<32>;       // Trusted verifier who signed this
     submitted_at: Uint<32>;           // When proof was submitted

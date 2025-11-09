@@ -103,7 +103,7 @@ export interface DeployedPayrollAPI {
     thresholdMin: string,
     thresholdMax: string,
     txids: Array<string>,
-    merkleRoot: string,
+    historyCommitment: string,
     attestationHash: string,
     verifierPubkey: string,
     timestamp: bigint,
@@ -111,6 +111,7 @@ export interface DeployedPayrollAPI {
   ): Promise<boolean>;
   verifyIncomeProof(employeeId: string, requiredProofType: bigint, requiredThreshold: string): Promise<boolean>;
   getIncomeProof(employeeId: string): Promise<any | null>;
+  computeHistoryCommitment(employeeId: string): Promise<string>;
 }
 
 /**
@@ -1032,7 +1033,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     thresholdMin: string,
     thresholdMax: string,
     txids: Array<string>,
-    merkleRoot: string,
+    historyCommitment: string,
     attestationHash: string,
     verifierPubkey: string,
     timestamp: bigint,
@@ -1045,12 +1046,13 @@ export class PayrollAPI implements DeployedPayrollAPI {
         thresholdMin,
         thresholdMax,
         txidsCount: txids.length,
+        historyCommitment,
         expiresIn,
       },
     });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
-    const merkleRootBytes = utils.hexToBytes32(merkleRoot);
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
+    const historyCommitmentBytes = utils.hexToBytes32(historyCommitment);
     const attestationHashBytes = utils.hexToBytes32(attestationHash);
     const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
 
@@ -1067,7 +1069,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
       utils.parseAmount(thresholdMin),
       utils.parseAmount(thresholdMax),
       txidVector,
-      merkleRootBytes,
+      historyCommitmentBytes,
       attestationHashBytes,
       verifierPubkeyBytes,
       timestamp,
@@ -1084,7 +1086,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
   ): Promise<boolean> {
     this.logger?.info({ verifyIncomeProof: { employeeId, requiredProofType, requiredThreshold } });
 
-    const employeeIdBytes = utils.stringToBytes32(employeeId);
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
 
     const result = await this.circuits.verify_income_proof(
       employeeIdBytes,
@@ -1097,8 +1099,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
   }
 
   async getIncomeProof(employeeId: string): Promise<any | null> {
-    const normalizedId = utils.normalizeId(employeeId);
-    const employeeIdBytes = utils.stringToBytes32(normalizedId);
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
 
     const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
     if (!state) {
@@ -1112,6 +1113,44 @@ export class PayrollAPI implements DeployedPayrollAPI {
     }
 
     return ledgerState.income_proofs.lookup(employeeIdBytes);
+  }
+
+  /**
+   * Compute history commitment for employee's payment history
+   * Uses the contract's compute_history_commitment circuit to ensure consistency
+   * with on-chain validation: persistentHash<Vector<12, PC_PaymentRecord>>(payment_history)
+   *
+   * @param employeeId - Employee wallet address
+   * @returns Hex-encoded hash commitment (with '0x' prefix)
+   */
+  async computeHistoryCommitment(employeeId: string): Promise<string> {
+    const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
+
+    // Call the contract's compute_history_commitment circuit
+    // This ensures we get the exact same hash as the on-chain validation
+    const result = await this.circuits.compute_history_commitment(employeeIdBytes);
+
+    if (!result) {
+      throw new Error(`Failed to compute history commitment for employee: ${employeeId}`);
+    }
+
+    // Extract the Bytes<32> result from the circuit
+    const hashBytes = result.private.result;
+
+    // Convert result bytes to hex with '0x' prefix
+    const hex = '0x' + Array.from(hashBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    this.logger?.info({
+      computeHistoryCommitment: {
+        employeeId,
+        hashBytesLength: hashBytes.length,
+        hashHex: hex
+      }
+    });
+
+    return hex;
   }
 
   // ========================================

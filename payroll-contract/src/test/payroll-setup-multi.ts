@@ -6,7 +6,7 @@ import {
   sampleContractAddress,
   QueryContext,
 } from '@midnight-ntwrk/compact-runtime';
-import { stringToBytes32, stringToBytes64, hexToBytes32 } from './utils.js';
+import { stringToBytes32, stringToBytes64, hexToBytes32, bytesToHex } from './utils.js';
 import type { RecurringPayment } from '../types.js';
 
 // Participant represents a company or employee with their own private state
@@ -786,7 +786,7 @@ export class PayrollMultiPartyTestSetup {
     thresholdMin: bigint,
     thresholdMax: bigint,
     txids: string[], // Array of 12 hex strings
-    merkleRoot: string,
+    historyCommitment: string,
     attestationHash: string,
     verifierPubkey: string,
     timestamp: bigint,
@@ -797,14 +797,14 @@ export class PayrollMultiPartyTestSetup {
     const employeeIdBytes = stringToBytes32(employeeId);
     const proofTypeU8 = BigInt(proofType); // Convert to bigint for Uint<8>
     const txidsVector = txids.map(tx => hexToBytes32(tx));
-    const merkleRootBytes = hexToBytes32(merkleRoot);
+    const historyCommitmentBytes = hexToBytes32(historyCommitment);
     const attestationHashBytes = hexToBytes32(attestationHash);
     const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
     const expiresInU32 = BigInt(expiresIn); // Convert to bigint for Uint<32>
 
     this.executeAsParticipant(
       this.companyId,
-      (ctx, empId, pType, thMin, thMax, txs, mr, attHash, vpBytes, ts, exp) =>
+      (ctx, empId, pType, thMin, thMax, txs, hc, attHash, vpBytes, ts, exp) =>
         this.contract.impureCircuits.submit_income_proof(
           ctx,
           empId,
@@ -812,7 +812,7 @@ export class PayrollMultiPartyTestSetup {
           thMin,
           thMax,
           txs,
-          mr,
+          hc,
           attHash,
           vpBytes,
           ts,
@@ -823,7 +823,7 @@ export class PayrollMultiPartyTestSetup {
       thresholdMin,
       thresholdMax,
       txidsVector,
-      merkleRootBytes,
+      historyCommitmentBytes,
       attestationHashBytes,
       verifierPubkeyBytes,
       timestamp,
@@ -880,5 +880,26 @@ export class PayrollMultiPartyTestSetup {
     }
 
     return isValid;
+  }
+
+  /**
+   * Compute history commitment for an employee's payment history
+   * Uses the contract's compute_history_commitment circuit to get the correct hash
+   */
+  computeHistoryCommitment(employeeId: string): string {
+    const employeeIdBytes = stringToBytes32(employeeId);
+
+    // Use executeAsParticipant to call the circuit
+    const result = this.executeAsParticipant(
+      this.companyId,
+      (ctx, eidBytes) => this.contract.impureCircuits.compute_history_commitment(ctx, eidBytes),
+      employeeIdBytes
+    );
+
+    if (!result) {
+      throw new Error(`Failed to compute history commitment for employee: ${employeeId}`);
+    }
+
+    return bytesToHex(result);
   }
 }
