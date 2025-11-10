@@ -8,20 +8,20 @@ import sys
 import ezkl
 import json
 
-def generate_proof(model_path: str, pk_path: str, input_data_path: str, witness_output: str, proof_output: str) -> bool:
+def generate_proof(onnx_path: str, compiled_path: str, pk_path: str, input_data_path: str, witness_output: str, proof_output: str) -> bool:
     """Generate a ZK proof using EZKL"""
     try:
-        # Step 1: Generate witness
+        # Step 1: Generate witness from compiled model
         ezkl.gen_witness(
             data=input_data_path,
-            model=model_path,
+            model=compiled_path,
             output=witness_output
         )
 
-        # Step 2: Generate proof
+        # Step 2: Generate proof from compiled circuit
         ezkl.prove(
             witness=witness_output,
-            model=model_path,
+            model=compiled_path,
             pk_path=pk_path,
             proof_path=proof_output,
             proof_type="single"
@@ -33,17 +33,18 @@ def generate_proof(model_path: str, pk_path: str, input_data_path: str, witness_
         return False
 
 if __name__ == "__main__":
-    if len(sys.argv) < 6:
-        print("Usage: generate_proof.py <model_path> <pk_path> <input_data> <witness_output> <proof_output>", file=sys.stderr)
+    if len(sys.argv) < 7:
+        print("Usage: generate_proof.py <onnx_path> <compiled_path> <pk_path> <input_data> <witness_output> <proof_output>", file=sys.stderr)
         sys.exit(1)
 
-    model_path = sys.argv[1]
-    pk_path = sys.argv[2]
-    input_data = sys.argv[3]
-    witness_output = sys.argv[4]
-    proof_output = sys.argv[5]
+    onnx_path = sys.argv[1]
+    compiled_path = sys.argv[2]
+    pk_path = sys.argv[3]
+    input_data = sys.argv[4]
+    witness_output = sys.argv[5]
+    proof_output = sys.argv[6]
 
-    success = generate_proof(model_path, pk_path, input_data, witness_output, proof_output)
+    success = generate_proof(onnx_path, compiled_path, pk_path, input_data, witness_output, proof_output)
 
     # Output JSON result
     result = {

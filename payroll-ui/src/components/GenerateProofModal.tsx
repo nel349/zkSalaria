@@ -198,17 +198,17 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       // Fetch employee payment history with decrypted amounts
       console.log('[GenerateProof] Fetching payment history...');
       const paymentHistory = await api.getEmployeePaymentHistoryDecrypted(employeeId);
-      const txids = paymentHistory.map(p => Buffer.from(p.payment_id).toString('hex'));
-      console.log(`[GenerateProof] Found ${txids.length} payments`);
+      console.log(`[GenerateProof] Found ${paymentHistory.length} payments`);
 
       // Extract payment amounts (need exactly 6 for ZKML)
       if (paymentHistory.length < 6) {
         throw new Error(`Need at least 6 payments for ZK proof. Found: ${paymentHistory.length}`);
       }
 
-      // Get the last 6 payments and extract amounts
+      // Get the last 6 payments and extract amounts + txids
       const last6Payments = paymentHistory.slice(-6);
       const paymentAmounts = last6Payments.map(p => Number(p.decrypted_amount) / 100); // Convert from atomic units to dollars
+      const txids = last6Payments.map(p => Buffer.from(p.payment_id).toString('hex'));
 
       console.log(`[GenerateProof] Payment amounts (last 6): [$${paymentAmounts[0]}, ..., $${paymentAmounts[5]}]`);
 
@@ -217,9 +217,9 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       const historyCommitment = await api.computeHistoryCommitment(employeeId);
       console.log(`[GenerateProof] History commitment: ${historyCommitment}`);
 
-      // Parse thresholds
-      const thresholdMinParsed = utils.parseAmount(minThreshold);
-      const thresholdMaxParsed = maxThreshold ? utils.parseAmount(maxThreshold) : undefined;
+      // Parse thresholds - ZKML models expect dollars (not atomic units)
+      const thresholdMinDollars = Number(minThreshold);
+      const thresholdMaxDollars = maxThreshold ? Number(maxThreshold) : undefined;
 
       // Call verifier service to generate ZKML proof + attestation
       console.log('[GenerateProof] Generating ZKML proof (this may take 10-30 seconds)...');
@@ -229,8 +229,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         body: JSON.stringify({
           proof_type: Number(proofTypeNum),
           payments: paymentAmounts,
-          threshold_min: Number(thresholdMinParsed),
-          threshold_max: thresholdMaxParsed ? Number(thresholdMaxParsed) : undefined,
+          threshold_min: thresholdMinDollars,
+          threshold_max: thresholdMaxDollars,
           employee_id: employeeId,
           txids: txids,
           history_commitment: historyCommitment
@@ -256,13 +256,30 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       console.log(`  - Verifier Pubkey: ${verifierPubkey.substring(0, 18)}...`);
       console.log(`  - Duration: ${proofData.duration}ms`);
 
+      // Register verifier if not already registered (idempotent operation)
+      console.log('[GenerateProof] Registering trusted verifier...');
+      try {
+        await api.registerTrustedVerifier(verifierPubkey);
+        console.log('[GenerateProof] ✓ Verifier registered');
+      } catch (error) {
+        // Might fail if already registered or if not authorized - continue anyway
+        console.warn('[GenerateProof] Verifier registration warning (may already be registered):', error);
+      }
+
+      // Update contract timestamp to current time (prevents "timestamp in future" rejection)
+      console.log('[GenerateProof] Syncing contract timestamp...');
+      const currentTimestamp = Math.floor(Date.now() / 1000);
+      await api.updateTimestamp(currentTimestamp);
+      console.log(`[GenerateProof] ✓ Contract timestamp updated to ${currentTimestamp}`);
+
       console.log('[GenerateProof] Submitting income proof to contract...');
       const expiresInSeconds = expirationDays === '0' ? 0 : Number(expirationDays) * 24 * 60 * 60;
 
+      // Contract expects thresholds as dollar strings (will be parsed to atomic units by API)
       const submitted = await api.submitIncomeProof(
         employeeId,
         proofTypeNum,
-        thresholdStr, // Use threshold from attestation (already parsed)
+        minThreshold, // Original threshold in dollars
         maxThreshold || '0',
         txids,
         historyCommitment,

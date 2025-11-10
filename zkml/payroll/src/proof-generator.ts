@@ -68,7 +68,7 @@ export class ProofGenerator {
 
       // Generate witness and proof using Python EZKL API
       await execAsync(
-        `uv run python ${GENERATE_SCRIPT} ${modelPaths.compiled} ${modelPaths.pk} ${inputFile} ${witnessFile} ${proofFile}`,
+        `uv run python ${GENERATE_SCRIPT} ${modelPaths.onnx} ${modelPaths.compiled} ${modelPaths.pk} ${inputFile} ${witnessFile} ${proofFile}`,
         { timeout: 120000, cwd: join(__dirname, '..') }
       );
 
