@@ -8,7 +8,8 @@
     "build": "tsc",
     "test": "npx tsx test/e2e.test.ts",
     "setup": "npx tsx scripts/setup-models.ts",
-    "validate": "npx tsx scripts/validate-models.ts"
+    "validate": "npx tsx scripts/validate-models.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit test/*.ts"
   },
   "keywords": [
     "zkml",

@@ -23,7 +23,7 @@ export interface ProofPublicInputs {
 
 export interface GenerateProofRequest {
   proof_type: ProofType;
-  payments: number[];  // 12 monthly payments
+  payments: number[];  // 6 monthly payments
   threshold_min: number;
   threshold_max?: number;  // Only for INCOME_RANGE
   employee_id: string;

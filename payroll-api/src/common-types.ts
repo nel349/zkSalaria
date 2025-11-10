@@ -153,6 +153,7 @@ export type PayrollDerivedState = {
   readonly employees?: any; // employee_accounts from ledger
   readonly paymentHistory?: any; // employee_payment_history from ledger
   readonly encryptedBalances?: any; // encrypted_employee_balances from ledger
+  readonly valueDecryptionMap?: any; // value_decryption_map from ledger
 };
 
 export const emptyPayrollState: PayrollDerivedState = {

@@ -53,14 +53,14 @@ const TEST_CASES: TestCase[] = [
   {
     name: 'Type 1: INCOME_ABOVE_THRESHOLD',
     proof_type: 1,
-    payments: [5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100],
+    payments: [5000, 5100, 5200, 5300, 5400, 5500],
     threshold_min: 4500,
     expectedSuccess: true
   },
   {
     name: 'Type 2: INCOME_RANGE',
     proof_type: 2,
-    payments: [7000, 7200, 7400, 7600, 7800, 8000, 8200, 8400, 8600, 8800, 9000, 9200],
+    payments: [7000, 7200, 7400, 7600, 7800, 8000],
     threshold_min: 7000,
     threshold_max: 9500,
     expectedSuccess: true
@@ -68,14 +68,14 @@ const TEST_CASES: TestCase[] = [
   {
     name: 'Type 3: AVERAGE_INCOME',
     proof_type: 3,
-    payments: [12000, 12500, 13000, 13500, 14000, 14500, 15000, 15500, 16000, 16500, 17000, 17500],
+    payments: [12000, 12500, 13000, 13500, 14000, 14500],
     threshold_min: 12000,
     expectedSuccess: true
   },
   {
     name: 'Type 4: FIRST_TIME_LOAN_ELIGIBILITY',
     proof_type: 4,
-    payments: [8000, 8200, 8100, 8300, 8400, 8500, 8200, 8100, 8300, 8200, 8100, 8400],
+    payments: [8000, 8200, 8100, 8300, 8400, 8500],
     threshold_min: 0.25,  // 25% range threshold
     expectedSuccess: true
   }
@@ -257,7 +257,7 @@ describe('ZKML Proof Generation E2E Tests', () => {
 
     const request = {
       proof_type: 1,
-      payments: [5000, 5100, 5200], // Only 3 payments instead of 12
+      payments: [5000, 5100, 5200], // Only 3 payments instead of 6
       threshold_min: 4500,
       employee_id: '0xTEST_INVALID',
       txids: ['0xTX001', '0xTX002', '0xTX003'],
@@ -276,7 +276,7 @@ describe('ZKML Proof Generation E2E Tests', () => {
     const result = await response.json() as GenerateProofResponse;
     expect(result.success).toBe(false);
     expect(result.error).toBe('Bad Request');
-    expect(result.message).toContain('12');
+    expect(result.message).toContain('6');
 
     logger.info('  ✅ Invalid payment count properly rejected');
   });
@@ -286,7 +286,7 @@ describe('ZKML Proof Generation E2E Tests', () => {
 
     const request = {
       proof_type: 1,
-      payments: [5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100],
+      payments: [5000, 5100, 5200, 5300, 5400, 5500],
       // Missing threshold_min, employee_id, txids, history_commitment
     };
 

@@ -15,8 +15,8 @@ import {
   generateIncomeProof,
   verifyIncomeProof,
   ModelManager,
-  calculateCreditScore,
-  calculateAverageIncome
+  calculateAverageIncome,
+  calculateFirstTimeLoanEligibility
 } from '../../../zkml/payroll/src/index';
 
 describe('zkSalaria Comprehensive ZKML Integration', () => {
@@ -81,8 +81,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         payroll.addEmployee(EMPLOYEE_ID);
         payroll.depositCompanyFunds(200000n);
 
-        // Create payment history (12 payments to fill the rolling window)
-        for (let i = 0; i < 12; i++) {
+        // Create payment history (6 payments to fill the rolling window)
+        for (let i = 0; i < 6; i++) {
           payroll.payEmployee(EMPLOYEE_ID, 5000n + BigInt(i * 100), 0); // SALARY payments
         }
 
@@ -331,8 +331,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         payroll.addEmployee(EMPLOYEE_ID);
         payroll.depositCompanyFunds(200000n);
 
-        // Create payment history (12 payments to fill the rolling window)
-        for (let i = 0; i < 12; i++) {
+        // Create payment history (6 payments to fill the rolling window)
+        for (let i = 0; i < 6; i++) {
           payroll.payEmployee(EMPLOYEE_ID, 5000n + BigInt(i * 100), 0); // SALARY payments
         }
 
@@ -598,7 +598,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Setup: Add employee and create payment history (required for history_commitment verification)
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(200000n);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         payroll.payEmployee(employeeId, BigInt(payments[i]), 0); // Use actual payment amounts from proof
       }
 
@@ -663,7 +663,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Setup: Add employee and create payment history
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(300000n);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
       }
 
@@ -720,7 +720,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Setup: Add employee and create payment history
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(500000n);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
       }
 
@@ -750,15 +750,15 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       console.log('\n🚀 E2E Test: CREDIT_SCORE with Real Proof\n');
       console.log('='.repeat(70));
 
-      const payments = [8000, 6000, 10000, 7000, 9000, 8500, 7500, 8000, 9500, 8000, 8500, 9000];
-      const threshold = 600;
+      const payments = [8000, 6000, 10000, 7000, 9000, 8500];
+      const threshold = 0.25; // 25% consistency threshold for first-time loan
 
-      console.log('\n📊 Generating CREDIT_SCORE proof...');
-      const creditScore = calculateCreditScore(payments);
-      console.log(`  Expected Credit Score: ${creditScore.toFixed(0)}`);
+      console.log('\n📊 Generating FIRST_TIME_LOAN_ELIGIBILITY proof...');
+      const loanEligibility = calculateFirstTimeLoanEligibility(payments, threshold);
+      console.log(`  Expected Loan Eligibility: ${loanEligibility.toFixed(0)}`);
 
       const proofResult = await generateIncomeProof(
-        ProofType.CREDIT_SCORE,
+        ProofType.FIRST_TIME_LOAN_ELIGIBILITY,
         payments,
         threshold
       );
@@ -776,7 +776,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Setup: Add employee and create payment history
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(250000n);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
       }
 
@@ -785,10 +785,10 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       payroll.submitIncomeProof(
         employeeId,
-        ProofType.CREDIT_SCORE,
-        BigInt(Math.floor(creditScore)),
+        ProofType.FIRST_TIME_LOAN_ELIGIBILITY,
+        BigInt(Math.floor(loanEligibility)),
         0n,
-        Array(12).fill('0x').map((_, i) => `${_}TX${i}`.padEnd(64, '0')),
+        Array(6).fill('0x').map((_, i) => `${_}TX${i}`.padEnd(64, '0')),
         historyCommitmentEmp4,
         'attestation_004'.padEnd(64, '0'),
         VERIFIER_PUBKEY,
@@ -796,10 +796,10 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
         2592000
       );
 
-      const isValid = payroll.verifyIncomeProof(employeeId, ProofType.CREDIT_SCORE, 600n);
+      const isValid = payroll.verifyIncomeProof(employeeId, ProofType.FIRST_TIME_LOAN_ELIGIBILITY, 600n);
       expect(isValid).toBe(true);
 
-      console.log('\n🎉 CREDIT_SCORE E2E TEST PASSED!\n');
+      console.log('\n🎉 FIRST_TIME_LOAN_ELIGIBILITY E2E TEST PASSED!\n');
     }, 60000);
 
     test('should handle complete multi-employee scenario with different proof types', async () => {
@@ -815,7 +815,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       // Setup EMP_JUNIOR with payment history
       payroll.addEmployee('EMP_JUNIOR');
       payroll.depositCompanyFunds(300000n);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         payroll.payEmployee('EMP_JUNIOR', BigInt(emp1Payments[i]), 0);
       }
 
@@ -843,7 +843,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       // Setup EMP_MID with payment history
       payroll.addEmployee('EMP_MID');
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         payroll.payEmployee('EMP_MID', BigInt(emp2Payments[i]), 0);
       }
 

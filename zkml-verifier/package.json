@@ -12,15 +12,21 @@
     "test:generate": "tsx test-generate-proof.ts",
     "test": "npm run test:generate"
   },
-  "keywords": ["zkml", "ezkl", "zero-knowledge", "verification"],
+  "keywords": [
+    "zkml",
+    "ezkl",
+    "zero-knowledge",
+    "verification"
+  ],
   "author": "zkSalaria",
   "license": "MIT",
   "dependencies": {
-    "fastify": "^4.25.2",
     "@fastify/cors": "^8.5.0",
+    "@zksalaria/zkml-payroll": "file:../zkml/payroll",
+    "dotenv": "^17.2.3",
+    "fastify": "^4.25.2",
     "pino": "^8.17.2",
-    "pino-pretty": "^10.3.1",
-    "@zksalaria/zkml-payroll": "file:../zkml/payroll"
+    "pino-pretty": "^10.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",

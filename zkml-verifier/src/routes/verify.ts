@@ -128,11 +128,11 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       } as GenerateProofResponse);
     }
 
-    if (payments.length !== 12) {
+    if (payments.length !== 6) {
       return reply.code(400).send({
         success: false,
         error: 'Bad Request',
-        message: 'Exactly 12 monthly payments required'
+        message: 'Exactly 6 monthly payments required'
       } as GenerateProofResponse);
     }
 

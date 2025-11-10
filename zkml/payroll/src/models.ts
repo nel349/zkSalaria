@@ -65,12 +65,12 @@ export class ModelManager {
  * Returns average salary if consistent (range < 25%), otherwise 0
  */
 export function calculateFirstTimeLoanEligibility(payments: number[], threshold: number = 0.25): number {
-  if (payments.length !== 12) {
-    throw new Error('Exactly 12 payments required');
+  if (payments.length !== 6) {
+    throw new Error('Exactly 6 payments required');
   }
 
   const total = payments.reduce((sum, p) => sum + p, 0);
-  const avg = total / 12;
+  const avg = total / 6;
 
   // Calculate range-based consistency
   const max = Math.max(...payments);
@@ -86,10 +86,10 @@ export function calculateFirstTimeLoanEligibility(payments: number[], threshold:
  * Calculate average income from payments
  */
 export function calculateAverageIncome(payments: number[]): number {
-  if (payments.length !== 12) {
-    throw new Error('Exactly 12 payments required');
+  if (payments.length !== 6) {
+    throw new Error('Exactly 6 payments required');
   }
 
   const total = payments.reduce((sum, p) => sum + p, 0);
-  return total / 12;
+  return total / 6;
 }

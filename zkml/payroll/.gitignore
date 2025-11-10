@@ -1,0 +1,29 @@
+# Compiled output
+dist/
+*.js
+*.d.ts
+*.d.ts.map
+*.js.map
+
+# Except for config files
+!*.config.js
+
+# Dependencies
+node_modules/
+
+# EZKL models
+models/*.onnx
+models/*.compiled
+models/*.pk
+models/*.vk
+models/settings.json
+
+# Test artifacts
+test/*.js
+test/*.d.ts
+test/*.d.ts.map
+test/*.js.map
+
+# Logs
+*.log
+logs/

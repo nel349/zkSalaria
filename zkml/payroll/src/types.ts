@@ -10,7 +10,7 @@ export enum ProofType {
 }
 
 export interface ProofInput {
-  payments: number[];  // Exactly 12 monthly payment amounts
+  payments: number[];  // Exactly 6 monthly payment amounts
   thresholdMin: number;
   thresholdMax?: number;  // Only for INCOME_RANGE
 }

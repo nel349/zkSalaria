@@ -4,6 +4,7 @@
  * Main entry point for the verification service
  */
 
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import verifyRoutes from './routes/verify.js';

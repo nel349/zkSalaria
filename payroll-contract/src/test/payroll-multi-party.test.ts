@@ -2438,7 +2438,7 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const history = ledger.employee_payment_history.lookup(empId);
 
       // All empty records should have status = 0 (PENDING)
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 6; i++) {
         expect(history[i].status).toBe(PaymentStatus.PENDING);
         expect(history[i].timestamp).toBe(0n);
       }

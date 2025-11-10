@@ -58,8 +58,12 @@ export class ProofGenerator {
       const witnessFile = join(this.workDir, `witness_${Date.now()}.json`);
       const proofFile = join(this.workDir, `proof_${Date.now()}.json`);
 
-      // Write input data
-      await writeFile(inputFile, JSON.stringify({ input_data: [inputData] }, null, 2));
+      // Write input data (each value as separate array for EZKL)
+      // Convert [v1, v2, v3, ...] to [[v1], [v2], [v3], ...]
+      const ezklInput = {
+        input_data: inputData.map(v => [v])  // Each value as separate array
+      };
+      await writeFile(inputFile, JSON.stringify(ezklInput, null, 2));
 
       // Step 1: Generate witness
       await execAsync(
@@ -106,8 +110,8 @@ export class ProofGenerator {
    * Validate input data
    */
   private validateInput(proofType: ProofType, input: ProofInput): void {
-    if (!input.payments || input.payments.length !== 12) {
-      throw new Error('Exactly 12 monthly payments required');
+    if (!input.payments || input.payments.length !== 6) {
+      throw new Error('Exactly 6 monthly payments required');
     }
 
     if (input.payments.some(p => p < 0)) {

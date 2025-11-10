@@ -183,7 +183,7 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       const txids = paymentHistory.slice(0, 3).map(p => Buffer.from(p.payment_id).toString('hex'));
 
       // Compute history commitment: hash of employee's full payment history
-      // This matches the contract's validation: persistentHash<Vector<12, PC_PaymentRecord>>(payment_history)
+      // This matches the contract's validation: persistentHash<Vector<6, PC_PaymentRecord>>(payment_history)
       const historyCommitment = await employeeAPI.computeHistoryCommitment(employeeId);
 
       const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');

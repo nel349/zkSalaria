@@ -117,7 +117,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       value: 'first_time_loan' as ProofType,
       label: 'First-Time Loan Eligibility',
       description: 'Prove salary consistency for first loan (ZKML)',
-      example: 'I have 12 months of consistent salary → eligible for loan',
+      example: 'I have 6 months of consistent salary → eligible for loan',
     },
   ];
 
@@ -143,7 +143,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       case 'average_income':
         return `${employeeName}'s average income is at least $${Number(minThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
       case 'first_time_loan':
-        return `${employeeName} has 12 consecutive months of consistent salary (within ${Number(minThreshold) * 100}% range)${employmentText}${companyText}.`;
+        return `${employeeName} has 6 consecutive months of consistent salary (within ${Number(minThreshold) * 100}% range)${employmentText}${companyText}.`;
       default:
         return '';
     }
@@ -201,16 +201,16 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       const txids = paymentHistory.map(p => Buffer.from(p.payment_id).toString('hex'));
       console.log(`[GenerateProof] Found ${txids.length} payments`);
 
-      // Extract payment amounts (need exactly 12 for ZKML)
-      if (paymentHistory.length < 12) {
-        throw new Error(`Need at least 12 payments for ZK proof. Found: ${paymentHistory.length}`);
+      // Extract payment amounts (need exactly 6 for ZKML)
+      if (paymentHistory.length < 6) {
+        throw new Error(`Need at least 6 payments for ZK proof. Found: ${paymentHistory.length}`);
       }
 
-      // Get the last 12 payments and extract amounts
-      const last12Payments = paymentHistory.slice(-12);
-      const paymentAmounts = last12Payments.map(p => Number(p.decrypted_amount) / 100); // Convert from atomic units to dollars
+      // Get the last 6 payments and extract amounts
+      const last6Payments = paymentHistory.slice(-6);
+      const paymentAmounts = last6Payments.map(p => Number(p.decrypted_amount) / 100); // Convert from atomic units to dollars
 
-      console.log(`[GenerateProof] Payment amounts (last 12): [$${paymentAmounts[0]}, ..., $${paymentAmounts[11]}]`);
+      console.log(`[GenerateProof] Payment amounts (last 6): [$${paymentAmounts[0]}, ..., $${paymentAmounts[5]}]`);
 
       // Compute history commitment
       console.log('[GenerateProof] Computing history commitment...');

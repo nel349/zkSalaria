@@ -113,6 +113,9 @@ export interface DeployedPayrollAPI {
   verifyIncomeProof(employeeId: string, requiredProofType: bigint, requiredThreshold: string): Promise<boolean>;
   getIncomeProof(employeeId: string): Promise<any | null>;
   computeHistoryCommitment(employeeId: string): Promise<string>;
+
+  // Debug/Test operations
+  debugCreate6MonthlyPayments(employeeWalletAddress: string, baseAmount: string, varianceAmount: string): Promise<boolean>;
 }
 
 /**
@@ -178,6 +181,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
           employees: ledgerState.employee_accounts,
           paymentHistory: ledgerState.employee_payment_history,
           encryptedBalances: ledgerState.encrypted_employee_balances,
+          valueDecryptionMap: ledgerState.value_decryption_map,
         };
         return result;
       },
@@ -1119,7 +1123,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
   /**
    * Compute history commitment for employee's payment history
    * Uses the contract's compute_history_commitment circuit to ensure consistency
-   * with on-chain validation: persistentHash<Vector<12, PC_PaymentRecord>>(payment_history)
+   * with on-chain validation: persistentHash<Vector<6, PC_PaymentRecord>>(payment_history)
    *
    * @param employeeId - Employee wallet address
    * @returns Hex-encoded hash commitment (with '0x' prefix)
@@ -1185,6 +1189,50 @@ export class PayrollAPI implements DeployedPayrollAPI {
       );
     } catch (error) {
       this.logger?.warn({ appendWithdrawalLog: { error } });
+    }
+  }
+
+  // ========================================
+  // DEBUG/TEST HELPERS
+  // ========================================
+
+  /**
+   * DEBUG ONLY: Create 6 months of payment history at once for testing
+   * Creates payments backdated to the last 6 months with realistic variance
+   * WARNING: Only use in development/testing - NOT for production!
+   */
+  async debugCreate6MonthlyPayments(
+    employeeWalletAddress: string,
+    baseAmount: string,      // In dollars (e.g., "5000.00")
+    varianceAmount: string   // In dollars (e.g., "500.00")
+  ): Promise<boolean> {
+    try {
+      // Hash wallet address to get employee ID
+      const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeWalletAddress);
+      const baseAmountAtomic = BigInt(Math.floor(parseFloat(baseAmount) * 100)); // Convert to atomic units
+      const varianceAmountAtomic = BigInt(Math.floor(parseFloat(varianceAmount) * 100));
+
+      this.logger?.info({
+        debugCreate6MonthlyPayments: {
+          employeeWalletAddress,
+          baseAmount,
+          varianceAmount,
+          baseAmountAtomic: baseAmountAtomic.toString(),
+          varianceAmountAtomic: varianceAmountAtomic.toString(),
+        },
+      });
+
+      await this.deployedContract.callTx.debug_create_6_monthly_payments(
+        employeeIdBytes,
+        baseAmountAtomic,
+        varianceAmountAtomic,
+      );
+
+      this.logger?.info({ debugCreate6MonthlyPayments: 'Success - 6 payments created' });
+      return true;
+    } catch (error) {
+      this.logger?.error({ debugCreate6MonthlyPayments: { error } });
+      return false;
     }
   }
 }

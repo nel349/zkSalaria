@@ -108,7 +108,7 @@ module PayrollCommons {
     proof_type: Uint<8>;              // 1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE
     threshold_min: Uint<64>;          // Minimum threshold proven (e.g., "income > $5000")
     threshold_max: Uint<64>;          // Maximum threshold (0 for non-range proofs)
-    txids: Vector<12, Bytes<32>>;     // Transaction IDs used in proof (12 months max)
+    txids: Vector<12, Bytes<32>>;     // Transaction IDs used in proof (6 months max)
     history_commitment: Bytes<32>;    // Commitment hash of payment history (binds proof to on-chain data)
     attestation_hash: Bytes<32>;      // Hash of the ZKML proof
     verifier_pubkey: Bytes<32>;       // Trusted verifier who signed this
@@ -136,7 +136,7 @@ module PayrollCommons {
   }
 
   // Helper to create empty payment history (for new employees)
-  export pure circuit create_empty_history(): Vector<12, PaymentRecord> {
+  export pure circuit create_empty_history(): Vector<6, PaymentRecord> {
     const empty_record = PaymentRecord {
       payment_id: pad(32, ""),       // Empty payment ID
       timestamp: 0 as Uint<32>,
@@ -147,17 +147,16 @@ module PayrollCommons {
     };
 
     return [
-      empty_record, empty_record, empty_record, empty_record,
-      empty_record, empty_record, empty_record, empty_record,
-      empty_record, empty_record, empty_record, empty_record
+      empty_record, empty_record, empty_record,
+      empty_record, empty_record, empty_record
     ];
   }
 
   // Helper to append payment to history (shifts old records, adds new one)
   export pure circuit append_to_history(
-    history: Vector<12, PaymentRecord>,
+    history: Vector<6, PaymentRecord>,
     new_record: PaymentRecord
-  ): Vector<12, PaymentRecord> {
+  ): Vector<6, PaymentRecord> {
     // Shift all records left (oldest drops off)
     // Add new record at the end
     return [
@@ -166,12 +165,6 @@ module PayrollCommons {
       history[3],
       history[4],
       history[5],
-      history[6],
-      history[7],
-      history[8],
-      history[9],
-      history[10],
-      history[11],
       new_record
     ];
   }

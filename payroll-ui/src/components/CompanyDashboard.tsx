@@ -35,6 +35,7 @@ import { RecurringPaymentsModal } from './RecurringPaymentsModal';
 import { BatchPayrollButton } from './BatchPayrollButton';
 import { PaymentHistorySection } from './PaymentHistorySection';
 import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
+import { DebugPanel } from './DebugPanel';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
 
@@ -191,9 +192,27 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
           const contractType = record.payment_type === 0n ? 'Regular Salary' :
                               record.payment_type === 1n ? 'Advance' : 'Bonus';
 
-          // Match by payment index - same index in metadata array
+          // Get decrypted amount from value_decryption_map (primary source)
+          // Fall back to metadata if decryption map not available
           const metadata = employeeMetas[i];
-          const amount = metadata ? metadata.amount : 0;
+          let amount = 0;
+
+          console.log(`[CompanyDashboard] Payment ${i} decryption check:`, {
+            hasValueDecryptionMap: !!contractState.valueDecryptionMap,
+            encryptedAmount: record.encrypted_amount,
+            canLookup: contractState.valueDecryptionMap ? contractState.valueDecryptionMap.member(record.encrypted_amount) : false,
+          });
+
+          if (contractState.valueDecryptionMap && contractState.valueDecryptionMap.member(record.encrypted_amount)) {
+            const decryptedAmount = contractState.valueDecryptionMap.lookup(record.encrypted_amount);
+            amount = Number(decryptedAmount) / 100; // Convert from atomic units (cents) to dollars
+            console.log(`[CompanyDashboard] Payment ${i} decrypted from blockchain: $${amount}`);
+          } else if (metadata) {
+            amount = metadata.amount; // Fall back to localStorage metadata
+            console.log(`[CompanyDashboard] Payment ${i} from metadata: $${amount}`);
+          } else {
+            console.log(`[CompanyDashboard] Payment ${i} no amount source available`);
+          }
 
           // Use blockchain timestamp (convert from seconds to milliseconds)
           const timestamp = Number(record.timestamp) * 1000;
@@ -358,6 +377,13 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
               Monitor your payroll operations and manage employees
             </Typography>
           </Box>
+
+          {/* Debug Panel (Development Only) */}
+          <DebugPanel
+            api={api}
+            employees={employees.map(e => ({ id: e.employeeId, name: e.name }))}
+            contractAddress={currentCompany.contractAddress}
+          />
 
           {/* Stats Grid (4 columns) */}
           <Grid container spacing={3}>

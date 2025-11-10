@@ -40,7 +40,7 @@ export ledger current_timestamp: Uint<32>;
 // Payment history on ledger (for ZKML credit scoring)
 // Stored on public ledger so company can write when paying employee
 // NOTE: Following bank.compact pattern - history on ledger, not witnesses
-export ledger employee_payment_history: Map<Bytes<32>, Vector<12, PC_PaymentRecord>>;
+export ledger employee_payment_history: Map<Bytes<32>, Vector<6, PC_PaymentRecord>>;
 
 // Selective disclosure system (Bank Contract Pattern)
 // Stores disclosure authorizations and shared keys on public ledger
@@ -459,7 +459,7 @@ export circuit grant_income_disclosure(
 
   // Encrypt payment history with shared key for grantee access
   const history_hash = persistentHash<Vector<2, Bytes<32>>>([
-    persistentHash<Vector<12, PC_PaymentRecord>>(payment_history),
+    persistentHash<Vector<6, PC_PaymentRecord>>(payment_history),
     shared_key
   ]);
 
@@ -1113,7 +1113,7 @@ export circuit submit_income_proof(
   }
 
   const payment_history = employee_payment_history.lookup(disclose(employee_id));
-  const computed_commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+  const computed_commitment = persistentHash<Vector<6, PC_PaymentRecord>>(payment_history);
 
   if (disclose(history_commitment) != computed_commitment) {
     return false; // History commitment doesn't match on-chain payment history - possible fraud!
@@ -1215,7 +1215,164 @@ export circuit compute_history_commitment(employee_id: Bytes<32>): Bytes<32> {
   }
 
   const payment_history = employee_payment_history.lookup(disclose(employee_id));
-  const commitment = persistentHash<Vector<12, PC_PaymentRecord>>(payment_history);
+  const commitment = persistentHash<Vector<6, PC_PaymentRecord>>(payment_history);
 
   return commitment as Bytes<32>;
+}
+
+// ========================================
+// DEBUG/TEST HELPERS
+// ========================================
+
+// DEBUG ONLY: Create 6 months of payment history at once for testing
+// Creates payments backdated to the last 6 months with realistic variance
+// WARNING: Only use in development/testing - NOT for production!
+export circuit debug_create_6_monthly_payments(
+  employee_id: Bytes<32>,
+  base_amount: Uint<64>,           // Base monthly payment amount (e.g., 500000 = $5,000.00)
+  variance_amount: Uint<64>        // Amount to vary (e.g., 50000 = +/- $500)
+): [] {
+  // Verify employee exists
+  assert(employee_accounts.member(disclose(employee_id)), "Employee not found");
+  assert(disclose(base_amount) > 0 as Uint<64>, "Base amount must be positive");
+
+  // Calculate total amount needed (6 payments with variance)
+  // 6 payments: 3 at base, 2 at base+variance, 1 at base-variance
+  // Total: 3*base + 2*(base+var) + (base-var) = 6*base + 2*var
+  const total_amount = (disclose(base_amount) * 6 as Uint<64>) + (disclose(variance_amount) * 2 as Uint<64>);
+
+  // Check available budget
+  assert(total_supply >= allocated_to_employees, "Accounting error: allocated exceeds supply");
+  const available_budget = (total_supply - allocated_to_employees) as Uint<64>;
+  assert(available_budget >= total_amount, "Insufficient available budget");
+
+  // Allocate funds
+  allocated_to_employees = (allocated_to_employees + total_amount) as Uint<64>;
+
+  // Generate encryption key for employee
+  const employee_key = generate_balance_key(employee_id);
+
+  // Get employee's current balance
+  const employee_encrypted = encrypted_employee_balances.member(disclose(employee_id)) ?
+    encrypted_employee_balances.lookup(disclose(employee_id)) : encrypt_balance(0 as Uint<64>, employee_key);
+  const employee_balance = value_decryption_map.member(employee_encrypted) ?
+    value_decryption_map.lookup(employee_encrypted) : 0 as Uint<64>;
+
+  // Seconds in 30 days (approximation of month): 30 days * 24 hours * 60 min * 60 sec = 2,592,000
+  const month_seconds = 2592000 as Uint<32>;
+
+  // Create 6 payment records with backdated timestamps
+  // Build from oldest (6 months ago) to newest (current month)
+  const payment_5_timestamp = current_timestamp - (month_seconds * 5 as Uint<32>);
+  const payment_4_timestamp = current_timestamp - (month_seconds * 4 as Uint<32>);
+  const payment_3_timestamp = current_timestamp - (month_seconds * 3 as Uint<32>);
+  const payment_2_timestamp = current_timestamp - (month_seconds * 2 as Uint<32>);
+  const payment_1_timestamp = current_timestamp - month_seconds;
+  const payment_0_timestamp = current_timestamp;
+
+  // Create varied amounts for realism (alternating +variance, 0, -variance)
+  const base = disclose(base_amount);
+  const variance = disclose(variance_amount);
+
+  const amount_0 = base as Uint<64>;
+  const amount_1 = (base + variance) as Uint<64>;
+  const amount_2 = base as Uint<64>;
+  const amount_3 = (base - variance) as Uint<64>;
+  const amount_4 = (base + variance) as Uint<64>;
+  const amount_5 = base as Uint<64>;
+
+  // Encrypt all payment amounts
+  const enc_amount_0 = encrypt_balance(amount_0, employee_key);
+  const enc_amount_1 = encrypt_balance(amount_1, employee_key);
+  const enc_amount_2 = encrypt_balance(amount_2, employee_key);
+  const enc_amount_3 = encrypt_balance(amount_3, employee_key);
+  const enc_amount_4 = encrypt_balance(amount_4, employee_key);
+  const enc_amount_5 = encrypt_balance(amount_5, employee_key);
+
+  // Add all amounts to decryption map
+  value_decryption_map.insert(enc_amount_0, amount_0);
+  value_decryption_map.insert(enc_amount_1, amount_1);
+  value_decryption_map.insert(enc_amount_2, amount_2);
+  value_decryption_map.insert(enc_amount_3, amount_3);
+  value_decryption_map.insert(enc_amount_4, amount_4);
+  value_decryption_map.insert(enc_amount_5, amount_5);
+
+  // Create 6 payment records (oldest to newest)
+  const payment_0 = PC_create_payment_record(
+    PC_generate_payment_id(company_id, disclose(employee_id), payment_0_timestamp),
+    payment_0_timestamp,
+    enc_amount_0,
+    company_id,
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  const payment_1 = PC_create_payment_record(
+    PC_generate_payment_id(company_id, disclose(employee_id), payment_1_timestamp),
+    payment_1_timestamp,
+    enc_amount_1,
+    company_id,
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  const payment_2 = PC_create_payment_record(
+    PC_generate_payment_id(company_id, disclose(employee_id), payment_2_timestamp),
+    payment_2_timestamp,
+    enc_amount_2,
+    company_id,
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  const payment_3 = PC_create_payment_record(
+    PC_generate_payment_id(company_id, disclose(employee_id), payment_3_timestamp),
+    payment_3_timestamp,
+    enc_amount_3,
+    company_id,
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  const payment_4 = PC_create_payment_record(
+    PC_generate_payment_id(company_id, disclose(employee_id), payment_4_timestamp),
+    payment_4_timestamp,
+    enc_amount_4,
+    company_id,
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  const payment_5 = PC_create_payment_record(
+    PC_generate_payment_id(company_id, disclose(employee_id), payment_5_timestamp),
+    payment_5_timestamp,
+    enc_amount_5,
+    company_id,
+    PC_PAYMENT_TYPE_SALARY(),
+    PC_PAYMENT_STATUS_COMPLETED()
+  );
+
+  // Build payment history vector (oldest to newest)
+  const history_vector: Vector<6, PC_PaymentRecord> = [
+    payment_0,
+    payment_1,
+    payment_2,
+    payment_3,
+    payment_4,
+    payment_5
+  ];
+
+  // Store payment history
+  employee_payment_history.insert(disclose(employee_id), history_vector);
+
+  // Update employee balance (add all payments)
+  const new_balance = (employee_balance + amount_0 + amount_1 + amount_2 +
+                      amount_3 + amount_4 + amount_5) as Uint<64>;
+
+  const new_employee_encrypted = encrypt_balance(new_balance, employee_key);
+  encrypted_employee_balances.insert(disclose(employee_id), new_employee_encrypted);
+  value_decryption_map.insert(new_employee_encrypted, new_balance);
+
+  // Increment payment counter by 6
+  total_payments.increment(6);
 }
