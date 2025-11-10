@@ -27,3 +27,4 @@ test/*.js.map
 # Logs
 *.log
 logs/
+calibration/

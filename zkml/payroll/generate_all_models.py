@@ -50,8 +50,9 @@ def run_ezkl_workflow(name, num_inputs):
     ezkl.gen_settings(f"{name}.onnx", f"{name}_settings.json", py_run_args=py_run_args)
     print(f"   ✓ Settings")
 
-    print(f"   → calibrate...")
-    ezkl.calibrate_settings(data=f"{name}_input.json", model=f"{name}.onnx", settings=f"{name}_settings.json", target="resources")
+    print(f"   → calibrate (using wide range: $1K-$15K)...")
+    # Use comprehensive calibration data covering realistic salary ranges
+    ezkl.calibrate_settings(data=f"../../calibration/calibration_{name}.json", model=f"{name}.onnx", settings=f"{name}_settings.json", target="resources")
     print(f"   ✓ Calibrated")
 
     print(f"   → compile...")

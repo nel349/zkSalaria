@@ -23,29 +23,29 @@ interface TestCase {
 
 const TEST_CASES: TestCase[] = [
   {
-    name: 'Junior Dev - Above Threshold',
+    name: 'Entry Level - Above Threshold',
     proofType: ProofType.INCOME_ABOVE_THRESHOLD,
-    payments: [5000, 5100, 5200, 5300, 5400, 5500],
-    thresholdMin: 4500,
+    payments: [2800, 2900, 3000, 3100, 3200, 3300],
+    thresholdMin: 15000,
     expectedPass: true,
-    description: 'Junior developer earning $5,250 avg > $4,500 threshold'
+    description: 'Entry level earning $18,300 total > $15,000 threshold'
   },
   {
     name: 'Mid-Level - In Range',
     proofType: ProofType.INCOME_RANGE,
-    payments: [7000, 7200, 7400, 7600, 7800, 8000],
-    thresholdMin: 7000,
-    thresholdMax: 9500,
+    payments: [5500, 5800, 6000, 6200, 6400, 6600],
+    thresholdMin: 30000,
+    thresholdMax: 40000,
     expectedPass: true,
-    description: 'Mid-level earning $7,500 avg within $7,000-$9,500 range'
+    description: 'Mid-level earning $36,500 total within $30,000-$40,000 range'
   },
   {
-    name: 'Senior - Average Income',
+    name: 'Mid-Level - Average Income',
     proofType: ProofType.AVERAGE_INCOME,
-    payments: [12000, 12500, 13000, 13500, 14000, 14500],
-    thresholdMin: 12000,
+    payments: [4500, 4700, 4900, 5100, 5300, 5500],
+    thresholdMin: 4800,
     expectedPass: true,
-    description: 'Senior earning $13,250 avg >= $12,000 average requirement'
+    description: 'Mid-level earning $5,000 avg >= $4,800 average requirement'
   },
   {
     name: 'Freelancer - First Time Loan Eligibility',
@@ -56,12 +56,12 @@ const TEST_CASES: TestCase[] = [
     description: 'Freelancer with $8,083 avg, income consistency >= 25% threshold'
   },
   {
-    name: 'High Earner - All Proof Types',
+    name: 'Executive - High Earner',
     proofType: ProofType.INCOME_ABOVE_THRESHOLD,
-    payments: [15000, 15500, 16000, 16500, 17000, 17500],
-    thresholdMin: 15000,
+    payments: [18000, 19000, 20000, 21000, 22000, 23000],
+    thresholdMin: 100000,
     expectedPass: true,
-    description: 'High earner with $16,250 avg passing multiple thresholds'
+    description: 'Executive earning $123,000 total > $100,000 threshold'
   }
 ];
 

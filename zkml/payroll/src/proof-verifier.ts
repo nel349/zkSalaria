@@ -16,7 +16,8 @@ import {
 } from './types';
 
 const execAsync = promisify(exec);
-const EZKL_PATH = process.env.EZKL_PATH || '/Users/norman/.ezkl/ezkl';
+const VERIFY_SCRIPT = join(__dirname, '..', 'verify_proof.py');
+const SRS_PATH = join(__dirname, '..', 'kzg.srs');
 
 export class ProofVerifier {
   private workDir: string;
@@ -42,13 +43,14 @@ export class ProofVerifier {
       const proofFile = join(this.workDir, `proof_verify_${Date.now()}.json`);
       await writeFile(proofFile, proof.proofJson);
 
-      // Verify using EZKL
+      // Verify using Python EZKL API
       const { stdout } = await execAsync(
-        `${EZKL_PATH} verify --proof-path ${proofFile} --settings-path ${modelPaths.settings} --vk-path ${modelPaths.vk}`,
-        { timeout: 60000 }
+        `uv run python ${VERIFY_SCRIPT} ${proofFile} ${modelPaths.settings} ${modelPaths.vk} ${SRS_PATH}`,
+        { timeout: 60000, cwd: join(__dirname, '..') }
       );
 
-      const verified = stdout.includes('verified: true');
+      const result = JSON.parse(stdout.trim());
+      const verified = result.verified === true;
 
       return {
         success: true,

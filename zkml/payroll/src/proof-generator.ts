@@ -21,7 +21,7 @@ import {
 } from './types';
 
 const execAsync = promisify(exec);
-const EZKL_PATH = process.env.EZKL_PATH || '/Users/norman/.ezkl/ezkl';
+const GENERATE_SCRIPT = join(__dirname, '..', 'generate_proof.py');
 
 export class ProofGenerator {
   private workDir: string;
@@ -58,23 +58,18 @@ export class ProofGenerator {
       const witnessFile = join(this.workDir, `witness_${Date.now()}.json`);
       const proofFile = join(this.workDir, `proof_${Date.now()}.json`);
 
-      // Write input data (each value as separate array for EZKL)
+      // Write input data in EZKL format
       // Convert [v1, v2, v3, ...] to [[v1], [v2], [v3], ...]
       const ezklInput = {
-        input_data: inputData.map(v => [v])  // Each value as separate array
+        input_shapes: inputData.map(() => [1]),
+        input_data: inputData.map(v => [v])
       };
       await writeFile(inputFile, JSON.stringify(ezklInput, null, 2));
 
-      // Step 1: Generate witness
+      // Generate witness and proof using Python EZKL API
       await execAsync(
-        `${EZKL_PATH} gen-witness -M ${modelPaths.compiled} -D ${inputFile} -O ${witnessFile}`,
-        { timeout: 60000 }
-      );
-
-      // Step 2: Generate proof
-      await execAsync(
-        `${EZKL_PATH} prove -M ${modelPaths.compiled} -W ${witnessFile} --pk-path ${modelPaths.pk} --proof-path ${proofFile}`,
-        { timeout: 120000 }
+        `uv run python ${GENERATE_SCRIPT} ${modelPaths.compiled} ${modelPaths.pk} ${inputFile} ${witnessFile} ${proofFile}`,
+        { timeout: 120000, cwd: join(__dirname, '..') }
       );
 
       // Read the generated proof
