@@ -12,3 +12,5 @@ export { ThemeToggle } from './ThemeToggle';
 
 export { CompanyCard } from './CompanyCard';
 export type { CompanyCardProps } from './CompanyCard';
+
+export { SettingsLayout } from './SettingsLayout';

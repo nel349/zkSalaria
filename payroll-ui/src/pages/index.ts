@@ -15,3 +15,8 @@ export { EmployeeOnboardingPage } from './EmployeeOnboardingPage';
 export { DashboardPage } from './DashboardPage';
 export { CompanySelectorPage } from './CompanySelectorPage';
 export { EmployeeListPage } from './EmployeeListPage';
+
+// Settings pages (Phase 4)
+export { ProfileSettingsPage } from './ProfileSettingsPage';
+export { PrivacySettingsPage } from './PrivacySettingsPage';
+export { NotificationSettingsPage } from './NotificationSettingsPage';

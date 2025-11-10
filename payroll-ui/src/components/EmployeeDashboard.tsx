@@ -20,6 +20,8 @@ import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import BadgeIcon from '@mui/icons-material/Badge';
 import PaymentsIcon from '@mui/icons-material/Payments';
+import SettingsIcon from '@mui/icons-material/Settings';
+import MenuIcon from '@mui/icons-material/Menu';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
@@ -27,6 +29,8 @@ import { PaymentHistorySection } from './PaymentHistorySection';
 import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import { WithdrawSalaryModal } from './WithdrawSalaryModal';
 import { GenerateProofModal } from './GenerateProofModal';
+import { EmployeeDashboardDrawer, type DashboardView } from './EmployeeDashboardDrawer';
+import { MyIncomeProofsView } from './MyIncomeProofsView';
 import pino from 'pino';
 
 const logger = pino({
@@ -85,6 +89,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const [payments, setPayments] = useState<any[]>([]);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [generateProofOpen, setGenerateProofOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [dashboardView, setDashboardView] = useState<DashboardView>('main');
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -314,12 +320,26 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       >
         <Container maxWidth="xl">
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            {/* Left: Title */}
+            {/* Left: Hamburger Menu & Title */}
             <Stack direction="row" alignItems="center" spacing={2}>
+              <Button
+                onClick={() => setDrawerOpen(true)}
+                sx={{
+                  minWidth: 'auto',
+                  p: 1,
+                  borderRadius: 2,
+                  color: theme.colors.primary[500],
+                  '&:hover': {
+                    bgcolor: mode === 'dark' ? `${theme.colors.primary[500]}20` : theme.colors.primary[50],
+                  },
+                }}
+              >
+                <MenuIcon sx={{ fontSize: 28 }} />
+              </Button>
               <BadgeIcon sx={{ fontSize: 32, color: theme.colors.primary[500] }} />
               <Box>
                 <Typography variant="h5" fontWeight={theme.typography.fontWeight.bold} color={theme.colors.text.primary}>
-                  My Dashboard
+                  {dashboardView === 'main' ? 'My Dashboard' : dashboardView === 'proofs' ? 'My Income Proofs' : 'Payment History'}
                 </Typography>
                 <Typography variant="body2" color={theme.colors.text.secondary}>
                   {stats.companyName}
@@ -351,23 +371,31 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       </Box>
 
       <Container maxWidth="xl" sx={{ mt: 4 }}>
-        <Stack spacing={4}>
-          {/* Error Alert */}
-          {error && (
-            <Alert severity="error" onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          )}
+        {/* Error Alert */}
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
 
-          {/* Page Title */}
-          <Box>
-            <Typography variant="h4" fontWeight={theme.typography.fontWeight.bold} color={theme.colors.text.primary}>
-              Employee Overview
-            </Typography>
-            <Typography variant="body2" color={theme.colors.text.secondary} sx={{ mt: 1 }}>
-              View your salary, payment history, and employment status
-            </Typography>
-          </Box>
+        {/* Render different views based on dashboardView */}
+        {dashboardView === 'proofs' ? (
+          <MyIncomeProofsView
+            api={api}
+            walletAddress={walletAddress || ''}
+            onBack={() => setDashboardView('main')}
+          />
+        ) : dashboardView === 'main' ? (
+          <Stack spacing={4}>
+            {/* Page Title */}
+            <Box>
+              <Typography variant="h4" fontWeight={theme.typography.fontWeight.bold} color={theme.colors.text.primary}>
+                Employee Overview
+              </Typography>
+              <Typography variant="body2" color={theme.colors.text.secondary} sx={{ mt: 1 }}>
+                View your salary, payment history, and employment status
+              </Typography>
+            </Box>
 
           {/* Stats Grid (4 columns) */}
           <Grid container spacing={3}>
@@ -508,7 +536,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             </Stack>
 
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="contained"
                   fullWidth
@@ -525,7 +553,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                 </Button>
               </Grid>
 
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="contained"
                   fullWidth
@@ -541,35 +569,19 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                 </Button>
               </Grid>
 
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   variant="contained"
                   fullWidth
-                  startIcon={<CheckCircleIcon />}
-                  onClick={() => {
-                    /* TODO: Navigate to disclosure */
-                  }}
+                  startIcon={<VerifiedIcon />}
+                  onClick={() => setDashboardView('proofs')}
                   sx={{
                     py: 1.5,
                     bgcolor: theme.colors.primary[500],
                     '&:hover': { bgcolor: theme.colors.primary[700] },
                   }}
                 >
-                  Grant Disclosure
-                </Button>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<ReceiptIcon />}
-                  onClick={() => {
-                    /* TODO: Open W-2 modal */
-                  }}
-                  sx={{ py: 1.5 }}
-                >
-                  Download W-2
+                  View My Proofs
                 </Button>
               </Grid>
             </Grid>
@@ -586,7 +598,17 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             <PaymentHistorySection userRole="employee" payments={payments} maxRows={20} />
           </Box>
         </Stack>
+        ) : null}
       </Container>
+
+      {/* Navigation Drawer */}
+      <EmployeeDashboardDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        currentView={dashboardView}
+        onViewChange={setDashboardView}
+        walletAddress={walletAddress || ''}
+      />
 
       {/* Withdraw Salary Modal */}
       <WithdrawSalaryModal
