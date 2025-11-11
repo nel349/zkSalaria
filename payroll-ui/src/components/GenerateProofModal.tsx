@@ -247,9 +247,9 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       const historyCommitment = await api.computeHistoryCommitment(employeeId);
       console.log(`[GenerateProof] History commitment: ${historyCommitment}`);
 
-      // CRITICAL: ALL models now use input_scale:7 and require normalization
+      // CRITICAL: ALL models now use input_scale:14 and require normalization
       // All payment amounts and thresholds must be divided by 10000
-      // See zkml/payroll/EZKL_SCALING_GUIDE.md for details
+      // Precision: 2^-14 ≈ 0.000061 (~$0.61 resolution after denormalization)
       const NORMALIZATION_FACTOR = 10000;
 
       let thresholdMinDollars: number;

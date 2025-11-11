@@ -149,6 +149,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       // Step 1: Generate ZK proof using zkml-payroll module
+      // NOTE: payments and thresholds must be ALREADY NORMALIZED by caller
       fastify.log.info('  → Generating ZK proof with EZKL...');
       const proofResult = await generateIncomeProof(
         proof_type as unknown as ZKMLProofType,

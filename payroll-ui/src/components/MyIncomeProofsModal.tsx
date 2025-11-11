@@ -133,7 +133,6 @@ const getProofAttempts = (employeeId: string): ProofAttempt[] => {
 
     console.log('[getProofAttempts] Requested employeeId:', employeeId);
     console.log('[getProofAttempts] Total attempts in storage:', allAttempts.length);
-    console.log('[getProofAttempts] All employeeIds in storage:', allAttempts.map(a => a.employeeId));
 
     // TEMPORARY: Show ALL attempts regardless of employeeId for debugging
     // TODO: Fix employeeId matching once we understand the format

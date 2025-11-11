@@ -162,7 +162,7 @@ export class ProofGenerator {
    * Prepare input data array for ONNX model
    * NOTE: Values are expected to be ALREADY NORMALIZED by the caller (UI/API)
    * The normalization (dividing by 10000) happens in GenerateProofModal.tsx
-   * because all models use input_scale: 7 to prevent EZKL overflow
+   * All models use input_scale: 14 for precision (2^-14 ≈ $0.61 resolution)
    */
   private prepareInputData(proofType: ProofType, input: ProofInput): number[] {
     const { payments, thresholdMin, thresholdMax } = input;

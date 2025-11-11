@@ -51,35 +51,39 @@ interface TestCase {
   skipReason?: string;
 }
 
+// NORMALIZATION: All models use input_scale: 14 requiring division by 10000
+// The verifier service API expects NORMALIZED values ($5000 → 0.5)
+const NORMALIZATION_FACTOR = 10000;
+
 const TEST_CASES: TestCase[] = [
   {
     name: 'Type 1: INCOME_ABOVE_THRESHOLD',
     proof_type: 1,
-    payments: [5000, 5100, 5200, 5300, 5400, 5500],
-    threshold_min: 4500,
+    payments: [5000, 5100, 5200, 5300, 5400, 5500].map(p => p / NORMALIZATION_FACTOR),
+    threshold_min: 4500 / NORMALIZATION_FACTOR,
     expectedSuccess: true
   },
   {
     name: 'Type 2: INCOME_RANGE',
     proof_type: 2,
-    payments: [7000, 7200, 7400, 7600, 7800, 8000],
-    threshold_min: 40000,  // 6-month minimum: 40K
-    threshold_max: 50000,  // 6-month maximum: 50K (sum is 45K)
+    payments: [7000, 7200, 7400, 7600, 7800, 8000].map(p => p / NORMALIZATION_FACTOR),
+    threshold_min: 40000 / NORMALIZATION_FACTOR,  // 6-month minimum: 40K
+    threshold_max: 50000 / NORMALIZATION_FACTOR,  // 6-month maximum: 50K (sum is 45K)
     expectedSuccess: true
   },
   {
     name: 'Type 3: AVERAGE_INCOME',
     proof_type: 3,
-    payments: [12000, 12500, 13000, 13500, 14000, 14500],
-    threshold_min: 12000,
+    payments: [12000, 12500, 13000, 13500, 14000, 14500].map(p => p / NORMALIZATION_FACTOR),
+    threshold_min: 12000 / NORMALIZATION_FACTOR,
     expectedSuccess: true,
-    skip: false  // Re-enabled: Fixed overflow by using input_scale:7 with normalization
+    skip: false  // Re-enabled: Fixed overflow by using input_scale:14 with normalization
   },
   {
     name: 'Type 4: FIRST_TIME_LOAN_ELIGIBILITY',
     proof_type: 4,
-    payments: [8000, 8200, 8100, 8300, 8400, 8500],
-    threshold_min: 0.25,  // 25% range threshold
+    payments: [8000, 8200, 8100, 8300, 8400, 8500].map(p => p / NORMALIZATION_FACTOR),
+    threshold_min: 0.25,  // 25% range threshold (already a ratio, no normalization needed)
     expectedSuccess: true
   }
 ];

@@ -19,6 +19,10 @@ import {
   calculateFirstTimeLoanEligibility
 } from '../../../zkml/payroll/src/index';
 
+// NORMALIZATION: All models use input_scale: 14 requiring division by 10000
+// All payment amounts and thresholds must be normalized ($5000 → 0.5)
+const NORMALIZATION_FACTOR = 10000;
+
 describe('zkSalaria Comprehensive ZKML Integration', () => {
   let payroll: PayrollMultiPartyTestSetup;
   const companyId = 'COMP001';
@@ -563,13 +567,15 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       // Step 1: Generate real EZKL proof
       console.log('\n📊 STEP 1: Generating real EZKL proof...');
-      const payments = [5000, 5100, 5200, 5300, 5400, 5500];
-      const threshold = 30000; // 6-month total threshold
+      const paymentsRaw = [5000, 5100, 5200, 5300, 5400, 5500]; // Actual dollar amounts
+      const payments = paymentsRaw.map(p => p / NORMALIZATION_FACTOR); // Normalized for ZKML
+      const thresholdRaw = 30000; // 6-month total threshold (actual dollars)
+      const threshold = thresholdRaw / NORMALIZATION_FACTOR; // Normalized for ZKML
 
-      const avgIncome = calculateAverageIncome(payments);
+      const avgIncome = calculateAverageIncome(paymentsRaw);
       console.log(`  Payments: [${payments.slice(0, 3).join(', ')}, ..., ${payments.slice(-2).join(', ')}]`);
       console.log(`  Average Income: $${avgIncome.toLocaleString()}`);
-      console.log(`  Threshold: $${threshold.toLocaleString()}`);
+      console.log(`  Threshold: $${thresholdRaw.toLocaleString()}`);
 
       const proofResult = await generateIncomeProof(
         ProofType.INCOME_ABOVE_THRESHOLD,
@@ -599,7 +605,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(200000n);
       for (let i = 0; i < 6; i++) {
-        payroll.payEmployee(employeeId, BigInt(payments[i]), 0); // Use actual payment amounts from proof
+        payroll.payEmployee(employeeId, BigInt(paymentsRaw[i]), 0); // Use actual dollar amounts
       }
 
       const txids = Array(12).fill(0).map((_, i) => `0xTX_REAL_${i + 1}`.padEnd(64, '0'));
@@ -610,7 +616,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       payroll.submitIncomeProof(
         employeeId,
         ProofType.INCOME_ABOVE_THRESHOLD,
-        BigInt(threshold),
+        BigInt(thresholdRaw),
         0n,
         txids,
         historyCommitment,
@@ -638,9 +644,12 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       console.log('\n🚀 E2E Test: INCOME_RANGE with Real Proof\n');
       console.log('='.repeat(70));
 
-      const payments = [7000, 7200, 7400, 7600, 7800, 8000];
-      const thresholdMin = 45000; // 6-month total minimum
-      const thresholdMax = 50000; // 6-month total maximum
+      const paymentsRaw = [7000, 7200, 7400, 7600, 7800, 8000]; // Actual dollar amounts
+      const payments = paymentsRaw.map(p => p / NORMALIZATION_FACTOR); // Normalized for ZKML
+      const thresholdMinRaw = 45000; // 6-month total minimum (actual dollars)
+      const thresholdMaxRaw = 50000; // 6-month total maximum (actual dollars)
+      const thresholdMin = thresholdMinRaw / NORMALIZATION_FACTOR; // Normalized for ZKML
+      const thresholdMax = thresholdMaxRaw / NORMALIZATION_FACTOR; // Normalized for ZKML
 
       console.log('\n📊 Generating INCOME_RANGE proof...');
       const proofResult = await generateIncomeProof(
@@ -664,7 +673,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(300000n);
       for (let i = 0; i < 6; i++) {
-        payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
+        payroll.payEmployee(employeeId, BigInt(paymentsRaw[i]), 0);
       }
 
       const timestamp = BigInt(payroll.getCurrentTimestamp());
@@ -674,8 +683,8 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       payroll.submitIncomeProof(
         employeeId,
         ProofType.INCOME_RANGE,
-        BigInt(thresholdMin),
-        BigInt(thresholdMax),
+        BigInt(thresholdMinRaw),
+        BigInt(thresholdMaxRaw),
         Array(12).fill('0x').map((_, i) => `${_}TX${i}`.padEnd(64, '0')),
         historyCommitmentEmp2,
         'attestation_002'.padEnd(64, '0'),
@@ -755,15 +764,16 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       console.log('\n🎉 AVERAGE_INCOME E2E TEST PASSED!\n');
     }, 60000);
 
-    test('should complete full flow: generate proof → submit → verify (CREDIT_SCORE)', async () => {
-      console.log('\n🚀 E2E Test: CREDIT_SCORE with Real Proof\n');
+    test('should complete full flow: generate proof → submit → verify (FIRST LOAN)', async () => {
+      console.log('\n🚀 E2E Test: FIRST LOAN with Real Proof\n');
       console.log('='.repeat(70));
 
-      const payments = [8000, 8100, 8200, 8000, 8100, 8200]; // Consistent payments with ~2.5% variation
-      const threshold = 0.3; // 30% consistency threshold for first-time loan
+      const paymentsRaw = [8000, 8100, 8200, 8000, 8100, 8200]; // Actual dollar amounts
+      const payments = paymentsRaw.map(p => p / NORMALIZATION_FACTOR); // Normalized for ZKML
+      const threshold = 0.3; // 30% consistency threshold for first-time loan (already a ratio)
 
       console.log('\n📊 Generating FIRST_TIME_LOAN_ELIGIBILITY proof...');
-      const loanEligibility = calculateFirstTimeLoanEligibility(payments, threshold);
+      const loanEligibility = calculateFirstTimeLoanEligibility(paymentsRaw, threshold);
       console.log(`  Expected Loan Eligibility: ${loanEligibility.toFixed(0)}`);
 
       const proofResult = await generateIncomeProof(
@@ -786,7 +796,7 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
       payroll.addEmployee(employeeId);
       payroll.depositCompanyFunds(250000n);
       for (let i = 0; i < 6; i++) {
-        payroll.payEmployee(employeeId, BigInt(payments[i]), 0);
+        payroll.payEmployee(employeeId, BigInt(paymentsRaw[i]), 0);
       }
 
       const timestamp = BigInt(payroll.getCurrentTimestamp());
@@ -819,16 +829,17 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       // Employee 1: Junior dev with INCOME_ABOVE_THRESHOLD
       console.log('\n👤 Employee 1: Junior Developer (INCOME_ABOVE_THRESHOLD)');
-      const emp1Payments = [5000, 5100, 5200, 5300, 5400, 5500];
+      const emp1PaymentsRaw = [5000, 5100, 5200, 5300, 5400, 5500];
+      const emp1Payments = emp1PaymentsRaw.map(p => p / NORMALIZATION_FACTOR);
 
       // Setup EMP_JUNIOR with payment history
       payroll.addEmployee('EMP_JUNIOR');
       payroll.depositCompanyFunds(300000n);
       for (let i = 0; i < 6; i++) {
-        payroll.payEmployee('EMP_JUNIOR', BigInt(emp1Payments[i]), 0);
+        payroll.payEmployee('EMP_JUNIOR', BigInt(emp1PaymentsRaw[i]), 0);
       }
 
-      const emp1Proof = await generateIncomeProof(ProofType.INCOME_ABOVE_THRESHOLD, emp1Payments, 30000); // 6-month total
+      const emp1Proof = await generateIncomeProof(ProofType.INCOME_ABOVE_THRESHOLD, emp1Payments, 30000 / NORMALIZATION_FACTOR); // 6-month total
       expect(emp1Proof.success).toBe(true);
 
       const historyCommitmentJunior = payroll.computeHistoryCommitment('EMP_JUNIOR');
@@ -848,15 +859,16 @@ describe('zkSalaria Comprehensive ZKML Integration', () => {
 
       // Employee 2: Mid-level with INCOME_RANGE
       console.log('👤 Employee 2: Mid-Level (INCOME_RANGE)');
-      const emp2Payments = [7000, 7200, 7400, 7600, 7800, 8000];
+      const emp2PaymentsRaw = [7000, 7200, 7400, 7600, 7800, 8000];
+      const emp2Payments = emp2PaymentsRaw.map(p => p / NORMALIZATION_FACTOR);
 
       // Setup EMP_MID with payment history
       payroll.addEmployee('EMP_MID');
       for (let i = 0; i < 6; i++) {
-        payroll.payEmployee('EMP_MID', BigInt(emp2Payments[i]), 0);
+        payroll.payEmployee('EMP_MID', BigInt(emp2PaymentsRaw[i]), 0);
       }
 
-      const emp2Proof = await generateIncomeProof(ProofType.INCOME_RANGE, emp2Payments, 45000, 50000); // 6-month totals
+      const emp2Proof = await generateIncomeProof(ProofType.INCOME_RANGE, emp2Payments, 45000 / NORMALIZATION_FACTOR, 50000 / NORMALIZATION_FACTOR); // 6-month totals
       expect(emp2Proof.success).toBe(true);
 
       const historyCommitmentMid = payroll.computeHistoryCommitment('EMP_MID');

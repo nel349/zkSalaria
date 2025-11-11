@@ -129,7 +129,7 @@ export const generateProofPDF = async (
   );
   doc.text(description, 20, yPos + 20);
 
-  // Zero-Knowledge Statement (NO AMOUNTS - privacy preserved)
+  // Verification Result with Threshold
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 100, 100);
@@ -138,10 +138,30 @@ export const generateProofPDF = async (
   doc.setTextColor(34, 197, 94); // Green
   doc.setFontSize(14);
   doc.text('Requirements Met ✓', 20, yPos + 45);
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
+
+  // Show threshold amount that was met
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'normal');
-  doc.text('(Specific amounts not disclosed - privacy preserved)', 20, yPos + 51);
+  const proofType = Number(proof.proof_type);
+  let thresholdText = '';
+
+  if (proofType === 1) {
+    // Income Above Threshold - show 6-month total (threshold_min is in cents)
+    thresholdText = `Income Above: ${formatAmount(proof.threshold_min)} (6-month total)`;
+  } else if (proofType === 2) {
+    // Income Range - show range (thresholds are in cents)
+    thresholdText = `Income Range: ${formatAmount(proof.threshold_min)} - ${formatAmount(proof.threshold_max)} (6-month total)`;
+  } else if (proofType === 3) {
+    // Average Income - show monthly average (threshold_min is in cents)
+    thresholdText = `Average Income Above: ${formatAmount(proof.threshold_min)}/month`;
+  } else if (proofType === 4) {
+    // First-Time Loan - show consistency threshold (threshold_min is ratio as percentage)
+    const consistencyPct = Number(proof.threshold_min) / 100; // Convert from cents to percentage
+    thresholdText = `Income Consistency: <${consistencyPct.toFixed(0)}% variation`;
+  }
+
+  doc.text(thresholdText, 20, yPos + 51);
 
   // Dates
   doc.setFontSize(9);
@@ -361,7 +381,7 @@ export const generateFailureReport = async (
   );
   doc.text(description, 20, yPos + 20);
 
-  // Zero-Knowledge Statement (NO AMOUNTS - privacy preserved)
+  // Verification Result
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 100, 100);
@@ -370,10 +390,46 @@ export const generateFailureReport = async (
   doc.setTextColor(239, 68, 68); // Red
   doc.setFontSize(14);
   doc.text('Requirements Not Met ✗', 20, yPos + 45);
-  doc.setFontSize(8);
+
+  // Tested Amounts
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 100, 100);
+  doc.text('TESTED AMOUNTS', 20, yPos + 55);
   doc.setFont('helvetica', 'normal');
-  doc.text('(Specific amounts not disclosed - privacy preserved)', 20, yPos + 51);
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
+
+  // Format the values based on proof type
+  let valueText = '';
+  if (proofType === 3) {
+    // Average Income - show monthly average
+    const monthlyAvg = actualValue / 6;
+    valueText = `6-Month Total: $${actualValue.toLocaleString()} | Avg: $${monthlyAvg.toLocaleString()}/mo`;
+  } else {
+    // Other types - show 6-month total
+    valueText = `6-Month Total: $${actualValue.toLocaleString()}`;
+  }
+  doc.text(valueText, 20, yPos + 62);
+
+  // Threshold comparison
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 100, 100);
+  doc.text('THRESHOLD', 20, yPos + 68);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(239, 68, 68); // Red
+
+  let thresholdText = '';
+  if (proofType === 2 && thresholdMax) {
+    thresholdText = `Range: $${thresholdMin.toLocaleString()} - $${thresholdMax.toLocaleString()}`;
+  } else if (proofType === 3) {
+    thresholdText = `Required Avg: $${thresholdMin.toLocaleString()}/mo`;
+  } else {
+    thresholdText = `Required: $${thresholdMin.toLocaleString()}`;
+  }
+  doc.text(thresholdText, 20, yPos + 75);
 
   yPos += 90;
 
@@ -381,12 +437,12 @@ export const generateFailureReport = async (
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text('Zero-Knowledge Privacy Notice', 15, yPos);
+  doc.text('Report Information', 15, yPos);
   yPos += 9;
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const privacyText = 'This verification was performed using zero-knowledge cryptographic proofs. No specific income amounts, payment history, or threshold values are disclosed in this report. The verification confirms only that the requirements were not met, without revealing any private financial data.';
+  const privacyText = 'This is a local failure report for your records only. Since the verification did not meet requirements, no proof was submitted to the blockchain. The actual amounts are shown above to help you understand what was tested and what threshold needs to be met. This report is private and should only be shared with parties you trust.';
   const privacySplit = doc.splitTextToSize(privacyText, pageWidth - 30);
   doc.text(privacySplit, 15, yPos);
   yPos += privacySplit.length * 4 + 4;
