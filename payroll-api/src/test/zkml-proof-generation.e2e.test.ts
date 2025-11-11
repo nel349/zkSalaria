@@ -63,8 +63,8 @@ const TEST_CASES: TestCase[] = [
     name: 'Type 2: INCOME_RANGE',
     proof_type: 2,
     payments: [7000, 7200, 7400, 7600, 7800, 8000],
-    threshold_min: 7000,
-    threshold_max: 9500,
+    threshold_min: 40000,  // 6-month minimum: 40K
+    threshold_max: 50000,  // 6-month maximum: 50K (sum is 45K)
     expectedSuccess: true
   },
   {
@@ -73,8 +73,7 @@ const TEST_CASES: TestCase[] = [
     payments: [12000, 12500, 13000, 13500, 14000, 14500],
     threshold_min: 12000,
     expectedSuccess: true,
-    skip: true,
-    skipReason: 'Division overflow limitation - model creates intermediate values that exceed calibrated range'
+    skip: false  // Re-enabled: Fixed overflow by using input_scale:7 with normalization
   },
   {
     name: 'Type 4: FIRST_TIME_LOAN_ELIGIBILITY',
@@ -190,10 +189,9 @@ describe('ZKML Proof Generation E2E Tests', () => {
     logger.info(`  ✅ ${testCase.name} proof validated`);
   }, 30_000);
 
-  test.skip('should generate proof for Type 3: AVERAGE_INCOME - SKIPPED: Division overflow limitation', async () => {
+  test('should generate proof for Type 3: AVERAGE_INCOME', async () => {
     const testCase = TEST_CASES[2];
     logger.info(`Testing ${testCase.name}...`);
-    logger.info(`  ⏭️  SKIPPED: ${testCase.skipReason}`);
 
     const request = {
       proof_type: testCase.proof_type,

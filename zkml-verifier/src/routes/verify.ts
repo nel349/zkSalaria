@@ -4,6 +4,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import type { VerifyProofRequest, VerifyProofResponse, GenerateProofRequest, GenerateProofResponse } from '../types.js';
+import { ErrorCode } from '../types.js';
 import { EZKLVerifier } from '../services/ezkl-verifier.js';
 import { AttestationSigner } from '../services/attestation-signer.js';
 import { generateIncomeProof, ProofType as ZKMLProofType } from '@zksalaria/zkml-payroll';
@@ -124,6 +125,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({
         success: false,
         error: 'Bad Request',
+        error_code: ErrorCode.VALIDATION_ERROR,
         message: 'Missing required fields: proof_type, payments, threshold_min, employee_id, txids, history_commitment'
       } as GenerateProofResponse);
     }
@@ -132,6 +134,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(400).send({
         success: false,
         error: 'Bad Request',
+        error_code: ErrorCode.VALIDATION_ERROR,
         message: 'Exactly 6 monthly payments required'
       } as GenerateProofResponse);
     }
@@ -155,13 +158,39 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       if (!proofResult.success || !proofResult.proof) {
-        fastify.log.error('ZK proof generation failed', undefined, { error: proofResult.error });
-        return reply.code(500).send({
-          success: false,
-          error: 'Proof Generation Failed',
-          message: proofResult.error || 'Unknown error during proof generation',
-          duration: Date.now() - startTime
-        } as GenerateProofResponse);
+        const errorMsg = proofResult.error || 'Unknown error - no error message returned';
+
+        // Check if this is a legitimate threshold failure (not a technical error)
+        const isThresholdFailure = errorMsg.toLowerCase().includes('does not meet') ||
+                                    errorMsg.toLowerCase().includes('threshold');
+
+        if (isThresholdFailure) {
+          // Threshold failure is a valid result, return 200 OK
+          fastify.log.info(`Threshold not met: ${errorMsg}`);
+          return reply.code(200).send({
+            success: false,
+            error_code: ErrorCode.THRESHOLD_NOT_MET,
+            message: errorMsg,
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        } else {
+          // Technical error, return 500
+          fastify.log.error(`ZK proof generation failed: ${errorMsg}`);
+          fastify.log.error('Proof generation details:', undefined, {
+            proof_type,
+            num_payments: payments.length,
+            threshold_min,
+            threshold_max,
+            proofResult: JSON.stringify(proofResult)
+          });
+          return reply.code(500).send({
+            success: false,
+            error: 'Proof Generation Failed',
+            error_code: ErrorCode.PROOF_GENERATION_FAILED,
+            message: errorMsg,
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        }
       }
 
       fastify.log.info('  ✓ ZK proof generated', undefined, { duration: proofResult.duration });
@@ -195,6 +224,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(500).send({
         success: false,
         error: 'Internal Server Error',
+        error_code: ErrorCode.INTERNAL_ERROR,
         message: error instanceof Error ? error.message : 'Unknown error',
         duration: Date.now() - startTime
       } as GenerateProofResponse);

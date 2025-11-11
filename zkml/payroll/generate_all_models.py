@@ -46,16 +46,23 @@ def run_ezkl_workflow(name, num_inputs):
     py_run_args.input_visibility = "private"
     py_run_args.output_visibility = "public"
     py_run_args.param_visibility = "fixed"
+    py_run_args.input_scale = 7  # MANUALLY SET TO 7 to prevent overflow
 
     ezkl.gen_settings(f"{name}.onnx", f"{name}_settings.json", py_run_args=py_run_args)
     print(f"   ✓ Settings")
 
-    print(f"   → calibrate (using wide range: $1K-$15K)...")
-    # IMPORTANT: Calibration data determines input_scale parameter
-    # For models with division (e.g., average_income), use normalized values (0-1 range)
-    # to prevent overflow. See EZKL_SCALING_GUIDE.md for details.
-    ezkl.calibrate_settings(data=f"../../calibration/calibration_{name}.json", model=f"{name}.onnx", settings=f"{name}_settings.json", target="resources")
-    print(f"   ✓ Calibrated")
+    print(f"   → calibrate (forcing input_scale: 7)...")
+    # IMPORTANT: Force input_scale to 7 to prevent overflow
+    # All models use normalized inputs ($X / 10000) to work with scale 7
+    # The scales=[7] parameter forces calibration to ONLY try scale 7
+    ezkl.calibrate_settings(
+        data=f"../../calibration/calibration_{name}.json",
+        model=f"{name}.onnx",
+        settings=f"{name}_settings.json",
+        target="resources",
+        scales=[7]  # FORCE input_scale to 7
+    )
+    print(f"   ✓ Calibrated with input_scale: 7")
 
     print(f"   → compile...")
     ezkl.compile_circuit(f"{name}.onnx", f"{name}.compiled", f"{name}_settings.json")

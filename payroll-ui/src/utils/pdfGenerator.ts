@@ -129,18 +129,19 @@ export const generateProofPDF = async (
   );
   doc.text(description, 20, yPos + 20);
 
-  // Proven Amount
+  // Zero-Knowledge Statement (NO AMOUNTS - privacy preserved)
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 100, 100);
-  doc.text('PROVEN THRESHOLD', 20, yPos + 35);
+  doc.text('VERIFICATION RESULT', 20, yPos + 35);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(99, 102, 241);
-  doc.setFontSize(16);
-  const threshold = Number(proof.proof_type) === 2
-    ? `${formatAmount(proof.threshold_min)} - ${formatAmount(proof.threshold_max)}`
-    : `≥ ${formatAmount(proof.threshold_min)}`;
-  doc.text(threshold, 20, yPos + 45);
+  doc.setTextColor(34, 197, 94); // Green
+  doc.setFontSize(14);
+  doc.text('Requirements Met ✓', 20, yPos + 45);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.setFont('helvetica', 'normal');
+  doc.text('(Specific amounts not disclosed - privacy preserved)', 20, yPos + 51);
 
   // Dates
   doc.setFontSize(9);
@@ -271,5 +272,194 @@ export const generateProofPDF = async (
 
   // Save PDF
   const filename = `zkSalaria-Income-Proof-${Date.now()}.pdf`;
+  doc.save(filename);
+};
+
+/**
+ * Generate a failure report PDF when income doesn't meet threshold
+ */
+export const generateFailureReport = async (
+  proofType: number,
+  employeeName: string,
+  payments: number[],
+  actualValue: number,
+  thresholdMin: number,
+  thresholdMax?: number,
+  companyName?: string
+): Promise<void> => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+  let yPos = 20;
+
+  // Header with branding
+  doc.setFillColor(239, 68, 68); // Red color for failure
+  doc.rect(0, 0, pageWidth, 40, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.text('zkSalaria', pageWidth / 2, 20, { align: 'center' });
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Income Verification Report - Not Qualified', pageWidth / 2, 30, { align: 'center' });
+
+  yPos = 48;
+
+  // Reset text color
+  doc.setTextColor(0, 0, 0);
+
+  // Certificate Statement
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VERIFICATION RESULT', 15, yPos);
+  yPos += 6;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const certText = `This report certifies that ${employeeName}${companyName ? ` at ${companyName}` : ''} has attempted income verification using zero-knowledge cryptography. The verification was completed successfully, but the income does not meet the required threshold.`;
+  const splitText = doc.splitTextToSize(certText, pageWidth - 30);
+  doc.text(splitText, 15, yPos);
+  yPos += splitText.length * 4 + 6;
+
+  // Verification Status - Not Qualified
+  doc.setFillColor(239, 68, 68); // Red background
+  doc.roundedRect(15, yPos, pageWidth - 30, 15, 3, 3, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('THRESHOLD NOT MET', pageWidth / 2, yPos + 10, { align: 'center' });
+  yPos += 25;
+
+  // Proof Type Details
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Verification Details', 15, yPos);
+  yPos += 5;
+
+  // Draw details box
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.5);
+  doc.rect(15, yPos, pageWidth - 30, 80);
+
+  // Proof Type
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 100, 100);
+  doc.text('VERIFICATION TYPE', 20, yPos + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(11);
+  doc.text(PROOF_TYPE_NAMES[proofType] || `Type ${proofType}`, 20, yPos + 15);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  const description = doc.splitTextToSize(
+    PROOF_TYPE_DESCRIPTIONS[proofType] || 'Income verification proof',
+    pageWidth - 50
+  );
+  doc.text(description, 20, yPos + 20);
+
+  // Zero-Knowledge Statement (NO AMOUNTS - privacy preserved)
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 100, 100);
+  doc.text('VERIFICATION RESULT', 20, yPos + 35);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(239, 68, 68); // Red
+  doc.setFontSize(14);
+  doc.text('Requirements Not Met ✗', 20, yPos + 45);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.setFont('helvetica', 'normal');
+  doc.text('(Specific amounts not disclosed - privacy preserved)', 20, yPos + 51);
+
+  yPos += 90;
+
+  // Privacy Notice Section
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('Zero-Knowledge Privacy Notice', 15, yPos);
+  yPos += 9;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const privacyText = 'This verification was performed using zero-knowledge cryptographic proofs. No specific income amounts, payment history, or threshold values are disclosed in this report. The verification confirms only that the requirements were not met, without revealing any private financial data.';
+  const privacySplit = doc.splitTextToSize(privacyText, pageWidth - 30);
+  doc.text(privacySplit, 15, yPos);
+  yPos += privacySplit.length * 4 + 4;
+
+  // What This Means Section
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('What This Means:', 15, yPos);
+  yPos += 6;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('• The cryptographic proof generation was successful', 20, yPos);
+  yPos += 5;
+  doc.text('• The income verification was computed correctly', 20, yPos);
+  yPos += 5;
+  doc.text('• The requirements were not satisfied for this proof type', 20, yPos);
+  yPos += 5;
+  doc.text('• All financial data remains private and encrypted', 20, yPos);
+  yPos += 10;
+
+  // Next Steps
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Recommendations:', 15, yPos);
+  yPos += 6;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  yPos += 5;
+  doc.text('• Try a different proof type that may better suit your situation', 20, yPos);
+  yPos += 5;
+  doc.text('• Wait for additional payment periods before re-attempting verification', 20, yPos);
+  yPos += 5;
+  doc.text('• Contact the verifier to discuss alternative verification options', 20, yPos);
+  yPos += 5;
+  doc.text('• Your private financial data was never disclosed during this process', 20, yPos);
+
+  yPos += 15;
+
+  // Footer (positioned from bottom of page)
+  const footerY = pageHeight - 35;
+
+  // Privacy Notice
+  const noticeY = footerY - 25;
+  doc.setFillColor(250, 250, 250);
+  doc.rect(15, noticeY, pageWidth - 30, 20, 'F');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100, 100, 100);
+  const notice = 'This report is for informational purposes only. No proof was submitted to the blockchain. Your payment data remains private and was processed using zero-knowledge cryptography.';
+  const noticeLines = doc.splitTextToSize(notice, pageWidth - 40);
+  doc.text(noticeLines, 20, noticeY + 8);
+
+  // Footer separator line
+  doc.setDrawColor(239, 68, 68);
+  doc.setLineWidth(0.5);
+  doc.line(15, footerY - 5, pageWidth - 15, footerY - 5);
+
+  // Left side footer
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 100, 100);
+  doc.text('Powered by zkSalaria', 15, footerY + 2);
+  doc.text('Zero-Knowledge Income Verification', 15, footerY + 7);
+
+  // Right side footer - timestamp
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7);
+  const generatedText = `Generated: ${new Date().toLocaleString()}`;
+  doc.text(generatedText, pageWidth - 15, footerY + 5, { align: 'right' });
+
+  // Save PDF
+  const filename = `zkSalaria-Verification-Failed-${Date.now()}.pdf`;
   doc.save(filename);
 };

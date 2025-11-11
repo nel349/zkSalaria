@@ -31,12 +31,20 @@ export interface GenerateProofRequest {
   history_commitment: string;
 }
 
+export enum ErrorCode {
+  THRESHOLD_NOT_MET = 'THRESHOLD_NOT_MET',          // Income doesn't meet requirements (legitimate failure)
+  PROOF_GENERATION_FAILED = 'PROOF_GENERATION_FAILED', // EZKL technical error
+  VALIDATION_ERROR = 'VALIDATION_ERROR',            // Invalid input data
+  INTERNAL_ERROR = 'INTERNAL_ERROR'                 // Unexpected server error
+}
+
 export interface GenerateProofResponse {
   success: boolean;
   proof_json?: string;  // The actual EZKL proof
   attestation?: Attestation;
-  error?: string;
-  message?: string;
+  error?: string;  // General error category (for backwards compatibility)
+  error_code?: ErrorCode;  // Specific error code for UI handling
+  message?: string;  // Human-readable message
   duration?: number;
 }
 

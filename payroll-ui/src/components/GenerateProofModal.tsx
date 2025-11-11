@@ -24,6 +24,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EmailIcon from '@mui/icons-material/Email';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -31,7 +32,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import { useTheme, useThemeValues } from '../theme';
 import { toast } from 'react-hot-toast';
 import { type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
-import { generateProofPDF } from '../utils/pdfGenerator';
+import { generateProofPDF, generateFailureReport } from '../utils/pdfGenerator';
 import { getCurrentEmployer } from '../utils/EmployerContractsLocalState';
 
 interface GenerateProofModalProps {
@@ -48,6 +49,13 @@ type ProofType = 'income_above' | 'income_range' | 'average_income' | 'first_tim
 // Verifier service configuration
 const VERIFIER_SERVICE_URL = import.meta.env.VITE_VERIFIER_SERVICE_URL || 'http://localhost:3002';
 
+enum ErrorCode {
+  THRESHOLD_NOT_MET = 'THRESHOLD_NOT_MET',
+  PROOF_GENERATION_FAILED = 'PROOF_GENERATION_FAILED',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  INTERNAL_ERROR = 'INTERNAL_ERROR'
+}
+
 interface AttestationResponse {
   success: boolean;
   proof_json?: string;  // The actual EZKL proof
@@ -62,6 +70,7 @@ interface AttestationResponse {
   };
   duration?: number;
   error?: string;
+  error_code?: ErrorCode;  // Specific error code from verifier
   message?: string;
 }
 
@@ -93,23 +102,34 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showFailure, setShowFailure] = useState(false);
   const [generatedProofId, setGeneratedProofId] = useState('');
   const [proofLink, setProofLink] = useState('');
   const [generatedProofData, setGeneratedProofData] = useState<any | null>(null);
   const [contractAddr, setContractAddr] = useState<string | null>(null);
+  const [failureData, setFailureData] = useState<{
+    proofType: number;
+    employeeName: string;
+    payments: number[];
+    actualValue: number;
+    thresholdMin: number;
+    thresholdMax?: number;
+    companyName?: string;
+    message: string;
+  } | null>(null);
 
   const proofTypes = [
     {
       value: 'income_above' as ProofType,
       label: 'Income Above Threshold (yearly)',
-      description: 'Prove you earn at least $X per month',
-      example: 'I earn at least $4,000/month',
+      description: 'Prove you earn at least $X per year',
+      example: 'I earn at least $40,000/year',
     },
     {
       value: 'income_range' as ProofType,
       label: 'Income Range (yearly)',
-      description: 'Prove you earn between $X and $Y per month',
-      example: 'I earn between $8,000 and $10,000/month',
+      description: 'Prove you earn between $X and $Y per year',
+      example: 'I earn between $80,000 and $100,000/year',
     },
     {
       value: 'average_income' as ProofType,
@@ -189,6 +209,10 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       });
     }, interval);
 
+    // Declare variables that need to be accessible in catch block
+    let proofData: AttestationResponse | undefined;
+    let paymentAmounts: number[] = [];
+
     try {
       console.log('[GenerateProof] Starting real proof generation...');
 
@@ -211,33 +235,45 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
       // Get the last 6 payments and extract amounts + txids
       const last6Payments = paymentHistory.slice(-6);
-      const paymentAmounts = last6Payments.map(p => Number(p.decrypted_amount) / 100); // Convert from atomic units to dollars
+      paymentAmounts = last6Payments.map(p => Number(p.decrypted_amount) / 100); // Convert from atomic units to dollars
       const txids = last6Payments.map(p => Buffer.from(p.payment_id).toString('hex'));
 
       console.log(`[GenerateProof] Payment amounts (last 6): [$${paymentAmounts[0]}, ..., $${paymentAmounts[5]}]`);
+      console.log(`[GenerateProof] Selected proof type: "${proofType}"`);
 
       // Compute history commitment
       console.log('[GenerateProof] Computing history commitment...');
       const historyCommitment = await api.computeHistoryCommitment(employeeId);
       console.log(`[GenerateProof] History commitment: ${historyCommitment}`);
 
-      // Convert thresholds for ZKML model
-      // - Income Above Threshold: annual/2 = 6-month total
-      // - Income Range: annual/2 = 6-month total
-      // - Average Income: monthly (no conversion, model checks monthly avg)
-      // - First Time Loan: threshold is ratio (0-1), no conversion
+      // CRITICAL: ALL models now use input_scale:7 and require normalization
+      // All payment amounts and thresholds must be divided by 10000
+      // See zkml/payroll/EZKL_SCALING_GUIDE.md for details
+      const NORMALIZATION_FACTOR = 10000;
+
       let thresholdMinDollars: number;
       let thresholdMaxDollars: number | undefined;
+      let normalizedPayments: number[];
 
-      if (proofType === 'first_time_loan' || proofType === 'average_income') {
-        // No conversion needed (ratio for loan, monthly for average)
+      // Normalize ALL payment amounts for EZKL (input_scale: 7)
+      normalizedPayments = paymentAmounts.map(p => p / NORMALIZATION_FACTOR);
+
+      // Threshold conversion and normalization
+      if (proofType === 'first_time_loan') {
+        // Threshold is already a ratio (0-1), no conversion needed
         thresholdMinDollars = Number(minThreshold);
         thresholdMaxDollars = maxThreshold ? Number(maxThreshold) : undefined;
+      } else if (proofType === 'income_above' || proofType === 'income_range') {
+        // Convert annual threshold to 6-month total, then normalize
+        thresholdMinDollars = (Number(minThreshold) / 2) / NORMALIZATION_FACTOR;
+        thresholdMaxDollars = maxThreshold ? (Number(maxThreshold) / 2) / NORMALIZATION_FACTOR : undefined;
       } else {
-        // Income Above/Range: Convert annual to 6-month total
-        thresholdMinDollars = Number(minThreshold) / 2;
-        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) / 2 : undefined;
+        // average_income: normalize threshold directly
+        thresholdMinDollars = Number(minThreshold) / NORMALIZATION_FACTOR;
+        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) / NORMALIZATION_FACTOR : undefined;
       }
+
+      console.log(`[GenerateProof] Normalized for ${proofType}: payments=[${normalizedPayments[0].toFixed(4)}...${normalizedPayments[5].toFixed(4)}], threshold=${thresholdMinDollars.toFixed(4)}`);
 
       // Call verifier service to generate ZKML proof + attestation
       console.log('[GenerateProof] Generating ZKML proof (this may take 10-30 seconds)...');
@@ -246,7 +282,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           proof_type: Number(proofTypeNum),
-          payments: paymentAmounts,
+          payments: normalizedPayments,
           threshold_min: thresholdMinDollars,
           threshold_max: thresholdMaxDollars,
           employee_id: employeeId,
@@ -259,10 +295,28 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         throw new Error(`Verifier service error: ${proofResponse.statusText}`);
       }
 
-      const proofData: AttestationResponse = await proofResponse.json();
+      proofData = await proofResponse.json();
+      console.log('[GenerateProof] Verifier response:', {
+        success: proofData?.success,
+        error_code: proofData?.error_code,
+        message: proofData?.message
+      });
 
-      if (!proofData.success || !proofData.attestation) {
-        throw new Error(proofData.message || 'Failed to generate proof');
+      // Check if it's a threshold failure (legitimate result, not an error)
+      if (!proofData?.success) {
+        if (proofData?.error_code === ErrorCode.THRESHOLD_NOT_MET) {
+          // This is a legitimate threshold failure, throw to catch block with proofData available
+          console.log('[GenerateProof] Threshold failure detected, will generate PDF report');
+          throw new Error(proofData?.message || 'Income does not meet the specified threshold');
+        } else {
+          // Technical error
+          console.log('[GenerateProof] Technical error detected:', proofData?.error_code);
+          throw new Error(proofData?.message || 'Failed to generate proof');
+        }
+      }
+
+      if (!proofData.attestation) {
+        throw new Error('No attestation returned from verifier');
       }
 
       const { attestation_hash, verifier_pubkey, timestamp, threshold: thresholdStr } = proofData.attestation;
@@ -336,9 +390,87 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     } catch (error) {
       console.error('[GenerateProof] Failed:', error);
       clearInterval(progressInterval);
-      toast.error(`Failed to generate proof: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsGenerating(false);
       setProgress(0);
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      // Distinguish between threshold failures and technical failures using error_code
+      // Threshold failure: The proof was generated successfully but income doesn't meet requirements
+      // Technical failure: EZKL error, network error, validation error, etc.
+      const isThresholdFailure = proofData?.error_code === ErrorCode.THRESHOLD_NOT_MET;
+      console.log('[GenerateProof] Error handler - isThresholdFailure:', isThresholdFailure, 'error_code:', proofData?.error_code);
+
+      if (isThresholdFailure && paymentAmounts.length === 6) {
+        // Category A: Legitimate threshold failure → Show failure modal with PDF option
+        console.log('[GenerateProof] ✅ Confirmed threshold failure - preparing failure display...');
+
+        // Calculate actual value based on proof type
+        let actualValue: number;
+        const total = paymentAmounts.reduce((sum, p) => sum + p, 0);
+        const average = total / 6;
+
+        switch (proofType) {
+          case 'average_income':
+          case 'first_time_loan':
+            actualValue = average;
+            break;
+          case 'income_above':
+          case 'income_range':
+          default:
+            actualValue = total;
+            break;
+        }
+
+        // Map UI proof type to contract type number
+        const proofTypeNum =
+          proofType === 'income_above' ? 1 :
+          proofType === 'income_range' ? 2 :
+          proofType === 'average_income' ? 3 :
+          4; // first_time_loan
+
+        // Set failure state to display failure modal
+        clearInterval(progressInterval);
+        setProgress(0);
+        setIsGenerating(false);
+        setFailureData({
+          proofType: proofTypeNum,
+          employeeName,
+          payments: paymentAmounts,
+          actualValue,
+          thresholdMin: Number(minThreshold),
+          thresholdMax: maxThreshold ? Number(maxThreshold) : undefined,
+          companyName: companyName || undefined,
+          message: proofData?.message || 'Income does not meet the specified threshold'
+        });
+        setShowFailure(true);
+      } else {
+        // Category B: Technical failure → Show error reason with troubleshooting guidance
+        console.error('[GenerateProof] Technical error:', errorMessage);
+
+        // Provide specific guidance based on error type
+        let userFriendlyMessage = 'Failed to generate proof: ';
+        let troubleshooting = '';
+
+        if (errorMessage.includes('Exactly 6 monthly payments required')) {
+          userFriendlyMessage += 'Not enough payment history.';
+          troubleshooting = ' You need at least 6 months of payment records to generate a proof.';
+        } else if (errorMessage.includes('Verifier service error') || errorMessage.includes('fetch')) {
+          userFriendlyMessage += 'Unable to reach verification service.';
+          troubleshooting = ' Please check your internet connection and try again in a few moments.';
+        } else if (errorMessage.includes('decomposition error') || errorMessage.includes('overflow')) {
+          userFriendlyMessage += 'Proof generation encountered a mathematical overflow.';
+          troubleshooting = ' This is a system issue. Please contact support.';
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+          userFriendlyMessage += 'Proof generation timed out.';
+          troubleshooting = ' The verification service may be busy. Please try again.';
+        } else {
+          userFriendlyMessage += errorMessage;
+          troubleshooting = ' If this error persists, please contact support.';
+        }
+
+        toast.error(userFriendlyMessage + troubleshooting, { duration: 8000 });
+      }
     }
   };
 
@@ -372,10 +504,12 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     setIsGenerating(false);
     setProgress(0);
     setShowSuccess(false);
+    setShowFailure(false);
     setGeneratedProofId('');
     setProofLink('');
     setGeneratedProofData(null);
     setContractAddr(null);
+    setFailureData(null);
     setProofType('income_above');
     setMinThreshold('4000');
     setMaxThreshold('10000');
@@ -520,6 +654,125 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
             Generate Another
           </Button>
           <Button onClick={handleClose} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+
+  // Failure Modal (RED themed)
+  if (showFailure && failureData) {
+    const handleDownloadFailurePDF = async () => {
+      await generateFailureReport(
+        failureData.proofType,
+        failureData.employeeName,
+        failureData.payments,
+        failureData.actualValue,
+        failureData.thresholdMin,
+        failureData.thresholdMax,
+        failureData.companyName
+      );
+      toast.success('Failure report downloaded');
+    };
+
+    const proofTypeLabels: Record<number, string> = {
+      1: 'Income Above Threshold',
+      2: 'Income Range',
+      3: 'Average Income',
+      4: 'First-Time Loan Eligibility'
+    };
+
+    return (
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
+            backgroundImage: 'none',
+          },
+        }}
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <CancelIcon sx={{ fontSize: 32, color: theme.colors.error[500] }} />
+              <Box>
+                <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.error[500]}>
+                  Threshold Not Met ❌
+                </Typography>
+                <Typography variant="caption" color={theme.colors.text.secondary}>
+                  Income does not meet the specified requirement
+                </Typography>
+              </Box>
+            </Stack>
+            <IconButton onClick={handleClose} size="small">
+              <CloseIcon />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+
+        <Divider />
+
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 2 }}>
+            {/* Failure Details */}
+            <Box>
+              <Typography variant="body2" color={theme.colors.text.secondary} sx={{ mb: 1 }}>
+                Proof Type
+              </Typography>
+              <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
+                {proofTypeLabels[failureData.proofType]}
+              </Typography>
+            </Box>
+
+            <Box>
+              <Typography variant="body2" color={theme.colors.text.secondary} sx={{ mb: 1 }}>
+                Verification Result
+              </Typography>
+              <Typography variant="body1" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.error[500]}>
+                Requirements Not Met
+              </Typography>
+              <Typography variant="caption" color={theme.colors.text.secondary} sx={{ mt: 0.5 }}>
+                (Specific amounts not disclosed - privacy preserved)
+              </Typography>
+            </Box>
+
+            <Divider />
+
+            {/* Failure Message */}
+            <Alert severity="error">
+              <Typography variant="caption">
+                {failureData.message}
+              </Typography>
+            </Alert>
+
+            {/* Download Failure Report */}
+            <Box>
+              <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary} sx={{ mb: 2 }}>
+                Download Detailed Report
+              </Typography>
+
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadFailurePDF}
+                fullWidth
+              >
+                Download Failure Report PDF
+              </Button>
+            </Box>
+          </Stack>
+        </DialogContent>
+
+        <Divider />
+
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={handleClose} variant="contained" color="primary" fullWidth>
             Close
           </Button>
         </DialogActions>
