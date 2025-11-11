@@ -20,3 +20,6 @@ export { EmployeeListPage } from './EmployeeListPage';
 export { ProfileSettingsPage } from './ProfileSettingsPage';
 export { PrivacySettingsPage } from './PrivacySettingsPage';
 export { NotificationSettingsPage } from './NotificationSettingsPage';
+
+// Proof verification (Phase 4.7)
+export { VerifyProofPage } from './VerifyProofPage';

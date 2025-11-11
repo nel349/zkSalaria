@@ -16,6 +16,7 @@ import {
   ProfileSettingsPage,
   PrivacySettingsPage,
   NotificationSettingsPage,
+  VerifyProofPage,
 } from './pages';
 import { SettingsLayout } from './components/SettingsLayout';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
@@ -83,6 +84,9 @@ export const App: React.FC = () => {
 
           {/* Dashboard (company or employee) */}
           <Route path="/dashboard" element={<DashboardPage />} />
+
+          {/* Public Proof Verification */}
+          <Route path="/verify/:attestationHash" element={<VerifyProofPage />} />
 
           {/* Settings (Phase 4) */}
           <Route

@@ -31,6 +31,8 @@ import ShareIcon from '@mui/icons-material/Share';
 import { useTheme, useThemeValues } from '../theme';
 import { toast } from 'react-hot-toast';
 import { type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
+import { generateProofPDF } from '../utils/pdfGenerator';
+import { getCurrentEmployer } from '../utils/EmployerContractsLocalState';
 
 interface GenerateProofModalProps {
   open: boolean;
@@ -93,6 +95,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
   const [showSuccess, setShowSuccess] = useState(false);
   const [generatedProofId, setGeneratedProofId] = useState('');
   const [proofLink, setProofLink] = useState('');
+  const [generatedProofData, setGeneratedProofData] = useState<any | null>(null);
+  const [contractAddr, setContractAddr] = useState<string | null>(null);
 
   const proofTypes = [
     {
@@ -297,12 +301,21 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       clearInterval(progressInterval);
       setProgress(100);
 
-      // Generate proof ID from attestation hash (first 6 chars)
-      const proofId = `PROOF-${attestationHash.substring(2, 8).toUpperCase()}`;
-      const link = `https://zksalaria.app/verify/${proofId}`;
+      // Generate proof ID and shareable link using full attestation hash
+      const hashWithout0x = attestationHash.substring(2); // Remove 0x prefix
+      const proofId = `PROOF-${hashWithout0x.substring(0, 8).toUpperCase()}`;
+      const link = `${window.location.origin}/verify/${hashWithout0x}`;
+
+      // Query the submitted proof from contract to get full data for PDF
+      const submittedProof = await api.getIncomeProof(employeeId);
+
+      // Get current employer contract address
+      const employerContract = getCurrentEmployer();
 
       setGeneratedProofId(proofId);
       setProofLink(link);
+      setGeneratedProofData(submittedProof);
+      setContractAddr(employerContract);
       setShowSuccess(true);
 
       toast.success('Proof generated and submitted successfully!');
@@ -326,9 +339,19 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     window.open(`mailto:${verifierEmail}?subject=${subject}&body=${body}`);
   };
 
-  const handleDownloadPDF = () => {
-    // TODO: Generate PDF with proof details
-    toast.success('PDF download started (feature coming soon)');
+  const handleDownloadPDF = async () => {
+    if (!generatedProofData) {
+      toast.error('Proof data not available');
+      return;
+    }
+
+    try {
+      await generateProofPDF(generatedProofData, contractAddr || undefined);
+      toast.success('PDF report downloaded successfully');
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      toast.error('Failed to generate PDF report');
+    }
   };
 
   const handleReset = () => {
@@ -337,6 +360,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     setShowSuccess(false);
     setGeneratedProofId('');
     setProofLink('');
+    setGeneratedProofData(null);
+    setContractAddr(null);
     setProofType('income_above');
     setMinThreshold('4000');
     setMaxThreshold('10000');

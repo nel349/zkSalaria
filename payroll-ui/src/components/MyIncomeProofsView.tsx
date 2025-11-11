@@ -1,4 +1,3 @@
-// @ts-nocheck - MUI Grid v5/v6 compatibility issues (runtime works fine)
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -6,18 +5,20 @@ import {
   Stack,
   Paper,
   Button,
-  Chip,
   CircularProgress,
   Alert,
-  Divider,
-  Grid,
+  TextField,
+  IconButton,
 } from '@mui/material';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import DownloadIcon from '@mui/icons-material/Download';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useTheme, useThemeValues } from '../theme';
 import { type DeployedPayrollAPI } from '@zksalaria/payroll-api';
+import { ProofVerificationCard } from './ProofVerificationCard';
+import { toast } from 'react-hot-toast';
+import { getCurrentEmployer } from '../utils/EmployerContractsLocalState';
 
 interface IncomeProof {
   employee_id: Uint8Array;
@@ -31,20 +32,6 @@ interface IncomeProof {
   submitted_at: bigint;
   expires_at: bigint;
 }
-
-const PROOF_TYPE_NAMES: Record<number, string> = {
-  1: 'Income Above Threshold',
-  2: 'Income Range',
-  3: 'Average Income',
-  4: 'First-Time Loan Eligibility',
-};
-
-const PROOF_TYPE_DESCRIPTIONS: Record<number, string> = {
-  1: 'Proves minimum monthly income meets threshold',
-  2: 'Proves monthly income falls within specified range',
-  3: 'Proves average income over 6 months meets minimum',
-  4: 'Proves income consistency for loan eligibility',
-};
 
 interface MyIncomeProofsViewProps {
   api: DeployedPayrollAPI | null;
@@ -67,6 +54,8 @@ export const MyIncomeProofsView: React.FC<MyIncomeProofsViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [incomeProof, setIncomeProof] = useState<IncomeProof | null>(null);
+  const [contractAddress, setContractAddress] = useState<string | null>(null);
+  const [proofLink, setProofLink] = useState<string>('');
 
   useEffect(() => {
     const loadProofData = async () => {
@@ -82,6 +71,17 @@ export const MyIncomeProofsView: React.FC<MyIncomeProofsViewProps> = ({
 
         if (proof) {
           setIncomeProof(proof);
+
+          // Get contract address
+          const employerContract = getCurrentEmployer();
+          setContractAddress(employerContract);
+
+          // Generate shareable link
+          const hashHex = (Array.from(proof.attestation_hash) as number[])
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+          const link = `${window.location.origin}/verify/${hashHex}`;
+          setProofLink(link);
         }
 
         setLoading(false);
@@ -95,48 +95,11 @@ export const MyIncomeProofsView: React.FC<MyIncomeProofsViewProps> = ({
     loadProofData();
   }, [api, walletAddress]);
 
-  const formatTimestamp = (timestamp: bigint): string => {
-    if (!timestamp || timestamp === 0n) return 'Never';
-    const date = new Date(Number(timestamp) * 1000);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatAmount = (amount: bigint): string => {
-    return `$${(Number(amount) / 100).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
-  const handleDownloadProof = () => {
-    if (!incomeProof) return;
-
-    const proofData = {
-      employee_id: Array.from(incomeProof.employee_id),
-      proof_type: Number(incomeProof.proof_type),
-      threshold_min: incomeProof.threshold_min.toString(),
-      threshold_max: incomeProof.threshold_max.toString(),
-      attestation_hash: Array.from(incomeProof.attestation_hash),
-      verifier_pubkey: Array.from(incomeProof.verifier_pubkey),
-      submitted_at: incomeProof.submitted_at.toString(),
-      expires_at: incomeProof.expires_at.toString(),
-    };
-
-    const blob = new Blob([JSON.stringify(proofData, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `income-proof-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleCopyLink = () => {
+    if (proofLink) {
+      navigator.clipboard.writeText(proofLink);
+      toast.success('Proof link copied to clipboard!');
+    }
   };
 
   if (loading) {
@@ -238,168 +201,53 @@ export const MyIncomeProofsView: React.FC<MyIncomeProofsViewProps> = ({
           </Typography>
         </Paper>
       ) : (
-        <Paper
-          elevation={2}
-          sx={{
-            borderRadius: 3,
-            bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Proof Header */}
-          <Box
+        <Stack spacing={3}>
+          {/* Shareable Link Section */}
+          <Paper
+            elevation={1}
             sx={{
               p: 3,
-              bgcolor:
-                mode === 'dark'
-                  ? `${theme.colors.primary[500]}15`
-                  : theme.colors.primary[50],
-              borderBottom: `1px solid ${theme.colors.border.default}`,
+              borderRadius: 2,
+              bgcolor: mode === 'dark' ? theme.colors.background.paper : theme.colors.background.default,
             }}
           >
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <VerifiedIcon sx={{ fontSize: 32, color: theme.colors.primary[500] }} />
-                <Box>
-                  <Typography
-                    variant="h6"
-                    fontWeight={theme.typography.fontWeight.semibold}
-                    color={theme.colors.text.primary}
-                  >
-                    {PROOF_TYPE_NAMES[Number(incomeProof.proof_type)] || `Type ${incomeProof.proof_type}`}
-                  </Typography>
-                  <Typography variant="body2" color={theme.colors.text.secondary}>
-                    {PROOF_TYPE_DESCRIPTIONS[Number(incomeProof.proof_type)] || 'Income verification proof'}
-                  </Typography>
-                </Box>
-              </Stack>
-              <Chip
-                label={<Typography>Verified</Typography>}
-                color="success"
-                icon={<VerifiedIcon sx={{ fontSize: 22 }}/>}
-                sx={{ fontWeight: theme.typography.fontWeight.semibold }}
-              />
-            </Stack>
-          </Box>
+            <Typography
+              variant="body2"
+              fontWeight={theme.typography.fontWeight.semibold}
+              color={theme.colors.text.primary}
+              sx={{ mb: 2 }}
+            >
+              Share Your Proof
+            </Typography>
+            <Typography variant="caption" color={theme.colors.text.secondary} sx={{ mb: 1.5, display: 'block' }}>
+              Send this link to lenders, landlords, or anyone who needs to verify your income
+            </Typography>
+            <TextField
+              fullWidth
+              value={proofLink}
+              InputProps={{
+                readOnly: true,
+                endAdornment: (
+                  <IconButton onClick={handleCopyLink} size="small">
+                    <ContentCopyIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                ),
+                sx: {
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                }
+              }}
+            />
+          </Paper>
 
-          {/* Proof Details */}
-          <Box sx={{ p: 3 }}>
-            <Grid container spacing={3}>
-              {/* Threshold Information */}
-              <Grid item xs={12} md={6}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    bgcolor: mode === 'dark' ? theme.colors.background.default : theme.colors.background.paper,
-                    borderRadius: 2,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color={theme.colors.text.secondary}
-                    sx={{ mb: 0.5, display: 'block' }}
-                  >
-                    Proven Threshold
-                  </Typography>
-                  <Typography
-                    variant="h5"
-                    fontWeight={theme.typography.fontWeight.bold}
-                    sx={{
-                      background: `linear-gradient(135deg, ${theme.colors.primary[400]}, ${theme.colors.secondary[500]})`,
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    {Number(incomeProof.proof_type) === 2
-                      ? `${formatAmount(incomeProof.threshold_min)} - ${formatAmount(incomeProof.threshold_max)}`
-                      : `≥ ${formatAmount(incomeProof.threshold_min)}`}
-                  </Typography>
-                  <Typography variant="caption" color={theme.colors.text.disabled}>
-                    {Number(incomeProof.proof_type) === 2 ? 'Income Range' : 'Minimum Income'}
-                  </Typography>
-                </Paper>
-              </Grid>
-
-              {/* Submission Date */}
-              <Grid item xs={12} md={6}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    bgcolor: mode === 'dark' ? theme.colors.background.default : theme.colors.background.paper,
-                    borderRadius: 2,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color={theme.colors.text.secondary}
-                    sx={{ mb: 0.5, display: 'block' }}
-                  >
-                    Submission Date
-                  </Typography>
-                  <Typography
-                    variant="h6"
-                    fontWeight={theme.typography.fontWeight.semibold}
-                    color={theme.colors.text.primary}
-                  >
-                    {formatTimestamp(incomeProof.submitted_at)}
-                  </Typography>
-                  <Typography variant="caption" color={theme.colors.text.disabled}>
-                    {incomeProof.expires_at !== 0n
-                      ? `Expires: ${formatTimestamp(incomeProof.expires_at)}`
-                      : 'Never expires'}
-                  </Typography>
-                </Paper>
-              </Grid>
-
-              {/* Attestation Hash */}
-              <Grid item xs={12}>
-                <Box>
-                  <Typography
-                    variant="caption"
-                    color={theme.colors.text.secondary}
-                    sx={{ mb: 0.5, display: 'block' }}
-                  >
-                    Attestation Hash
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    fontFamily="monospace"
-                    color={theme.colors.text.primary}
-                    sx={{
-                      bgcolor: mode === 'dark' ? theme.colors.background.default : theme.colors.background.paper,
-                      p: 1.5,
-                      borderRadius: 1,
-                      wordBreak: 'break-all',
-                    }}
-                  >
-                    {Array.from(incomeProof.attestation_hash)
-                      .map((b) => b.toString(16).padStart(2, '0'))
-                      .join('')}
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
-
-            <Divider sx={{ my: 3 }} />
-
-            {/* Actions */}
-            <Stack direction="row" spacing={2}>
-              <Button
-                variant="contained"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadProof}
-                sx={{
-                  bgcolor: theme.colors.primary[500],
-                  '&:hover': { bgcolor: theme.colors.primary[700] },
-                }}
-              >
-                Download Proof
-              </Button>
-            </Stack>
-          </Box>
-        </Paper>
+          {/* Proof Verification Card */}
+          <ProofVerificationCard
+            proof={incomeProof}
+            contractAddress={contractAddress || undefined}
+            showDownloadPDF={true}
+            showTechnicalDetails={true}
+          />
+        </Stack>
       )}
     </Stack>
   );
