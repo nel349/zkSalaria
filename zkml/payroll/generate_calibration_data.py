@@ -59,9 +59,10 @@ def generate_calibration_samples():
 def create_calibration_file(model_name, num_thresholds=1):
     """Create calibration data file for a specific model using MAX values"""
 
-    # Use realistic maximum values (covers 95% of use cases)
-    # Maximum payment: $15,000/month (covers up to ~$180K/year)
-    max_payments = [15000.0] * 6
+    # Use conservative maximum values to avoid circuit overflow
+    # Maximum payment: $10,000/month (covers up to ~$120K/year)
+    # This prevents overflow in sum/division operations
+    max_payments = [10000.0] * 6
 
     # Create input data for EZKL calibration
     calibration_data = {
@@ -75,15 +76,15 @@ def create_calibration_file(model_name, num_thresholds=1):
 
     # Add threshold(s) based on model type
     if model_name == "income_above_threshold":
-        # Max total threshold: 6 months * $15K = $90K
-        calibration_data["input_data"].append([90000.0])
+        # Max total threshold: 6 months * $10K = $60K
+        calibration_data["input_data"].append([60000.0])
     elif model_name == "income_range":
-        # Max range thresholds
-        calibration_data["input_data"].append([50000.0])  # min
-        calibration_data["input_data"].append([100000.0])  # max
+        # Max range thresholds (conservative)
+        calibration_data["input_data"].append([40000.0])  # min
+        calibration_data["input_data"].append([60000.0])  # max
     elif model_name == "average_income":
-        # Max average threshold: $15,000/month
-        calibration_data["input_data"].append([15000.0])
+        # Max average threshold: $10,000/month
+        calibration_data["input_data"].append([10000.0])
     elif model_name == "first_time_loan":
         # Max consistency ratio
         calibration_data["input_data"].append([1.0])

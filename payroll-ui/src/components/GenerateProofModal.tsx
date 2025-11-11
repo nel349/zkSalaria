@@ -82,8 +82,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
   // Form state
   const [proofType, setProofType] = useState<ProofType>('income_above');
-  const [minThreshold, setMinThreshold] = useState('4000');
-  const [maxThreshold, setMaxThreshold] = useState('10000');
+  const [minThreshold, setMinThreshold] = useState('60000'); // Annual for most, monthly for average_income
+  const [maxThreshold, setMaxThreshold] = useState('120000'); // Annual for most, monthly for average_income
   const [includeEmployment, setIncludeEmployment] = useState(true);
   const [includeCompany, setIncludeCompany] = useState(true);
   const [expirationDays, setExpirationDays] = useState('30');
@@ -101,27 +101,27 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
   const proofTypes = [
     {
       value: 'income_above' as ProofType,
-      label: 'Income Above Threshold',
+      label: 'Income Above Threshold (yearly)',
       description: 'Prove you earn at least $X per month',
       example: 'I earn at least $4,000/month',
     },
     {
       value: 'income_range' as ProofType,
-      label: 'Income Range',
+      label: 'Income Range (yearly)',
       description: 'Prove you earn between $X and $Y per month',
       example: 'I earn between $8,000 and $10,000/month',
     },
     {
       value: 'average_income' as ProofType,
-      label: 'Average Income',
+      label: 'Average Income (monthly)',
       description: 'Prove your average income over time',
       example: 'My average income is at least $11,000/month',
     },
     {
       value: 'first_time_loan' as ProofType,
-      label: 'First-Time Loan Eligibility',
-      description: 'Prove salary consistency for first loan (ZKML)',
-      example: 'I have 6 months of consistent salary → eligible for loan',
+      label: 'Loan Eligibility (Stable Income)',
+      description: 'Prove 6 months of stable, consistent salary history',
+      example: 'I qualify for a loan with my stable income history',
     },
   ];
 
@@ -141,13 +141,13 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
     switch (proofType) {
       case 'income_above':
-        return `${employeeName} earns at least $${Number(minThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
+        return `${employeeName} earns at least $${Number(minThreshold).toLocaleString()}/year${employmentText}${companyText}.`;
       case 'income_range':
-        return `${employeeName} earns between $${Number(minThreshold).toLocaleString()} and $${Number(maxThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
+        return `${employeeName} earns between $${Number(minThreshold).toLocaleString()} and $${Number(maxThreshold).toLocaleString()}/year${employmentText}${companyText}.`;
       case 'average_income':
-        return `${employeeName}'s average income is at least $${Number(minThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
+        return `${employeeName}'s average monthly income is at least $${Number(minThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
       case 'first_time_loan':
-        return `${employeeName} has 6 consecutive months of consistent salary (within ${Number(minThreshold) * 100}% range)${employmentText}${companyText}.`;
+        return `${employeeName} has 6 consecutive months of consistent salary${employmentText}${companyText}.`;
       default:
         return '';
     }
@@ -221,9 +221,23 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       const historyCommitment = await api.computeHistoryCommitment(employeeId);
       console.log(`[GenerateProof] History commitment: ${historyCommitment}`);
 
-      // Parse thresholds - ZKML models expect dollars (not atomic units)
-      const thresholdMinDollars = Number(minThreshold);
-      const thresholdMaxDollars = maxThreshold ? Number(maxThreshold) : undefined;
+      // Convert thresholds for ZKML model
+      // - Income Above Threshold: annual/2 = 6-month total
+      // - Income Range: annual/2 = 6-month total
+      // - Average Income: monthly (no conversion, model checks monthly avg)
+      // - First Time Loan: threshold is ratio (0-1), no conversion
+      let thresholdMinDollars: number;
+      let thresholdMaxDollars: number | undefined;
+
+      if (proofType === 'first_time_loan' || proofType === 'average_income') {
+        // No conversion needed (ratio for loan, monthly for average)
+        thresholdMinDollars = Number(minThreshold);
+        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) : undefined;
+      } else {
+        // Income Above/Range: Convert annual to 6-month total
+        thresholdMinDollars = Number(minThreshold) / 2;
+        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) / 2 : undefined;
+      }
 
       // Call verifier service to generate ZKML proof + attestation
       console.log('[GenerateProof] Generating ZKML proof (this may take 10-30 seconds)...');
@@ -608,7 +622,21 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
             </FormLabel>
             <Select
               value={proofType}
-              onChange={(e) => setProofType(e.target.value as ProofType)}
+              onChange={(e) => {
+                const newType = e.target.value as ProofType;
+                setProofType(newType);
+                // Update default thresholds based on proof type
+                if (newType === 'average_income') {
+                  setMinThreshold('5000'); // Monthly
+                  setMaxThreshold('10000'); // Monthly
+                } else if (newType === 'first_time_loan') {
+                  setMinThreshold('0.3'); // Fixed: 30% variation allowed
+                  setMaxThreshold('');
+                } else {
+                  setMinThreshold('60000'); // Annual
+                  setMaxThreshold('120000'); // Annual
+                }
+              }}
               sx={{ mt: 1 }}
             >
               {proofTypes.map((pt) => (
@@ -639,24 +667,33 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
             <Stack spacing={2}>
               {proofType === 'first_time_loan' ? (
-                <TextField
-                  fullWidth
-                  label="Consistency Threshold"
-                  type="number"
-                  value={minThreshold}
-                  onChange={(e) => setMinThreshold(e.target.value)}
-                  helperText="Maximum salary variation allowed (0.25 = 25% range between highest and lowest payment)"
-                  inputProps={{ min: 0, max: 1, step: 0.01 }}
-                />
+                <Box sx={{ p: 2, bgcolor: theme.colors.background.surface, borderRadius: 1 }}>
+                  <Typography variant="body2" color={theme.colors.text.primary}>
+                    This proof demonstrates you have 6 consecutive months of consistent salary payments, which qualifies you for first-time loan eligibility.
+                  </Typography>
+                  <Typography variant="caption" color={theme.colors.text.secondary} sx={{ mt: 1, display: 'block' }}>
+                    No additional parameters needed - we'll verify your salary has been stable over the past 6 months.
+                  </Typography>
+                </Box>
               ) : (
                 <>
                   <TextField
                     fullWidth
-                    label={proofType === 'income_range' ? 'Minimum Amount ($/month)' : 'Threshold Amount ($/month)'}
+                    label={
+                      proofType === 'average_income'
+                        ? 'Monthly Income Threshold ($/month)'
+                        : proofType === 'income_range'
+                        ? 'Minimum Annual Income ($/year)'
+                        : 'Annual Income Threshold ($/year)'
+                    }
                     type="number"
                     value={minThreshold}
                     onChange={(e) => setMinThreshold(e.target.value)}
-                    helperText={`Prove you earn ${proofType === 'income_range' ? 'at least' : proofType === 'average_income' ? 'on average at least' : 'more than'} this amount per month`}
+                    helperText={
+                      proofType === 'average_income'
+                        ? 'Prove your average monthly income is at least this amount'
+                        : `Prove you earn ${proofType === 'income_range' ? 'at least' : 'more than'} this amount per year`
+                    }
                     InputProps={{
                       startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>,
                     }}
@@ -666,11 +703,11 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
                   {proofType === 'income_range' && (
                     <TextField
                       fullWidth
-                      label="Maximum Amount ($/month)"
+                      label="Maximum Annual Income ($/year)"
                       type="number"
                       value={maxThreshold}
                       onChange={(e) => setMaxThreshold(e.target.value)}
-                      helperText="Prove you earn less than this amount per month"
+                      helperText="Prove you earn less than this amount per year"
                       InputProps={{
                         startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>,
                       }}

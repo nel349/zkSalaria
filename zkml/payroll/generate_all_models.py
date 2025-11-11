@@ -51,7 +51,9 @@ def run_ezkl_workflow(name, num_inputs):
     print(f"   ✓ Settings")
 
     print(f"   → calibrate (using wide range: $1K-$15K)...")
-    # Use comprehensive calibration data covering realistic salary ranges
+    # IMPORTANT: Calibration data determines input_scale parameter
+    # For models with division (e.g., average_income), use normalized values (0-1 range)
+    # to prevent overflow. See EZKL_SCALING_GUIDE.md for details.
     ezkl.calibrate_settings(data=f"../../calibration/calibration_{name}.json", model=f"{name}.onnx", settings=f"{name}_settings.json", target="resources")
     print(f"   ✓ Calibrated")
 

@@ -76,16 +76,47 @@ export class ProofGenerator {
       const { readFile } = await import('fs/promises');
       const proofJson = await readFile(proofFile, 'utf-8');
 
+      // Read the witness to get the actual ZKML model output
+      const witnessJson = await readFile(witnessFile, 'utf-8');
+      const witness = JSON.parse(witnessJson);
+
+      // Parse the result from witness outputs
+      // outputs is an array like [["0100000000..."]] where first 2 hex chars indicate 0 or 1
+      const outputHex = witness.outputs?.[0]?.[0] || '00';
+
+      // Different proof types have different output formats:
+      // - INCOME_ABOVE_THRESHOLD, INCOME_RANGE, AVERAGE_INCOME: boolean (01 = true, 00 = false)
+      // - FIRST_TIME_LOAN_ELIGIBILITY: number (average income if consistent, 0 if not)
+      let zkmlResult: boolean;
+      if (proofType === ProofType.FIRST_TIME_LOAN_ELIGIBILITY) {
+        // For first-time loan, output is a number. Check if it's > 0
+        // Parse hex to integer and check if non-zero
+        const outputValue = parseInt(outputHex.substring(0, 8), 16);
+        zkmlResult = outputValue > 0;
+      } else {
+        // For other proof types, check if first 2 chars are '01'
+        zkmlResult = outputHex.substring(0, 2) === '01';
+      }
+
       const result: ProofOutput = {
         proofType,
         proofJson,
         publicInputs: {
-          result: true, // Will be determined by verification
+          result: zkmlResult, // Actual result from ZKML model
           payments: input.payments,
           thresholdMin: input.thresholdMin,
           thresholdMax: input.thresholdMax
         }
       };
+
+      // If ZKML result is false, the proof should fail
+      if (!zkmlResult) {
+        return {
+          success: false,
+          error: 'Income does not meet the specified threshold',
+          duration: Date.now() - startTime
+        };
+      }
 
       return {
         success: true,

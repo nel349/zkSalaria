@@ -62,6 +62,32 @@ const TEST_CASES: TestCase[] = [
     thresholdMin: 100000,
     expectedPass: true,
     description: 'Executive earning $123,000 total > $100,000 threshold'
+  },
+  // NEGATIVE TEST CASES - Should fail when threshold not met
+  {
+    name: 'NEGATIVE: Below Threshold',
+    proofType: ProofType.INCOME_ABOVE_THRESHOLD,
+    payments: [2000, 2100, 2200, 2300, 2400, 2500],
+    thresholdMin: 20000,
+    expectedPass: false,
+    description: 'Low earner with $13,500 total < $20,000 threshold (should FAIL)'
+  },
+  {
+    name: 'NEGATIVE: Outside Range (Too Low)',
+    proofType: ProofType.INCOME_RANGE,
+    payments: [1500, 1600, 1700, 1800, 1900, 2000],
+    thresholdMin: 15000,
+    thresholdMax: 25000,
+    expectedPass: false,
+    description: 'Low earner with $10,500 total < $15,000 range minimum (should FAIL)'
+  },
+  {
+    name: 'NEGATIVE: Average Income Too Low',
+    proofType: ProofType.AVERAGE_INCOME,
+    payments: [3000, 3100, 3200, 3300, 3400, 3500],
+    thresholdMin: 5000,
+    expectedPass: false,
+    description: 'Mid-level earning $3,250 avg < $5,000 average requirement (should FAIL)'
   }
 ];
 
@@ -98,7 +124,14 @@ async function runTest(testCase: TestCase): Promise<{ passed: boolean; error?: s
     );
 
     if (!proofResult.success || !proofResult.proof) {
-      console.error(`❌ Proof generation failed: ${proofResult.error}`);
+      // For negative tests, proof generation SHOULD fail
+      if (!testCase.expectedPass) {
+        console.log(`✅ Proof generation correctly failed: ${proofResult.error}`);
+        console.log(`\n✅ TEST PASSED - Proof rejected as expected (threshold not met)`);
+        return { passed: true };
+      }
+      // For positive tests, proof generation should succeed
+      console.error(`❌ Proof generation failed unexpectedly: ${proofResult.error}`);
       return { passed: false, error: `Proof generation failed: ${proofResult.error}` };
     }
 

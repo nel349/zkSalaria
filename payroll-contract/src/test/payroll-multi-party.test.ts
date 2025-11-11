@@ -2352,8 +2352,8 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const empId = stringToBytes32('EMP_STATUS_001');
       const history = ledger.employee_payment_history.lookup(empId);
 
-      // Last entry should have status = COMPLETED (1)
-      expect(history[11].status).toBe(PaymentStatus.COMPLETED);
+      // Most recent entry (index 5) should have status = COMPLETED (1)
+      expect(history[5].status).toBe(PaymentStatus.COMPLETED);
 
       console.log('✅ Single payment status verified as COMPLETED (1)');
     });
@@ -2381,9 +2381,9 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const emp1History = ledger.employee_payment_history.lookup(emp1Id);
       const emp2History = ledger.employee_payment_history.lookup(emp2Id);
 
-      // Both should have status = COMPLETED (1)
-      expect(emp1History[11].status).toBe(PaymentStatus.COMPLETED);
-      expect(emp2History[11].status).toBe(PaymentStatus.COMPLETED);
+      // Both should have status = COMPLETED (1) at most recent entry (index 5)
+      expect(emp1History[5].status).toBe(PaymentStatus.COMPLETED);
+      expect(emp2History[5].status).toBe(PaymentStatus.COMPLETED);
 
       console.log('✅ Batch payment statuses verified as COMPLETED (1)');
     });
@@ -2422,8 +2422,8 @@ describe('zkSalaria Multi-Party Privacy Tests', () => {
       const empId = stringToBytes32('EMP_RECURRING_STATUS');
       const history = ledger.employee_payment_history.lookup(empId);
 
-      // Last entry should have status = COMPLETED (1)
-      expect(history[11].status).toBe(PaymentStatus.COMPLETED);
+      // Most recent entry (index 5) should have status = COMPLETED (1)
+      expect(history[5].status).toBe(PaymentStatus.COMPLETED);
 
       console.log('✅ Recurring payment status verified as COMPLETED (1)');
     });
