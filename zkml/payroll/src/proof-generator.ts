@@ -160,32 +160,25 @@ export class ProofGenerator {
 
   /**
    * Prepare input data array for ONNX model
-   * CRITICAL: ALL values must be normalized by dividing by 10000
+   * NOTE: Values are expected to be ALREADY NORMALIZED by the caller (UI/API)
+   * The normalization (dividing by 10000) happens in GenerateProofModal.tsx
    * because all models use input_scale: 7 to prevent EZKL overflow
    */
   private prepareInputData(proofType: ProofType, input: ProofInput): number[] {
     const { payments, thresholdMin, thresholdMax } = input;
-    const NORMALIZATION_FACTOR = 10000;
 
-    // Normalize all payment amounts
-    const normalizedPayments = payments.map(p => p / NORMALIZATION_FACTOR);
-
+    // Values are already normalized by the caller, just pass them through
     switch (proofType) {
       case ProofType.INCOME_ABOVE_THRESHOLD:
       case ProofType.AVERAGE_INCOME:
-        // Normalize threshold
-        return [...normalizedPayments, thresholdMin / NORMALIZATION_FACTOR];
-
       case ProofType.FIRST_TIME_LOAN_ELIGIBILITY:
-        // Threshold is already a ratio (0-1), no normalization needed
-        return [...normalizedPayments, thresholdMin];
+        return [...payments, thresholdMin];
 
       case ProofType.INCOME_RANGE:
         if (!thresholdMax) {
           throw new Error('INCOME_RANGE requires thresholdMax');
         }
-        // Normalize both thresholds
-        return [...normalizedPayments, thresholdMin / NORMALIZATION_FACTOR, thresholdMax / NORMALIZATION_FACTOR];
+        return [...payments, thresholdMin, thresholdMax];
 
       default:
         throw new Error(`Unknown proof type: ${proofType}`);

@@ -34,6 +34,7 @@ import { toast } from 'react-hot-toast';
 import { type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
 import { generateProofPDF, generateFailureReport } from '../utils/pdfGenerator';
 import { getCurrentEmployer } from '../utils/EmployerContractsLocalState';
+import { storeProofAttempt } from './MyIncomeProofsModal';
 
 interface GenerateProofModalProps {
   open: boolean;
@@ -374,6 +375,23 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       const proofId = `PROOF-${hashWithout0x.substring(0, 8).toUpperCase()}`;
       const link = `${window.location.origin}/verify/${hashWithout0x}`;
 
+      // Calculate actual total for display
+      const actualTotal = paymentAmounts.reduce((sum, p) => sum + p, 0);
+
+      // Store successful proof attempt in localStorage with full details
+      storeProofAttempt({
+        id: attestationHash,
+        timestamp: Date.now(),
+        success: true,
+        proofType: Number(proofTypeNum),
+        employeeId: employeeId,
+        attestationHash: attestationHash,
+        payments: paymentAmounts,
+        actualValue: actualTotal,
+        thresholdMin: Number(minThreshold),
+        thresholdMax: maxThreshold ? Number(maxThreshold) : undefined,
+      });
+
       // Query the submitted proof from contract to get full data for PDF
       const submittedProof = await api.getIncomeProof(employeeId);
 
@@ -398,6 +416,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       // Distinguish between threshold failures and technical failures using error_code
       // Threshold failure: The proof was generated successfully but income doesn't meet requirements
       // Technical failure: EZKL error, network error, validation error, etc.
+      console.log('[GenerateProof] Error handler - proofData:', proofData);
+      console.log('[GenerateProof] Error handler - paymentAmounts.length:', paymentAmounts.length);
       const isThresholdFailure = proofData?.error_code === ErrorCode.THRESHOLD_NOT_MET;
       console.log('[GenerateProof] Error handler - isThresholdFailure:', isThresholdFailure, 'error_code:', proofData?.error_code);
 
@@ -428,6 +448,34 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
           proofType === 'income_range' ? 2 :
           proofType === 'average_income' ? 3 :
           4; // first_time_loan
+
+        // Store failed proof attempt in localStorage
+        console.log('[GenerateProof] About to store failed proof attempt...');
+        console.log('[GenerateProof] Data to store:', {
+          proofType: proofTypeNum,
+          employeeId,
+          paymentsLength: paymentAmounts.length,
+          actualValue,
+          thresholdMin: Number(minThreshold)
+        });
+
+        storeProofAttempt({
+          id: `FAILED_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now(),
+          success: false,
+          proofType: proofTypeNum,
+          employeeId: employeeId,
+          error_code: 'THRESHOLD_NOT_MET',
+          message: proofData?.message || 'Income does not meet the specified threshold',
+          payments: paymentAmounts,
+          actualValue,
+          thresholdMin: Number(minThreshold),
+          thresholdMax: maxThreshold ? Number(maxThreshold) : undefined,
+          employeeName,
+          companyName: companyName || undefined,
+        });
+
+        console.log('[GenerateProof] storeProofAttempt() called successfully');
 
         // Set failure state to display failure modal
         clearInterval(progressInterval);

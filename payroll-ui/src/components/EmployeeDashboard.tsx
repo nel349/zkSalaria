@@ -30,7 +30,7 @@ import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import { WithdrawSalaryModal } from './WithdrawSalaryModal';
 import { GenerateProofModal } from './GenerateProofModal';
 import { EmployeeDashboardDrawer, type DashboardView } from './EmployeeDashboardDrawer';
-import { MyIncomeProofsView } from './MyIncomeProofsView';
+import { MyIncomeProofsModal } from './MyIncomeProofsModal';
 import pino from 'pino';
 
 const logger = pino({
@@ -108,14 +108,14 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
 
         // Subscribe to contract state
         const subscription = connectedApi.state$.subscribe(async (state) => {
-          console.log('[EmployeeDashboard] State updated:', state);
+          // console.log('[EmployeeDashboard] State updated:', state);
 
           // Get decrypted balance from blockchain
           let employeeBalance = 0n;
           if (walletAddress) {
             try {
               employeeBalance = await connectedApi.getEmployeeBalance(walletAddress);
-              console.log('[EmployeeDashboard] Employee balance:', employeeBalance);
+              // console.log('[EmployeeDashboard] Employee balance:', employeeBalance);
             } catch (err) {
               console.error('[EmployeeDashboard] Failed to get balance:', err);
             }
@@ -191,14 +191,14 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         const timestamp = Number(record.timestamp) * 1000;
         const dateStr = new Date(timestamp).toISOString();
 
-        console.log(`[EmployeeDashboard] Payment ${index} timestamp:`, {
-          rawTimestamp: record.timestamp,
-          timestampType: typeof record.timestamp,
-          timestampNumber: Number(record.timestamp),
-          timestampMs: timestamp,
-          dateISO: dateStr,
-          dateObject: new Date(timestamp),
-        });
+        // console.log(`[EmployeeDashboard] Payment ${index} timestamp:`, {
+        //   rawTimestamp: record.timestamp,
+        //   timestampType: typeof record.timestamp,
+        //   timestampNumber: Number(record.timestamp),
+        //   timestampMs: timestamp,
+        //   dateISO: dateStr,
+        //   dateObject: new Date(timestamp),
+        // });
 
         const paymentId = Array.from(record.payment_id).map((b: number) => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
 
@@ -220,13 +220,13 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         const metadata = employeeMetas[index];
         const paymentType = getPaymentTypeLabel(record.payment_type);
 
-        console.log(`[EmployeeDashboard] Payment ${index}:`, {
-          type: paymentType,
-          metadataType: metadata?.paymentType,
-          blockchainType: record.payment_type,
-          amount,
-          hasMetadata: !!metadata,
-        });
+        // console.log(`[EmployeeDashboard] Payment ${index}:`, {
+        //   type: paymentType,
+        //   metadataType: metadata?.paymentType,
+        //   blockchainType: record.payment_type,
+        //   amount,
+        //   hasMetadata: !!metadata,
+        // });
 
         return {
           id: `${walletAddress}-${index}`,
@@ -379,13 +379,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         )}
 
         {/* Render different views based on dashboardView */}
-        {dashboardView === 'proofs' ? (
-          <MyIncomeProofsView
-            api={api}
-            walletAddress={walletAddress || ''}
-            onBack={() => setDashboardView('main')}
-          />
-        ) : dashboardView === 'main' ? (
+        {dashboardView === 'main' ? (
           <Stack spacing={4}>
             {/* Page Title */}
             <Box>
@@ -635,6 +629,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         employeeName={walletAddress ? `${walletAddress.substring(0, 12)}...` : 'Employee'}
         companyName={stats.companyName}
         api={api}
+      />
+
+      {/* My Income Proofs Modal - Shows all proof attempts (success + failure) */}
+      <MyIncomeProofsModal
+        open={dashboardView === 'proofs'}
+        onClose={() => setDashboardView('main')}
+        api={api}
+        walletAddress={walletAddress || ''}
+        employeeName={walletAddress ? `${walletAddress.substring(0, 12)}...` : 'Employee'}
       />
     </Box>
   );

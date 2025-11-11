@@ -14,7 +14,7 @@ import ezkl
 class IncomeAboveThresholdModel(nn.Module):
     def forward(self, p1, p2, p3, p4, p5, p6, threshold):
         total = p1 + p2 + p3 + p4 + p5 + p6
-        return (total > threshold).float()
+        return (total >= threshold).float()
 
 class IncomeRangeModel(nn.Module):
     def forward(self, p1, p2, p3, p4, p5, p6, min_threshold, max_threshold):
@@ -81,17 +81,18 @@ def main():
     print("\n[1/4] Income Above Threshold")
     os.makedirs("generated/income_above_threshold", exist_ok=True)
     os.chdir("generated/income_above_threshold")
-    
+
     model = IncomeAboveThresholdModel()
     model.eval()
-    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [5000.0, 5100.0, 5200.0, 4900.0, 5000.0, 4800.0]]
-    threshold = torch.tensor([[25000.0]], dtype=torch.float32)
-    
+    # NORMALIZED VALUES: $5000 → 0.5, $25000 → 2.5 (divided by 10000)
+    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [0.5, 0.51, 0.52, 0.49, 0.5, 0.48]]
+    threshold = torch.tensor([[2.5]], dtype=torch.float32)
+
     torch.onnx.export(model, tuple(payments + [threshold]), "income_above_threshold.onnx", export_params=True, opset_version=10, do_constant_folding=True, input_names=['input'], output_names=['output'])
-    
+
     with open("income_above_threshold_input.json", "w") as f:
-        json.dump({"input_shapes": [[1]] * 7, "input_data": [[5000.0], [5100.0], [5200.0], [4900.0], [5000.0], [4800.0], [25000.0]]}, f, indent=2)
-    
+        json.dump({"input_shapes": [[1]] * 7, "input_data": [[0.5], [0.51], [0.52], [0.49], [0.5], [0.48], [2.5]]}, f, indent=2)
+
     run_ezkl_workflow("income_above_threshold", 7)
     os.chdir("../..")
 
@@ -99,18 +100,19 @@ def main():
     print("\n[2/4] Income Range")
     os.makedirs("generated/income_range", exist_ok=True)
     os.chdir("generated/income_range")
-    
+
     model = IncomeRangeModel()
     model.eval()
-    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [5000.0, 5100.0, 5200.0, 4900.0, 5000.0, 4800.0]]
-    min_t = torch.tensor([[28000.0]], dtype=torch.float32)
-    max_t = torch.tensor([[32000.0]], dtype=torch.float32)
-    
+    # NORMALIZED VALUES: $5000 → 0.5, $28000 → 2.8, $32000 → 3.2
+    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [0.5, 0.51, 0.52, 0.49, 0.5, 0.48]]
+    min_t = torch.tensor([[2.8]], dtype=torch.float32)
+    max_t = torch.tensor([[3.2]], dtype=torch.float32)
+
     torch.onnx.export(model, tuple(payments + [min_t, max_t]), "income_range.onnx", export_params=True, opset_version=10, do_constant_folding=True, input_names=['input'], output_names=['output'])
-    
+
     with open("income_range_input.json", "w") as f:
-        json.dump({"input_shapes": [[1]] * 8, "input_data": [[5000.0], [5100.0], [5200.0], [4900.0], [5000.0], [4800.0], [28000.0], [32000.0]]}, f, indent=2)
-    
+        json.dump({"input_shapes": [[1]] * 8, "input_data": [[0.5], [0.51], [0.52], [0.49], [0.5], [0.48], [2.8], [3.2]]}, f, indent=2)
+
     run_ezkl_workflow("income_range", 8)
     os.chdir("../..")
 
@@ -118,17 +120,18 @@ def main():
     print("\n[3/4] Average Income")
     os.makedirs("generated/average_income", exist_ok=True)
     os.chdir("generated/average_income")
-    
+
     model = AverageIncomeModel()
     model.eval()
-    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [5000.0, 5100.0, 5200.0, 4900.0, 5000.0, 4800.0]]
-    threshold = torch.tensor([[4800.0]], dtype=torch.float32)
-    
+    # NORMALIZED VALUES: $5000 → 0.5, $4800 → 0.48
+    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [0.5, 0.51, 0.52, 0.49, 0.5, 0.48]]
+    threshold = torch.tensor([[0.48]], dtype=torch.float32)
+
     torch.onnx.export(model, tuple(payments + [threshold]), "average_income.onnx", export_params=True, opset_version=10, do_constant_folding=True, input_names=['input'], output_names=['output'])
-    
+
     with open("average_income_input.json", "w") as f:
-        json.dump({"input_shapes": [[1]] * 7, "input_data": [[5000.0], [5100.0], [5200.0], [4900.0], [5000.0], [4800.0], [4800.0]]}, f, indent=2)
-    
+        json.dump({"input_shapes": [[1]] * 7, "input_data": [[0.5], [0.51], [0.52], [0.49], [0.5], [0.48], [0.48]]}, f, indent=2)
+
     run_ezkl_workflow("average_income", 7)
     os.chdir("../..")
 
@@ -136,17 +139,18 @@ def main():
     print("\n[4/4] First Time Loan Eligibility")
     os.makedirs("generated/first_time_loan", exist_ok=True)
     os.chdir("generated/first_time_loan")
-    
+
     model = FirstTimeLoanModel()
     model.eval()
-    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [5000.0, 5500.0, 5000.0, 4500.0, 5500.0, 5000.0]]
-    threshold = torch.tensor([[0.25]], dtype=torch.float32)
-    
+    # NORMALIZED VALUES: $5000 → 0.5, $5500 → 0.55, $4500 → 0.45
+    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [0.5, 0.55, 0.5, 0.45, 0.55, 0.5]]
+    threshold = torch.tensor([[0.25]], dtype=torch.float32)  # Threshold is already a ratio, no normalization needed
+
     torch.onnx.export(model, tuple(payments + [threshold]), "first_time_loan.onnx", export_params=True, opset_version=10, do_constant_folding=True, input_names=['input'], output_names=['output'])
-    
+
     with open("first_time_loan_input.json", "w") as f:
-        json.dump({"input_shapes": [[1]] * 7, "input_data": [[5000.0], [5500.0], [5000.0], [4500.0], [5500.0], [5000.0], [0.25]]}, f, indent=2)
-    
+        json.dump({"input_shapes": [[1]] * 7, "input_data": [[0.5], [0.55], [0.5], [0.45], [0.55], [0.5], [0.25]]}, f, indent=2)
+
     run_ezkl_workflow("first_time_loan", 7)
     os.chdir("../..")
 
