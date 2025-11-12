@@ -33,6 +33,8 @@ import { GenerateProofModal } from './GenerateProofModal';
 import { EmployeeDashboardDrawer, type DashboardView } from './EmployeeDashboardDrawer';
 import { MyIncomeProofsModal } from './MyIncomeProofsModal';
 import { ProfileSettingsModal } from './ProfileSettingsModal';
+import { PrivacySettingsModal } from './PrivacySettingsModal';
+import { NotificationSettingsModal } from './NotificationSettingsModal';
 import pino from 'pino';
 
 const logger = pino({
@@ -94,6 +96,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dashboardView, setDashboardView] = useState<DashboardView>('main');
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
+  const [privacySettingsOpen, setPrivacySettingsOpen] = useState(false);
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -606,6 +610,8 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         onViewChange={setDashboardView}
         walletAddress={walletAddress || ''}
         onOpenSettings={() => setProfileSettingsOpen(true)}
+        onOpenPrivacy={() => setPrivacySettingsOpen(true)}
+        onOpenNotifications={() => setNotificationSettingsOpen(true)}
       />
 
       {/* Withdraw Salary Modal */}
@@ -651,6 +657,27 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         isCompany={false}
         contractAddress={contractAddress}
         companyName={companyName}
+      />
+
+      {/* Privacy Settings Modal */}
+      <PrivacySettingsModal
+        open={privacySettingsOpen}
+        onClose={() => setPrivacySettingsOpen(false)}
+        isCompany={false}
+        contractAddress={contractAddress}
+        companyName={companyName}
+        onOpenIncomeProofs={() => {
+          setPrivacySettingsOpen(false);
+          setDashboardView('proofs');
+        }}
+      />
+
+      {/* Notification Settings Modal */}
+      <NotificationSettingsModal
+        open={notificationSettingsOpen}
+        onClose={() => setNotificationSettingsOpen(false)}
+        isCompany={false}
+        walletAddress={walletAddress}
       />
     </Box>
   );

@@ -40,6 +40,8 @@ import { PaymentHistorySection } from './PaymentHistorySection';
 import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import { DebugPanel } from './DebugPanel';
 import { ProfileSettingsModal } from './ProfileSettingsModal';
+import { PrivacySettingsModal } from './PrivacySettingsModal';
+import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { CompanyDashboardDrawer } from './CompanyDashboardDrawer';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
@@ -103,6 +105,8 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
   const [employees, setEmployees] = useState<EmployeeMetadata[]>([]);
   const [contractState, setContractState] = useState<any>(null); // Store reactive contract state
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
+  const [privacySettingsOpen, setPrivacySettingsOpen] = useState(false);
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Connect to contract and load stats
@@ -700,6 +704,8 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onOpenSettings={() => setProfileSettingsOpen(true)}
+        onOpenPrivacy={() => setPrivacySettingsOpen(true)}
+        onOpenNotifications={() => setNotificationSettingsOpen(true)}
         companyName={currentCompany.name}
       />
 
@@ -710,6 +716,23 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
         isCompany={true}
         contractAddress={currentCompany.contractAddress}
         companyName={currentCompany.name}
+      />
+
+      {/* Privacy Settings Modal */}
+      <PrivacySettingsModal
+        open={privacySettingsOpen}
+        onClose={() => setPrivacySettingsOpen(false)}
+        isCompany={true}
+        contractAddress={currentCompany.contractAddress}
+        companyName={currentCompany.name}
+      />
+
+      {/* Notification Settings Modal */}
+      <NotificationSettingsModal
+        open={notificationSettingsOpen}
+        onClose={() => setNotificationSettingsOpen(false)}
+        isCompany={true}
+        walletAddress={walletAddress}
       />
     </Box>
   );

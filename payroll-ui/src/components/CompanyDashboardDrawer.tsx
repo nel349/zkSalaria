@@ -16,6 +16,8 @@ import PeopleIcon from '@mui/icons-material/People';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import SettingsIcon from '@mui/icons-material/Settings';
+import SecurityIcon from '@mui/icons-material/Security';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useTheme, useThemeValues } from '../theme';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,6 +25,8 @@ interface CompanyDashboardDrawerProps {
   open: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
+  onOpenPrivacy: () => void;
+  onOpenNotifications: () => void;
   companyName: string;
 }
 
@@ -41,6 +45,8 @@ export const CompanyDashboardDrawer: React.FC<CompanyDashboardDrawerProps> = ({
   open,
   onClose,
   onOpenSettings,
+  onOpenPrivacy,
+  onOpenNotifications,
   companyName,
 }) => {
   const { mode } = useTheme();
@@ -163,9 +169,71 @@ export const CompanyDashboardDrawer: React.FC<CompanyDashboardDrawerProps> = ({
 
       {/* Settings Section */}
       <List sx={{ p: 2 }}>
+        <Typography
+          variant="caption"
+          color={theme.colors.text.disabled}
+          sx={{ px: 2, mb: 1, display: 'block' }}
+        >
+          SETTINGS
+        </Typography>
+
         <ListItemButton
           onClick={() => {
             onOpenSettings();
+            onClose();
+          }}
+          sx={{
+            borderRadius: 2,
+            mb: 1,
+            '&:hover': {
+              bgcolor: mode === 'dark'
+                ? `${theme.colors.primary[500]}10`
+                : theme.colors.background.default,
+            },
+          }}
+        >
+          <ListItemIcon sx={{ color: theme.colors.text.secondary, minWidth: 40 }}>
+            <SettingsIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Profile"
+            primaryTypographyProps={{
+              fontWeight: theme.typography.fontWeight.medium,
+              color: theme.colors.text.secondary,
+            }}
+          />
+        </ListItemButton>
+
+        <ListItemButton
+          onClick={() => {
+            onOpenPrivacy();
+            onClose();
+          }}
+          sx={{
+            borderRadius: 2,
+            mb: 1,
+            '&:hover': {
+              bgcolor: mode === 'dark'
+                ? `${theme.colors.primary[500]}10`
+                : theme.colors.background.default,
+            },
+          }}
+        >
+          <ListItemIcon sx={{ color: theme.colors.text.secondary, minWidth: 40 }}>
+            <SecurityIcon sx={{ fontSize: 22 }} />
+          </ListItemIcon>
+          <ListItemText
+            primary="Privacy & Security"
+            primaryTypographyProps={{
+              fontWeight: theme.typography.fontWeight.medium,
+              color: theme.colors.text.secondary,
+            }}
+          />
+        </ListItemButton>
+
+        <ListItemButton
+          onClick={() => {
+            onOpenNotifications();
             onClose();
           }}
           sx={{
@@ -178,10 +246,10 @@ export const CompanyDashboardDrawer: React.FC<CompanyDashboardDrawerProps> = ({
           }}
         >
           <ListItemIcon sx={{ color: theme.colors.text.secondary, minWidth: 40 }}>
-            <SettingsIcon sx={{ fontSize: 22 }} />
+            <NotificationsIcon sx={{ fontSize: 22 }} />
           </ListItemIcon>
           <ListItemText
-            primary="Settings"
+            primary="Notifications"
             primaryTypographyProps={{
               fontWeight: theme.typography.fontWeight.medium,
               color: theme.colors.text.secondary,

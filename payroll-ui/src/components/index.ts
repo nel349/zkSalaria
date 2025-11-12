@@ -12,3 +12,7 @@ export { ThemeToggle } from './ThemeToggle';
 
 export { CompanyCard } from './CompanyCard';
 export type { CompanyCardProps } from './CompanyCard';
+
+export { ProfileSettingsModal } from './ProfileSettingsModal';
+export { PrivacySettingsModal } from './PrivacySettingsModal';
+export { NotificationSettingsModal } from './NotificationSettingsModal';
