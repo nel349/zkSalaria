@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import IconButton from '@mui/material/IconButton';
 import BusinessIcon from '@mui/icons-material/Business';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -24,6 +25,8 @@ import PeopleIcon from '@mui/icons-material/People';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SpeedIcon from '@mui/icons-material/Speed';
+import SettingsIcon from '@mui/icons-material/Settings';
+import MenuIcon from '@mui/icons-material/Menu';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany, SavedCompany } from '../utils/CompaniesLocalState';
@@ -36,6 +39,8 @@ import { BatchPayrollButton } from './BatchPayrollButton';
 import { PaymentHistorySection } from './PaymentHistorySection';
 import { RoleSwitcher, type ViewMode } from './RoleSwitcher';
 import { DebugPanel } from './DebugPanel';
+import { ProfileSettingsModal } from './ProfileSettingsModal';
+import { CompanyDashboardDrawer } from './CompanyDashboardDrawer';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
 
@@ -97,6 +102,8 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
   const [payments, setPayments] = useState<any[]>([]);
   const [employees, setEmployees] = useState<EmployeeMetadata[]>([]);
   const [contractState, setContractState] = useState<any>(null); // Store reactive contract state
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -312,8 +319,22 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
       >
         <Container maxWidth="xl">
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            {/* Left: Company name and switcher */}
+            {/* Left: Hamburger Menu & Company name and switcher */}
             <Stack direction="row" alignItems="center" spacing={2}>
+              <Button
+                onClick={() => setDrawerOpen(true)}
+                sx={{
+                  minWidth: 'auto',
+                  p: 1,
+                  borderRadius: 2,
+                  color: theme.colors.primary[500],
+                  '&:hover': {
+                    bgcolor: mode === 'dark' ? `${theme.colors.primary[500]}20` : theme.colors.primary[50],
+                  },
+                }}
+              >
+                <MenuIcon sx={{ fontSize: 28 }} />
+              </Button>
               <BusinessIcon sx={{ fontSize: 32, color: theme.colors.primary[500] }} />
               <Box>
                 <Typography variant="h5" fontWeight={theme.typography.fontWeight.bold} color={theme.colors.text.primary}>
@@ -672,6 +693,23 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
         onClose={() => setRecurringPaymentsModalOpen(false)}
         api={api}
         currentCompany={currentCompany.contractAddress}
+      />
+
+      {/* Navigation Drawer */}
+      <CompanyDashboardDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onOpenSettings={() => setProfileSettingsOpen(true)}
+        companyName={currentCompany.name}
+      />
+
+      {/* Profile Settings Modal */}
+      <ProfileSettingsModal
+        open={profileSettingsOpen}
+        onClose={() => setProfileSettingsOpen(false)}
+        isCompany={true}
+        contractAddress={currentCompany.contractAddress}
+        companyName={currentCompany.name}
       />
     </Box>
   );

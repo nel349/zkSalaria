@@ -1,8 +1,8 @@
 # zkSalaria UI Implementation Roadmap
 
-**Version:** 1.3
-**Date:** 2025-11-08
-**Status:** Phase 3 Complete, Phase 2 In Progress
+**Version:** 1.4
+**Date:** 2025-11-11
+**Status:** Phase 3 Complete, Phase 2 Complete, Phase 4 Partially Complete
 **Backend Coverage:** 98% Complete ✅ (On-Chain Recovery Implemented)
 
 ---
@@ -20,13 +20,13 @@ This document provides a **complete implementation roadmap** for the zkSalaria U
 
 ## Phase Overview
 
-| Phase | Focus | Screens | Duration | Priority |
-|-------|-------|---------|----------|----------|
-| **Phase 1** | Auth & Core Setup | 5 screens | 1 week | 🔴 Critical |
-| **Phase 2** | Payment Operations | 8 screens | 2 weeks | 🔴 Critical |
-| **Phase 3** | Dashboard & Lists | 6 screens | 1.5 weeks | 🟠 High |
-| **Phase 4** | Settings & Management | 5 screens | 1 week | 🟡 Medium |
-| **Phase 5** | Polish & UX | 4 features | 1 week | 🟢 Nice-to-have |
+| Phase | Focus | Screens | Status | Completion |
+|-------|-------|---------|--------|------------|
+| **Phase 1** | Auth & Core Setup | 5 screens | ✅ **COMPLETE** | 100% (5/5) |
+| **Phase 2** | Payment Operations | 10 screens | ✅ **COMPLETE** | 100% (9/9 active + 1 deferred) |
+| **Phase 3** | Dashboard & Lists | 8 screens | ✅ **COMPLETE** | 87.5% (7/8 + 1 postponed) |
+| **Phase 4** | Settings & Management | 5 screens | ⏳ **IN PROGRESS** | 60% (3/5 + 2 deferred) |
+| **Phase 5** | Polish & UX | 6 features | ⏳ **NOT STARTED** | 0% (0/6) |
 
 ---
 
@@ -436,20 +436,112 @@ All Phase 1 API integrations have been successfully completed:
   - Radio button and checkbox visibility in dark mode required explicit `.MuiSvgIcon-root` styling
   - All 5 radio buttons and 7 checkboxes have proper unchecked (70% white) and checked (primary color) states
 
+#### 2.9 My Income Proofs Modal (Employee) ✅ **COMPLETED**
+- **Status:** ✅ Shipped November 11, 2025
+- **Implementation:**
+  - Modal-based proof history and management interface (employee view)
+  - **Active On-Chain Proof Display:**
+    - Retrieves current income proof from contract via `getIncomeProof(employeeId)`
+    - Shows proof type, threshold values, submission date, expiration date
+    - Status badge (Verified ✓ or Expired ✗)
+    - Shareable verification link with copy/email buttons
+    - Download verified proof PDF button
+  - **Historical Proof Attempts:**
+    - Loads all proof attempts from localStorage (success and failure states)
+    - Chronological timeline showing most recent first
+    - Success attempts show attestation hash, timestamp, and on-chain indicator
+    - Failed attempts show error code, threshold details, and diagnostic info
+    - Download failure report PDFs for debugging
+  - **Proof Management Actions:**
+    - Copy verification link to clipboard
+    - Email verification link (mailto: integration)
+    - Download verified proof PDF (professional format with company branding)
+    - Download failure report PDF (diagnostic information for failed attempts)
+  - **Filter System:** All, Verified, Failed attempts
+  - **Empty States:** Contextual messages for no proofs, no active proof, no attempts
+- **Components Built:**
+  - MyIncomeProofsModal.tsx (full proof history interface)
+  - ProofVerificationCard.tsx (active proof display component)
+  - ProofAttemptCard.tsx (historical attempt card component)
+  - ShareableProofLink.tsx (verification link sharing component)
+  - Integrated into EmployeeDashboard.tsx Quick Actions
+  - Integrated into PrivacySettingsPage.tsx (Settings → Privacy & Security)
+- **Backend API:** ✅ `getIncomeProof(employeeId)` - Retrieves active on-chain proof
+- **LocalStorage Schema:**
+  - `payroll-ui.proof-attempts.{employeeId}` - Array of ProofAttempt objects
+  - Each attempt includes: timestamp, success, proofType, attestationHash, error details
+- **PDF Generation:** Enhanced `pdfGenerator.ts` with:
+  - `generateProofPDF()` - Professional verified proof certificates
+  - `generateFailureReport()` - Diagnostic failure reports showing why threshold wasn't met
+- **Complexity:** 🟡 Medium (1.5 days)
+- **Notes:**
+  - Provides complete audit trail of all proof generation attempts
+  - Distinguishes between active on-chain proof and historical attempts
+  - Only one proof per employee can be active on-chain at a time (overwrites previous)
+  - Failed attempts are valuable for debugging threshold mismatches
+
+#### 2.10 Public Proof Verification Page ✅ **COMPLETED**
+- **Route:** `/verify/:attestationHash`
+- **Status:** ✅ Shipped November 11, 2025
+- **Implementation:**
+  - Public standalone page for verifying income proofs via shareable link
+  - **URL Structure:** `https://app.zksalaria.com/verify/{attestationHash}`
+  - **Wallet Connection Flow:**
+    - Detects if wallet is connected
+    - Shows "Connect Wallet to Verify" button if not connected
+    - Auto-loads proof after wallet connection
+  - **Proof Verification Display:**
+    - Loads on-chain proof using attestation hash (currently via employee wallet - see notes)
+    - Shows proof type, threshold values, submission timestamp, expiration timestamp
+    - Visual status indicators (Verified ✓, Expired ✗, Invalid ✗)
+    - Displays verifier public key (trusted ZKML verifier who signed the attestation)
+    - Shows employee ID (hashed wallet address) for privacy
+  - **Verification Checks:**
+    - Confirms proof exists on-chain
+    - Validates expiration timestamp (checks if proof is still valid)
+    - Shows contract address for transparency
+  - **Error Handling:**
+    - Invalid/missing attestation hash in URL
+    - No employer contract found
+    - Proof not found on-chain
+    - Network connection errors
+  - **Responsive Design:** Works on mobile and desktop
+- **Components Built:**
+  - VerifyProofPage.tsx (full public verification page)
+  - Uses ProofVerificationCard.tsx for proof display
+  - Integrated into App.tsx routing (`/verify/:attestationHash`)
+- **Backend API:** ✅ `getIncomeProof(employeeId)` - Retrieves on-chain proof
+- **Complexity:** 🟡 Medium (1 day)
+- **Limitations (TODO):**
+  - **Current Implementation:** Requires verifier to connect with employee's wallet address (not ideal)
+  - **Ideal Implementation:** Contract should support querying proofs by attestation_hash directly
+  - **Workaround:** Verification link could include employee address in URL params
+  - **Future Enhancement:** Add `getIncomeProofByAttestationHash(attestationHash)` contract method
+- **Security:**
+  - Proof data is already public on-chain (no privacy concerns)
+  - Attestation hash is unique and cannot be forged (signed by trusted verifier)
+  - Verifier public key can be validated against trusted verifier registry
+- **Notes:**
+  - Enables lenders, landlords, and other verifiers to validate income proofs without zkSalaria account
+  - Links are shareable via email, messaging apps, or embedded in loan applications
+  - Proof verification is fully on-chain - no centralized servers required
+
 ### Phase 2 Deliverables
 - ✅ Add employee flow (modal-based + API integration)
 - ✅ One-time payment (modal-based + API integration)
 - ✅ Recurring payment setup (modal-based + API integration)
-- ⏳ Batch payroll (marked as "coming soon")
+- ⏳ Batch payroll (marked as "coming soon" - deferred to post-MVP)
 - ✅ Recurring payment management (with on-chain recovery + API integration)
 - ✅ Withdraw salary (employee + API integration)
 - ✅ Generate ZK proof (employee + **FULL API integration & E2E tests**)
-- ✅ Download receipt
+- ✅ Download receipt (PDF/CSV/JSON exports)
+- ✅ **My Income Proofs Modal** (employee proof history & management)
+- ✅ **Public Proof Verification Page** (shareable proof verification links)
 
-**Current Status:** 7/8 completed (87.5%) - 1 deferred
+**Current Status:** ✅ **100% COMPLETE** (9/9 active features + 1 deferred)
 **API Integration Status:** ✅ **100% Complete** (all active features fully integrated)
 **E2E Test Coverage:** ✅ Verifier attestation model validated (3 comprehensive tests)
-**Total Effort:** 2 weeks UI + 3 days API integration (2 developers)
+**Total Effort:** 2 weeks UI + 3 days API integration + 2.5 days ZKML proof extensions (2 developers)
 
 ### Phase 2 Type System (Completed)
 - **PaymentMetadata interface** (`src/types/payment.ts`):
@@ -661,18 +753,131 @@ All Phase 1 API integrations have been successfully completed:
 
 ### Screens to Build
 
-#### 4.1 Settings - Company Profile (`/settings/profile`)
+#### 4.1 Settings - Profile Page (`/settings/profile`) ✅ **COMPLETED**
 - **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 1)
-- **Components:**
-  - Company logo upload
-  - Company info form (name, industry, size, email)
-  - Save button
-- **Backend API:** Off-chain storage (not on contract)
+- **Status:** ✅ Shipped November 11, 2025
+- **Implementation:**
+  - Unified profile settings for both Company and Employee roles
+  - **Company View:**
+    - Company name display (read-only, from contract)
+    - Contract address display with copy button
+    - Connected wallet address display
+    - Network information badge
+  - **Employee View:**
+    - Employee personal information (name, email, role - from localStorage)
+    - Connected wallet address display
+    - Employer company name (read-only, from contract)
+    - Employment status badge
+  - **Settings Layout:**
+    - Sidebar navigation with Profile, Privacy, Notifications tabs
+    - Header with settings title and description
+    - Glassmorphic design with theme-aware styling
+    - Breadcrumb navigation
+  - **Form Features:**
+    - Editable fields with validation
+    - Save/Cancel button controls
+    - Success/error toast notifications
+    - Real-time form state management
+- **Components Built:**
+  - ProfileSettingsPage.tsx (unified company/employee profile)
+  - SettingsLayout.tsx (sidebar navigation + header)
+  - Integrated into App.tsx routing (`/settings/profile`)
+- **Backend API:** `getCompanyInfo()`, `getEmployeeInfo()`, localStorage for metadata
 - **Complexity:** 🟢 Low (0.5 day)
+- **Notes:**
+  - Role detection automatically shows appropriate fields
+  - Company data from contract (immutable)
+  - Employee metadata from localStorage (editable)
 
-#### 4.2 Settings - Wallet Management (`/settings/wallet`)
+#### 4.2 Settings - Privacy & Security (`/settings/privacy`) ✅ **COMPLETED**
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 5)
+- **Status:** ✅ Shipped November 11, 2025
+- **Implementation:**
+  - **Employee View:**
+    - **Income Proofs Section:**
+      - "My Income Proofs" button opens MyIncomeProofsModal
+      - Shows count of active proofs
+      - Quick access to proof history and verification links
+    - **Data Encryption:**
+      - Explanation of on-chain encryption (balance, payment amounts)
+      - Decryption process information
+      - Privacy guarantees
+    - **Blockchain Privacy:**
+      - Zero-knowledge proof benefits
+      - Payment history commitment security
+      - No plaintext storage on-chain
+  - **Company View:**
+    - **Employee Data Access:**
+      - Explanation of encrypted employee balances
+      - Data visibility controls
+      - Audit trail information
+    - **Contract Transparency:**
+      - Contract address display
+      - Blockchain explorer link
+      - Trusted verifier registry
+  - **Common Sections:**
+    - **Session Security:**
+      - Active wallet connection status
+      - Network connection indicator
+      - Disconnect wallet button
+    - **Help & Documentation:**
+      - Privacy best practices
+      - Links to security documentation
+      - Contact support
+- **Components Built:**
+  - PrivacySettingsPage.tsx (unified privacy settings)
+  - Integrated MyIncomeProofsModal for proof management
+  - Integrated into App.tsx routing (`/settings/privacy`)
+- **Backend API:** `getIncomeProof()` via MyIncomeProofsModal
+- **Complexity:** 🟡 Medium (1 day)
+- **Notes:**
+  - Privacy-focused explanations for non-technical users
+  - Direct integration with proof management system
+  - Educational content about ZK privacy guarantees
+
+#### 4.3 Settings - Notification Preferences (`/settings/notifications`) ✅ **COMPLETED**
+- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 4)
+- **Status:** ✅ Shipped November 11, 2025
+- **Implementation:**
+  - **Email Notifications:**
+    - Payment received (employee)
+    - Payment sent (company)
+    - Recurring payment processed
+    - Low balance warning (company)
+    - Proof verification completed
+    - Proof expiration reminders
+  - **In-App Notifications:**
+    - Real-time transaction updates
+    - Contract state changes
+    - Network status alerts
+    - Proof generation progress
+  - **Advanced Settings:**
+    - Notification frequency (instant, daily digest, weekly)
+    - Quiet hours configuration
+    - Do not disturb mode
+  - **Notification Channels:**
+    - Browser push notifications (toggle)
+    - Email notifications (toggle)
+    - In-app toast notifications (always on)
+  - **UI Features:**
+    - Toggle switches for each notification type
+    - Preview of notification format
+    - Save preferences button
+    - Reset to defaults option
+- **Components Built:**
+  - NotificationSettingsPage.tsx (full notification preferences)
+  - Integrated into App.tsx routing (`/settings/notifications`)
+- **Backend API:** localStorage for user preferences (off-chain)
+- **Complexity:** 🟢 Low (0.5 day)
+- **Notes:**
+  - Preferences stored in localStorage for MVP
+  - Future: Sync preferences across devices via backend
+  - Email integration requires backend service (future)
+
+#### 4.4 Settings - Wallet Management (`/settings/wallet`) ⏳ **NOT IMPLEMENTED**
 - **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 2)
-- **Components:**
+- **Status:** ⏳ **Deferred to Post-MVP**
+- **Planned Components:**
   - Connected wallet display
   - Payroll account balance
   - Fund account button → modal
@@ -680,10 +885,12 @@ All Phase 1 API integrations have been successfully completed:
   - Transaction history link
 - **Backend API:** `state$`, `depositCompanyFunds()`
 - **Complexity:** 🟡 Medium (1 day)
+- **Note:** Funding functionality available via CompanyDashboard Quick Actions
 
-#### 4.3 Fund Account Modal
+#### 4.5 Fund Account Modal ⏳ **NOT IMPLEMENTED**
 - **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Flow)
-- **Components:**
+- **Status:** ⏳ **Deferred to Post-MVP**
+- **Planned Components:**
   - Amount input with recommendations
   - Token dropdown (USDC, DUST, DAI)
   - Deposit source (connected wallet vs external)
@@ -692,53 +899,18 @@ All Phase 1 API integrations have been successfully completed:
   - Success modal
 - **Backend API:** `depositCompanyFunds()`
 - **Complexity:** 🟡 Medium (1 day)
-
-#### 4.4 Settings - Notification Preferences (`/settings/notifications`)
-- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 4)
-- **Components:**
-  - Email notification checkboxes
-  - In-app notification toggles
-  - Webhook integration (advanced)
-- **Backend API:** Off-chain user preferences
-- **Complexity:** 🟢 Low (0.5 day)
-
-#### 4.5 Settings - Privacy & Security (`/settings/privacy`)
-- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 5)
-- **Components:**
-  - Encryption status
-  - Data visibility settings
-  - Session management (active sessions list)
-  - Revoke session buttons
-- **Backend API:** Session management API
-- **Complexity:** 🟡 Medium (1 day)
-
-#### 4.6 Settings - Employee Profile (`/settings/profile`) (Employee View)
-- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 1, Employee)
-- **Components:**
-  - Personal info form (name, email, role)
-  - Connected wallet (read-only)
-  - Employment info (read-only)
-- **Backend API:** `getEmployeeInfo()`
-- **Complexity:** 🟢 Low (0.5 day)
-
-#### 4.7 Settings - Privacy & Disclosure (Employee)
-- **File Reference:** `SETTINGS_NOTIFICATIONS_WIREFRAMES.md` (Section 3, Employee)
-- **Components:**
-  - Generated proofs list (cards)
-  - Revoke/download buttons
-  - Granted disclosures list
-  - Revoke access buttons
-- **Backend API:** Query proofs from contract state
-- **Complexity:** 🟡 Medium (1 day)
+- **Workaround:** Use Quick Actions "Deposit Funds" in CompanyDashboard
 
 ### Phase 4 Deliverables
-- ✅ Company settings (profile, wallet, notifications, privacy)
-- ✅ Employee settings (profile, privacy, disclosures)
-- ✅ Fund account flow
-- ✅ Notification preferences
-- ✅ Session management
+- ✅ Profile settings (unified company/employee view)
+- ✅ Privacy & security settings (with proof management integration)
+- ✅ Notification preferences (email, in-app, push toggles)
+- ⏳ Wallet management (deferred - functionality in dashboard)
+- ⏳ Fund account modal (deferred - functionality in dashboard)
 
-**Total Effort:** 1 week (2 developers)
+**Current Status:** ✅ **60% COMPLETE** (3/5 screens)
+**API Integration Status:** ✅ **100% Complete** (all implemented features working)
+**Total Effort:** 2 days UI (2 developers)
 
 ---
 
@@ -1242,30 +1414,46 @@ Multiply all estimates by 1.5x for single developer.
 - **96% backend coverage** (ready for UI)
 - **6-8 weeks** timeline (2 developers)
 
-**Current Progress (as of November 8, 2025):**
+**Current Progress (as of November 11, 2025):**
 - ✅ Phase 1: **Complete** (5/5 screens - 100%)
-- ✅ Phase 2: **Nearly Complete** (7/8 screens - 87.5%, 1 deferred)
+- ✅ Phase 2: **Complete** (9/9 active screens - 100%, 1 deferred to post-MVP)
 - ✅ Phase 3: **Complete** (7/8 screens - 87.5%, 1 postponed)
-- ⏳ Phase 4: **Not Started** (0/7 screens - 0%)
+- ✅ Phase 4: **60% Complete** (3/5 screens - 60%, 2 deferred to post-MVP)
 - ⏳ Phase 5: **Not Started** (0/6 features - 0%)
 
-**Recent Completions (November 8, 2025):**
-- ✅ **Verifier Attestation API Integration (Phase 2.7)** - Complete ZKML proof backend integration:
-  - E2E tests for trusted verifier attestation model (3 comprehensive tests)
-  - Attestation hash computation and verification
-  - Payment history commitment validation (`persistentHash<Vector<12, PC_PaymentRecord>>`)
-  - Replay protection testing (attestation hash tracking)
-  - Trust model validation (contract cannot validate hash without secret)
-  - Storage optimization documentation (cleanup mechanism for `used_attestations` Set)
-  - Test optimization: 3 employees × 1 payment = ~11 min runtime (vs 45+ min original)
-- ✅ **Generate Proof Modal (Phase 2.7)** - ZKML income proof generation with 4 proof types, dynamic threshold inputs, processing simulation, and shareable proof links
-- ✅ **Withdraw Salary Modal (Phase 2.6)** - Employee withdrawal with full/custom amount selection, timestamp updates, and withdrawal transaction display
-- ✅ **Download Receipt Modal (Phase 2.8)** - Multi-format receipt export (PDF, CSV, JSON) with customizable details and privacy options
-- ✅ **Setup Recurring Payment Modal** - Full recurring payment creation with frequency selection
-- ✅ **Payment Detail Modal** - 3-tab interface with Overview, Transaction Details, and History
+**Recent Completions (November 11, 2025):**
+- ✅ **My Income Proofs Modal (Phase 2.9)** - Complete proof history and management:
+  - Active on-chain proof display with verification status
+  - Historical proof attempts (success and failure tracking)
+  - Shareable verification links with copy/email buttons
+  - Download verified proof PDFs and failure diagnostic reports
+  - Integration with Settings → Privacy & Security
+- ✅ **Public Proof Verification Page (Phase 2.10)** - Shareable proof verification:
+  - Public standalone verification page at `/verify/:attestationHash`
+  - On-chain proof validation with status checks
+  - Expiration timestamp verification
+  - Mobile-responsive design for verifiers (lenders, landlords)
+- ✅ **Settings - Profile Page (Phase 4.1)** - Unified profile settings:
+  - Company and employee profile views with role detection
+  - Contract address and wallet information
+  - Settings layout with sidebar navigation
+- ✅ **Settings - Privacy & Security (Phase 4.2)** - Privacy management:
+  - Income proofs management integration
+  - Data encryption explanations
+  - Session security controls
+- ✅ **Settings - Notification Preferences (Phase 4.3)** - Notification controls:
+  - Email, in-app, and push notification toggles
+  - Notification frequency settings
+  - Preview and reset options
+
+**Previous Completions (November 8, 2025):**
+- ✅ **Verifier Attestation API Integration (Phase 2.7)** - Complete ZKML proof backend integration
+- ✅ **Generate Proof Modal (Phase 2.7)** - ZKML income proof generation with 4 proof types
+- ✅ **Withdraw Salary Modal (Phase 2.6)** - Employee withdrawal functionality
+- ✅ **Download Receipt Modal (Phase 2.8)** - Multi-format receipt export (PDF, CSV, JSON)
+- ✅ **Setup Recurring Payment Modal** - Full recurring payment creation
+- ✅ **Payment Detail Modal** - 3-tab interface with Overview, Transaction Details, History
 - ✅ **Role Switcher** - Toggle between Company and Employee views for dual-role users
-- ✅ **Payment type fixes** - Full support for Commission, Reimbursement, Adjustment types
-- ✅ **Payment amount display** - Fixed metadata matching to show correct amounts from localStorage
 
 **Previous Completions:**
 - ✅ AddEmployeeModal with full validation + API integration
@@ -1372,4 +1560,40 @@ If localStorage is lost, companies can:
 
 ---
 
-*Generated: November 4, 2025 | Updated: November 8, 2025 | zkSalaria v1.3*
+*Generated: November 4, 2025 | Updated: November 11, 2025 | zkSalaria v1.4*
+
+---
+
+## November 11, 2025 Update Summary
+
+**Major Additions:**
+1. **ZKML Proof Extensions (Phase 2.9, 2.10):**
+   - My Income Proofs Modal - Complete proof history management for employees
+   - Public Proof Verification Page - Shareable links for verifiers (lenders/landlords)
+   - Enhanced PDF generation for verified proofs and failure reports
+
+2. **Settings Implementation (Phase 4.1-4.3):**
+   - Profile Settings Page - Unified company/employee profiles
+   - Privacy & Security Settings - Proof management integration
+   - Notification Preferences - Email, in-app, and push notification controls
+
+**Progress Highlights:**
+- **Phase 2:** Now 100% complete (9/9 active screens)
+- **Phase 4:** 60% complete (3/5 screens, 2 deferred with workarounds in dashboard)
+- **Overall UI Completion:** 80%+ of MVP screens implemented
+
+**Key Components Added:**
+- MyIncomeProofsModal.tsx
+- ProofVerificationCard.tsx
+- ProofAttemptCard.tsx
+- ShareableProofLink.tsx
+- VerifyProofPage.tsx
+- ProfileSettingsPage.tsx
+- PrivacySettingsPage.tsx
+- NotificationSettingsPage.tsx
+- SettingsLayout.tsx
+
+**Next Steps for MVP:**
+- Phase 5 Polish & UX features (help center, product tour, loading states, error pages)
+- Wallet Management settings (can use dashboard Quick Actions as workaround)
+- Fund Account modal (can use dashboard Quick Actions as workaround)

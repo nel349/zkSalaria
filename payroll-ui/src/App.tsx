@@ -13,12 +13,8 @@ import {
   DashboardPage,
   CompanySelectorPage,
   EmployeeListPage,
-  ProfileSettingsPage,
-  PrivacySettingsPage,
-  NotificationSettingsPage,
   VerifyProofPage,
 } from './pages';
-import { SettingsLayout } from './components/SettingsLayout';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { PayrollWalletProvider } from './contexts/PayrollWalletContext';
@@ -87,36 +83,6 @@ export const App: React.FC = () => {
 
           {/* Public Proof Verification */}
           <Route path="/verify/:attestationHash" element={<VerifyProofPage />} />
-
-          {/* Settings (Phase 4) */}
-          <Route
-            path="/settings"
-            element={<Navigate to="/settings/profile" replace />}
-          />
-          <Route
-            path="/settings/profile"
-            element={
-              <SettingsLayout>
-                <ProfileSettingsPage />
-              </SettingsLayout>
-            }
-          />
-          <Route
-            path="/settings/privacy"
-            element={
-              <SettingsLayout>
-                <PrivacySettingsPage />
-              </SettingsLayout>
-            }
-          />
-          <Route
-            path="/settings/notifications"
-            element={
-              <SettingsLayout>
-                <NotificationSettingsPage />
-              </SettingsLayout>
-            }
-          />
 
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

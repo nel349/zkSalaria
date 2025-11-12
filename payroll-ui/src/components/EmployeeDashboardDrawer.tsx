@@ -26,6 +26,7 @@ interface EmployeeDashboardDrawerProps {
   currentView: DashboardView;
   onViewChange: (view: DashboardView) => void;
   walletAddress: string;
+  onOpenSettings: () => void;
 }
 
 interface NavItem {
@@ -62,6 +63,7 @@ export const EmployeeDashboardDrawer: React.FC<EmployeeDashboardDrawerProps> = (
   currentView,
   onViewChange,
   walletAddress,
+  onOpenSettings,
 }) => {
   const { mode } = useTheme();
   const theme = useThemeValues();
@@ -174,7 +176,7 @@ export const EmployeeDashboardDrawer: React.FC<EmployeeDashboardDrawerProps> = (
       <List sx={{ p: 2 }}>
         <ListItemButton
           onClick={() => {
-            window.location.href = '/settings';
+            onOpenSettings();
             onClose();
           }}
           sx={{
@@ -187,11 +189,7 @@ export const EmployeeDashboardDrawer: React.FC<EmployeeDashboardDrawerProps> = (
           }}
         >
           <ListItemIcon sx={{ color: theme.colors.text.secondary, minWidth: 40 }}>
-            <SettingsIcon sx={
-              {
-                fontSize: 22
-              }
-            } />
+            <SettingsIcon sx={{ fontSize: 22 }} />
           </ListItemIcon>
           <ListItemText
             primary="Settings"

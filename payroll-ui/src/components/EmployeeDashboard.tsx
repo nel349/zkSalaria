@@ -22,6 +22,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
+import IconButton from '@mui/material/IconButton';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
@@ -31,6 +32,7 @@ import { WithdrawSalaryModal } from './WithdrawSalaryModal';
 import { GenerateProofModal } from './GenerateProofModal';
 import { EmployeeDashboardDrawer, type DashboardView } from './EmployeeDashboardDrawer';
 import { MyIncomeProofsModal } from './MyIncomeProofsModal';
+import { ProfileSettingsModal } from './ProfileSettingsModal';
 import pino from 'pino';
 
 const logger = pino({
@@ -91,6 +93,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const [generateProofOpen, setGenerateProofOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [dashboardView, setDashboardView] = useState<DashboardView>('main');
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -602,6 +605,7 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         currentView={dashboardView}
         onViewChange={setDashboardView}
         walletAddress={walletAddress || ''}
+        onOpenSettings={() => setProfileSettingsOpen(true)}
       />
 
       {/* Withdraw Salary Modal */}
@@ -638,6 +642,15 @@ export const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         api={api}
         walletAddress={walletAddress || ''}
         employeeName={walletAddress ? `${walletAddress.substring(0, 12)}...` : 'Employee'}
+      />
+
+      {/* Profile Settings Modal */}
+      <ProfileSettingsModal
+        open={profileSettingsOpen}
+        onClose={() => setProfileSettingsOpen(false)}
+        isCompany={false}
+        contractAddress={contractAddress}
+        companyName={companyName}
       />
     </Box>
   );
