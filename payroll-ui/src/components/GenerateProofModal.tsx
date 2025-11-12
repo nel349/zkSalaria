@@ -329,15 +329,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       console.log(`  - Verifier Pubkey: ${verifierPubkey.substring(0, 18)}...`);
       console.log(`  - Duration: ${proofData.duration}ms`);
 
-      // Register verifier if not already registered (idempotent operation)
-      console.log('[GenerateProof] Registering trusted verifier...');
-      try {
-        await api.registerTrustedVerifier(verifierPubkey);
-        console.log('[GenerateProof] ✓ Verifier registered');
-      } catch (error) {
-        // Might fail if already registered or if not authorized - continue anyway
-        console.warn('[GenerateProof] Verifier registration warning (may already be registered):', error);
-      }
+      // NOTE: Verifier registration is done by company admin, not employees
+      // Only company can register trusted verifiers (security requirement)
 
       // Update contract timestamp to current time (prevents "timestamp in future" rejection)
       console.log('[GenerateProof] Syncing contract timestamp...');

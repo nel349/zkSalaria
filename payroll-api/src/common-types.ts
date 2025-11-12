@@ -61,7 +61,7 @@ export interface PayrollCircuitCalls {
   resume_recurring_payment(recurringPaymentId: Uint8Array, nextPaymentDate: bigint): Promise<void>;
   edit_recurring_payment(recurringPaymentId: Uint8Array, newAmount: bigint): Promise<void>;
   process_recurring_payment(recurringPaymentId: Uint8Array): Promise<void>;
-  register_trusted_verifier(verifierPubkey: Uint8Array): Promise<CircuitResults<PayrollPrivateState, boolean>>;
+  register_trusted_verifier(verifierPubkey?: Uint8Array): Promise<CircuitResults<PayrollPrivateState, boolean>>;
   submit_income_proof(
     employeeId: Uint8Array,
     proofType: bigint,
@@ -70,7 +70,6 @@ export interface PayrollCircuitCalls {
     txids: Uint8Array[],
     historyCommitment: Uint8Array,
     attestationHash: Uint8Array,
-    verifierPubkey: Uint8Array,
     timestamp: bigint,
     expiresIn: bigint
   ): Promise<CircuitResults<PayrollPrivateState, boolean>>;

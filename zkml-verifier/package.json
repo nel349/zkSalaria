@@ -22,6 +22,8 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/cors": "^8.5.0",
+    "@zksalaria/payroll-api": "file:../payroll-api",
+    "@zksalaria/payroll-contract": "file:../payroll-contract",
     "@zksalaria/zkml-payroll": "file:../zkml/payroll",
     "dotenv": "^17.2.3",
     "fastify": "^4.25.2",

@@ -8,12 +8,17 @@ import { TestEnvironment, TestProviders } from './commons.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { currentDir } from './config.js';
+import { computeVerifierPubkeyFromString } from '@zksalaria/payroll-contract';
 
 /**
  * E2E tests for Disclosure Management & ZKML Income Proofs
  * Tests full integration with Midnight testnet
  * Consolidated to minimize testnet load while maintaining full coverage
  */
+
+// Verifier configuration (must match what API uses)
+const VERIFIER_SECRET = 'test-verifier-secret-12345'; // Default from createPayrollPrivateState
+
 describe('Disclosure & ZKML API - E2E Tests', () => {
   let testEnvironment: TestEnvironment;
   let providers: PayrollProviders;
@@ -146,7 +151,9 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
     test('should register verifier, submit proof, and verify requirements', async () => {
       const companyId = `zkml-company-${Date.now()}`;
       const employeeId = `employee-${Date.now()}`;
-      const verifierPubkey = `0x${Buffer.from(utils.randomBytes(32)).toString('hex')}`;
+
+      // Compute verifier pubkey from test secret (matches what witness will derive)
+      const verifierPubkey = '0x' + computeVerifierPubkeyFromString(VERIFIER_SECRET);
 
       logger.info('Deploying contract for ZKML proof test…');
       const contractAddress = await PayrollAPI.deploy(providers, companyId, 'ZKML Test Corp', logger);
@@ -164,11 +171,11 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       const paymentHistory = await employeeAPI.getEmployeePaymentHistory(employeeId);
       expect(paymentHistory.length).toBeGreaterThanOrEqual(3);
 
-      // Register trusted verifier
-      logger.info('Registering trusted ZKML verifier…');
+      // Register trusted verifier (company registers verifier's PUBLIC key)
+      logger.info(`Registering trusted ZKML verifier: ${verifierPubkey}…`);
       const registered = await companyAPI.registerTrustedVerifier(verifierPubkey);
       expect(registered).toBe(true);
-      logger.info('✅ Trusted verifier registered successfully');
+      logger.info('✅ Trusted verifier registered (public key only, no secret)');
 
       // Sync contract timestamp with real time to avoid "timestamp in future" errors
       const currentTime = Math.floor(Date.now() / 1000);
@@ -189,6 +196,9 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
       const timestamp = BigInt(currentTime);
 
+      // Submit income proof (verifier proves ownership via witness)
+      // The API will derive verifier pubkey from VERIFIER_SECRET_KEY witness
+      // and contract will verify it matches the registered pubkey
       const submitted = await employeeAPI.submitIncomeProof(
         employeeId,
         proofType,
@@ -197,12 +207,11 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
         txids,
         historyCommitment,
         attestationHash,
-        verifierPubkey,
         timestamp,
         86400
       );
       expect(submitted).toBe(true);
-      logger.info('✅ ZKML income proof submitted successfully');
+      logger.info('✅ ZKML income proof submitted (verifier authenticated via witness)');
 
       // Get and verify stored proof
       logger.info('Retrieving submitted income proof…');
@@ -222,7 +231,9 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
     test('should handle all ZKML proof types (1-4)', async () => {
       const companyId = `proof-types-${Date.now()}`;
       const employeeId = `employee-${Date.now()}`;
-      const verifierPubkey = `0x${Buffer.from(utils.randomBytes(32)).toString('hex')}`;
+
+      // Compute verifier pubkey from test secret (matches what witness will derive)
+      const verifierPubkey = '0x' + computeVerifierPubkeyFromString(VERIFIER_SECRET);
 
       logger.info('Deploying contract for multiple proof types test…');
       const contractAddress = await PayrollAPI.deploy(providers, companyId, 'Proof Types Corp', logger);
@@ -241,7 +252,10 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
       const paymentHistory = await employeeAPI.getEmployeePaymentHistory(employeeId);
       expect(paymentHistory.length).toBeGreaterThanOrEqual(6);
 
+      // Register trusted verifier (company provides public key only)
+      logger.info(`Registering trusted verifier: ${verifierPubkey}…`);
       await companyAPI.registerTrustedVerifier(verifierPubkey);
+      logger.info('✅ Trusted verifier registered');
 
       // Sync contract timestamp with real time to avoid "timestamp in future" errors
       const currentTime = Math.floor(Date.now() / 1000);
@@ -266,7 +280,7 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
         const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
         const timestamp = BigInt(currentTime); // Reuse contract timestamp to avoid "timestamp in future" errors
 
-        // Submit proof
+        // Submit proof (verifier proves ownership via witness)
         const submitted = await employeeAPI.submitIncomeProof(
           employeeId,
           proofTypeInfo.type,
@@ -275,7 +289,6 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
           txids,
           historyCommitment,
           attestationHash,
-          verifierPubkey,
           timestamp,
           86400
         );

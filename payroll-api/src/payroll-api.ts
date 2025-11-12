@@ -16,6 +16,7 @@ import {
   type PayrollPrivateState,
   Contract,
   createPayrollPrivateState,
+  loadVerifierSecretFromEnv,
   ledger,
   payrollWitnesses,
   type PaymentRecord,
@@ -97,6 +98,7 @@ export interface DeployedPayrollAPI {
   verifyEmployment(employeeId: string, verifierId: string): Promise<boolean>;
 
   // ZKML Income Proofs (Phase 2.1)
+  // Company registers verifier by PUBLIC key (no secret needed)
   registerTrustedVerifier(verifierPubkey: string): Promise<boolean>;
   submitIncomeProof(
     employeeId: string,
@@ -106,7 +108,6 @@ export interface DeployedPayrollAPI {
     txids: Array<string>,
     historyCommitment: string,
     attestationHash: string,
-    verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number
   ): Promise<boolean>;
@@ -211,6 +212,23 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // ========================================
 
   /**
+   * Helper function to create private state
+   * If VERIFIER_SECRET_KEY env var exists, this API instance is acting as the verifier
+   * Otherwise, it's a regular participant (company/employee)
+   */
+  private static getPrivateState(): PayrollPrivateState {
+    try {
+      // Try to load verifier secret from environment
+      const verifierSecret = loadVerifierSecretFromEnv();
+      // If we get here, VERIFIER_SECRET_KEY exists - this is a verifier participant
+      return createPayrollPrivateState(verifierSecret);
+    } catch (error) {
+      // No VERIFIER_SECRET_KEY - this is a regular participant, use default
+      return createPayrollPrivateState();
+    }
+  }
+
+  /**
    * Deploy a new payroll contract
    * Following bank-api deploy pattern with retry logic
    * @param companyId - Unique identifier for the company
@@ -239,7 +257,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
         deployedPayrollContract = await deployContract(providers, {
           contract: payrollContract,
           privateStateId: `payroll-${companyId}` as AccountId,
-          initialPrivateState: createPayrollPrivateState(),
+          initialPrivateState: PayrollAPI.getPrivateState(),
           args: [companyIdBytes, companyNameBytes, initialTimestamp],
         });
         break;
@@ -284,7 +302,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
       contractAddress,
       contract: payrollContract,
       privateStateId: stateKey,
-      initialPrivateState: createPayrollPrivateState(),
+      initialPrivateState: PayrollAPI.getPrivateState(),
     }) as DeployedPayrollContract;
 
     const payrollAPI = new PayrollAPI(stateKey, normalizedUserId, deployedPayrollContract, providers, logger);
@@ -1025,6 +1043,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async registerTrustedVerifier(verifierPubkey: string): Promise<boolean> {
     this.logger?.info({ registerTrustedVerifier: { verifierPubkey } });
 
+    // Company provides verifier's PUBLIC key (no secret needed for registration)
     const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
 
     const result = await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
@@ -1040,7 +1059,6 @@ export class PayrollAPI implements DeployedPayrollAPI {
     txids: Array<string>,
     historyCommitment: string,
     attestationHash: string,
-    verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number
   ): Promise<boolean> {
@@ -1059,7 +1077,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
     const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
     const historyCommitmentBytes = utils.hexToBytes32(historyCommitment);
     const attestationHashBytes = utils.hexToBytes32(attestationHash);
-    const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
+    // verifierPubkey is now derived from witness in the contract
 
     // Convert txids array to Vector<12, Bytes<32>>
     const txidVector: Uint8Array[] = txids.map((txid) => utils.hexToBytes32(txid));
@@ -1076,7 +1094,6 @@ export class PayrollAPI implements DeployedPayrollAPI {
       txidVector,
       historyCommitmentBytes,
       attestationHashBytes,
-      verifierPubkeyBytes,
       timestamp,
       BigInt(expiresIn)
     );

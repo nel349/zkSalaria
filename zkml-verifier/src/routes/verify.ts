@@ -7,7 +7,9 @@ import type { VerifyProofRequest, VerifyProofResponse, GenerateProofRequest, Gen
 import { ErrorCode } from '../types.js';
 import { EZKLVerifier } from '../services/ezkl-verifier.js';
 import { AttestationSigner } from '../services/attestation-signer.js';
+import { ContractService } from '../services/contract-service.js';
 import { generateIncomeProof, ProofType as ZKMLProofType } from '@zksalaria/zkml-payroll';
+import { Logger } from 'pino';
 
 const verifyRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize services
@@ -20,6 +22,21 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
   const signer = new AttestationSigner(
     process.env.VERIFIER_SECRET_KEY || 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   );
+
+  // Initialize contract service for submitting proofs to blockchain
+  // TODO: Initialize with proper Midnight providers in production
+  const contractAddress = process.env.CONTRACT_ADDRESS;
+  const contractService = contractAddress
+    ? new ContractService(contractAddress, fastify.log as unknown as Logger)
+    : null;
+
+  // Initialize contract service (requires providers - TODO for production)
+  if (contractService) {
+    fastify.log.info('Contract service will be initialized when providers are available');
+    // TODO: await contractService.initialize(providers);
+  } else {
+    fastify.log.warn('CONTRACT_ADDRESS not set - proofs will not be submitted to blockchain');
+  }
 
   // POST /verify-proof
   fastify.post<{
@@ -208,6 +225,32 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
       fastify.log.info('  ✓ Attestation created', undefined, {
         attestation_hash: attestation.attestation_hash.substring(0, 16) + '...'
       });
+
+      // Step 3: Submit proof to blockchain (if contract service available)
+      if (contractService) {
+        fastify.log.info('  → Submitting proof to blockchain...');
+
+        const submitResult = await contractService.submitIncomeProof({
+          employeeId: employee_id,
+          proofType: proof_type as unknown as bigint,
+          thresholdMin: threshold_min.toString(),
+          thresholdMax: (threshold_max || 0).toString(),
+          txids: txids,
+          historyCommitment: history_commitment,
+          attestationHash: attestation.attestation_hash,
+          timestamp: BigInt(attestation.timestamp),
+          expiresIn: 86400 * 30 // 30 days default
+        });
+
+        if (submitResult.success) {
+          fastify.log.info('  ✓ Proof submitted to blockchain');
+        } else {
+          fastify.log.error({
+            error: submitResult.error
+          }, '  ✗ Failed to submit proof to blockchain');
+          // Continue anyway - proof is still valid off-chain
+        }
+      }
 
       const duration = Date.now() - startTime;
 
