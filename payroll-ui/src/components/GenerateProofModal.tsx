@@ -350,7 +350,6 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         txids,
         historyCommitment,
         attestationHash,
-        verifierPubkey,
         BigInt(timestamp),
         expiresInSeconds
       );

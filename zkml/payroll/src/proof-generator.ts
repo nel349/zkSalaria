@@ -49,6 +49,7 @@ export class ProofGenerator {
 
       // Prepare input data
       const inputData = this.prepareInputData(proofType, input);
+      console.log('🔍 INPUT DATA:', { proofType, inputData });
 
       // Create work directory
       await mkdir(this.workDir, { recursive: true });
@@ -64,6 +65,7 @@ export class ProofGenerator {
         input_shapes: inputData.map(() => [1]),
         input_data: inputData.map(v => [v])
       };
+      // console.log('🔍 EZKL INPUT FORMAT:', ezklInput);
       await writeFile(inputFile, JSON.stringify(ezklInput, null, 2));
 
       // Generate witness and proof using Python EZKL API
@@ -83,6 +85,11 @@ export class ProofGenerator {
       // Parse the result from witness outputs
       // outputs is an array like [["0100000000..."]] where first 2 hex chars indicate 0 or 1
       const outputHex = witness.outputs?.[0]?.[0] || '00';
+      // console.log('🔍 WITNESS DEBUG:', {
+      //   proofType,
+      //   outputHex: outputHex,
+      //   fullWitness: JSON.stringify(witness).substring(0, 200)
+      // });
 
       // Different proof types have different output formats:
       // - INCOME_ABOVE_THRESHOLD, INCOME_RANGE, AVERAGE_INCOME: boolean (01 = true, 00 = false)
@@ -97,6 +104,7 @@ export class ProofGenerator {
         // For other proof types, check if first 2 chars are '01'
         zkmlResult = outputHex.substring(0, 2) === '01';
       }
+      // console.log('🔍 RESULT PARSING:', { outputHexPrefix: outputHex.substring(0, 2), zkmlResult });
 
       const result: ProofOutput = {
         proofType,

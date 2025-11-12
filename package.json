@@ -11,7 +11,8 @@
     "payroll-contract",
     "payroll-api",
     "payroll-ui",
-    "payroll-commons"
+    "payroll-commons",
+    "zkml-verifier"
   ],
   "scripts": {
     "compact": "turbo run compact",

@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "description": "ZKML proof verification service for zkSalaria",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -10,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:verify": "tsx test-verify.ts",
     "test:generate": "tsx test-generate-proof.ts",
+    "test:wallet": "vitest run test/wallet-setup.test.ts",
     "test": "npm run test:generate"
   },
   "keywords": [
@@ -33,6 +36,7 @@
   "devDependencies": {
     "@types/node": "^20.10.6",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.1"
   }
 }

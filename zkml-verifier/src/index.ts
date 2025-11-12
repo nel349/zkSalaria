@@ -102,3 +102,16 @@ const start = async () => {
 };
 
 start();
+
+// Export types for external consumers (tests, other packages)
+export type {
+  GenerateProofRequest,
+  GenerateProofResponse,
+  VerifyProofRequest,
+  VerifyProofResponse,
+  Attestation,
+  ProofPublicInputs,
+  EZKLProof,
+  HealthResponse
+} from './types.js';
+export { ProofType, ErrorCode } from './types.js';

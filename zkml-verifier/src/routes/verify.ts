@@ -7,7 +7,7 @@ import type { VerifyProofRequest, VerifyProofResponse, GenerateProofRequest, Gen
 import { ErrorCode } from '../types.js';
 import { EZKLVerifier } from '../services/ezkl-verifier.js';
 import { AttestationSigner } from '../services/attestation-signer.js';
-import { ContractService } from '../services/contract-service.js';
+import { ProviderService, loadVerifierConfig } from '../services/providers.js';
 import { generateIncomeProof, ProofType as ZKMLProofType } from '@zksalaria/zkml-payroll';
 import { Logger } from 'pino';
 
@@ -23,21 +23,10 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
     process.env.VERIFIER_SECRET_KEY || 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   );
 
-  // Initialize contract service for submitting proofs to blockchain
-  // TODO: Initialize with proper Midnight providers in production
-  const contractAddress = process.env.CONTRACT_ADDRESS;
-  const contractService = contractAddress
-    ? new ContractService(contractAddress, fastify.log as unknown as Logger)
-    : null;
+  // Contract service will be initialized per-request when blockchain submission is enabled
+  fastify.log.info('Blockchain submission will be attempted per-request if ENABLE_BLOCKCHAIN_SUBMISSION=true');
 
-  // Initialize contract service (requires providers - TODO for production)
-  if (contractService) {
-    fastify.log.info('Contract service will be initialized when providers are available');
-    // TODO: await contractService.initialize(providers);
-  } else {
-    fastify.log.warn('CONTRACT_ADDRESS not set - proofs will not be submitted to blockchain');
-  }
-
+  fastify.log.info("Is blockchain enabled: " +  process.env.ENABLE_BLOCKCHAIN_SUBMISSION)
   // POST /verify-proof
   fastify.post<{
     Body: VerifyProofRequest;
@@ -135,15 +124,25 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
     Body: GenerateProofRequest;
   }>('/generate-proof', async (request, reply) => {
     const startTime = Date.now();
-    const { proof_type, payments, threshold_min, threshold_max, employee_id, txids, history_commitment } = request.body;
+    const { proof_type, payments, threshold_min, threshold_max, employee_id, txids, history_commitment, contract_address } = request.body;
 
     // Validate request
-    if (!proof_type || !payments || threshold_min === undefined || !employee_id || !txids || !history_commitment) {
+    const missingFields = [];
+    if (!proof_type) missingFields.push('proof_type');
+    if (!payments) missingFields.push('payments');
+    if (threshold_min === undefined) missingFields.push('threshold_min');
+    if (!employee_id) missingFields.push('employee_id');
+    if (!txids) missingFields.push('txids');
+    if (!history_commitment) missingFields.push('history_commitment');
+    if (!contract_address) missingFields.push('contract_address');
+
+    if (missingFields.length > 0) {
+      fastify.log.error('Validation failed - missing fields:', undefined, { missingFields, body: request.body });
       return reply.code(400).send({
         success: false,
         error: 'Bad Request',
         error_code: ErrorCode.VALIDATION_ERROR,
-        message: 'Missing required fields: proof_type, payments, threshold_min, employee_id, txids, history_commitment'
+        message: `Missing required fields: ${missingFields.join(', ')}`
       } as GenerateProofResponse);
     }
 
@@ -157,23 +156,41 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     try {
-      fastify.log.info('Generating ZKML proof', undefined, {
+      fastify.log.info({
         proof_type,
         employee_id,
         threshold_min,
         threshold_max,
-        num_payments: payments.length
-      });
+        num_payments: payments.length,
+        payments: payments
+      }, 'Generating ZKML proof');
 
       // Step 1: Generate ZK proof using zkml-payroll module
       // NOTE: payments and thresholds must be ALREADY NORMALIZED by caller
-      fastify.log.info('  → Generating ZK proof with EZKL...');
-      const proofResult = await generateIncomeProof(
-        proof_type as unknown as ZKMLProofType,
-        payments,
-        threshold_min,
-        threshold_max
-      );
+      fastify.log.info({
+        payments: payments,
+        threshold_min: threshold_min,
+        threshold_max: threshold_max
+      }, '  → Generating ZK proof with EZKL...');
+
+      let proofResult;
+      try {
+        fastify.log.info('  → Calling generateIncomeProof...');
+        proofResult = await generateIncomeProof(
+          proof_type as unknown as ZKMLProofType,
+          payments,
+          threshold_min,
+          threshold_max
+        );
+        fastify.log.info({
+          success: proofResult.success,
+          hasProof: !!proofResult.proof,
+          error: proofResult.error
+        }, '  → generateIncomeProof returned');
+      } catch (err) {
+        fastify.log.error({ err }, '  ❌ Exception in generateIncomeProof');
+        throw err;
+      }
 
       if (!proofResult.success || !proofResult.proof) {
         const errorMsg = proofResult.error || 'Unknown error - no error message returned';
@@ -226,29 +243,60 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
         attestation_hash: attestation.attestation_hash.substring(0, 16) + '...'
       });
 
-      // Step 3: Submit proof to blockchain (if contract service available)
-      if (contractService) {
-        fastify.log.info('  → Submitting proof to blockchain...');
+      // Step 3: Submit proof to blockchain
+      if (contract_address && process.env.ENABLE_BLOCKCHAIN_SUBMISSION === 'true') {
+        try {
+          fastify.log.info('  → Submitting proof to blockchain...');
 
-        const submitResult = await contractService.submitIncomeProof({
-          employeeId: employee_id,
-          proofType: proof_type as unknown as bigint,
-          thresholdMin: threshold_min.toString(),
-          thresholdMax: (threshold_max || 0).toString(),
-          txids: txids,
-          historyCommitment: history_commitment,
-          attestationHash: attestation.attestation_hash,
-          timestamp: BigInt(attestation.timestamp),
-          expiresIn: 86400 * 30 // 30 days default
-        });
+          // Initialize provider service with contract address
+          const config = loadVerifierConfig(contract_address);
+          const providerSvc = new ProviderService(fastify.log as unknown as Logger, config);
+          const api = await providerSvc.initialize();
 
-        if (submitResult.success) {
-          fastify.log.info('  ✓ Proof submitted to blockchain');
+          // Submit income proof via PayrollAPI
+          const success = await api.submitIncomeProof(
+            employee_id,
+            BigInt(proof_type),
+            threshold_min.toString(),
+            (threshold_max || 0).toString(),
+            txids,
+            history_commitment,
+            attestation.attestation_hash,
+            BigInt(attestation.timestamp),
+            30 * 24 * 60 * 60 // 30 days
+          );
+
+          if (!success) {
+            fastify.log.error('  ❌ Failed to submit proof to blockchain');
+            return reply.code(500).send({
+              success: false,
+              error: 'Blockchain Submission Failed',
+              error_code: ErrorCode.INTERNAL_ERROR,
+              message: 'Failed to submit proof to blockchain',
+              duration: Date.now() - startTime
+            } as GenerateProofResponse);
+          }
+
+          fastify.log.info('  ✅ Proof submitted to blockchain successfully');
+
+          // Cleanup
+          await providerSvc.shutdown();
+        } catch (error) {
+          fastify.log.error({ error }, '  ❌ Blockchain submission error');
+          return reply.code(500).send({
+            success: false,
+            error: 'Blockchain Submission Failed',
+            error_code: ErrorCode.INTERNAL_ERROR,
+            message: error instanceof Error ? error.message : 'Unknown blockchain error',
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        }
+      } else {
+        if (!contract_address) {
+          fastify.log.warn('  ⚠️  Blockchain submission skipped - contract_address not provided in request');
         } else {
-          fastify.log.error({
-            error: submitResult.error
-          }, '  ✗ Failed to submit proof to blockchain');
-          // Continue anyway - proof is still valid off-chain
+          fastify.log.warn('  ⚠️  Blockchain submission skipped - ENABLE_BLOCKCHAIN_SUBMISSION not set to "true"');
+          fastify.log.warn('  ⚠️  Set ENABLE_BLOCKCHAIN_SUBMISSION=true to enable automatic submission');
         }
       }
 

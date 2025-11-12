@@ -29,6 +29,7 @@ export interface GenerateProofRequest {
   employee_id: string;
   txids: string[];
   history_commitment: string;
+  contract_address: string;  // Contract address to submit proof to
 }
 
 export enum ErrorCode {
