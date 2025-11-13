@@ -18,9 +18,12 @@ class IncomeAboveThresholdModel(nn.Module):
 
 class IncomeRangeModel(nn.Module):
     def forward(self, p1, p2, p3, p4, p5, p6, min_threshold, max_threshold):
-        total = p1 + p2 + p3 + p4 + p5 + p6
-        above_min = (total >= min_threshold).float()
-        below_max = (total <= max_threshold).float()
+        # Sum 6 monthly payments and annualize (6 months → 12 months)
+        total_6_months = p1 + p2 + p3 + p4 + p5 + p6
+        annualized_total = total_6_months * 2.0  # Annualize to yearly
+        # Check if annualized total is within [min_threshold, max_threshold]
+        above_min = (annualized_total >= min_threshold).float()
+        below_max = (annualized_total <= max_threshold).float()
         return above_min * below_max
 
 class AverageIncomeModel(nn.Module):
@@ -104,15 +107,17 @@ def main():
 
     model = IncomeRangeModel()
     model.eval()
-    # NORMALIZED VALUES: $5000 → 0.5, $28000 → 2.8, $32000 → 3.2
-    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [0.5, 0.51, 0.52, 0.49, 0.5, 0.48]]
-    min_t = torch.tensor([[2.8]], dtype=torch.float32)
-    max_t = torch.tensor([[3.2]], dtype=torch.float32)
+    # NORMALIZED VALUES: $10000/month → 1.0
+    # 6 months × $10k = $60k → annualized = $120k/year → normalized = 12.0
+    # Range: $80k/year to $120k/year → normalized = [8.0, 12.0]
+    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]
+    min_t = torch.tensor([[8.0]], dtype=torch.float32)  # $80k yearly
+    max_t = torch.tensor([[12.0]], dtype=torch.float32)  # $120k yearly
 
     torch.onnx.export(model, tuple(payments + [min_t, max_t]), "income_range.onnx", export_params=True, opset_version=10, do_constant_folding=True, input_names=['input'], output_names=['output'])
 
     with open("income_range_input.json", "w") as f:
-        json.dump({"input_shapes": [[1]] * 8, "input_data": [[0.5], [0.51], [0.52], [0.49], [0.5], [0.48], [2.8], [3.2]]}, f, indent=2)
+        json.dump({"input_shapes": [[1]] * 8, "input_data": [[1.0], [1.0], [1.0], [1.0], [1.0], [1.0], [8.0], [12.0]]}, f, indent=2)
 
     run_ezkl_workflow("income_range", 8)
     os.chdir("../..")

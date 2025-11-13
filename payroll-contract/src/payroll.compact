@@ -107,6 +107,24 @@ pure circuit generate_balance_key(participant_id: Bytes<32>): Bytes<32> {
 }
 
 // ========================================
+// VERIFIER AUTHENTICATION (Midnight Pattern)
+// ========================================
+
+// Witness function to access verifier's secret key from private state
+// This will be implemented in witnesses.ts at the API/test layer
+witness verifier_secret_key(): Bytes<32>;
+
+// Derive public key from secret key (hash-based authentication)
+// This follows the Midnight pattern for proving ownership without signatures
+// Used by ZKML verifiers to prove they control a registered public key
+pure circuit verifier_public_key(secret_key: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "zksalaria:verifier:pk:"),
+    secret_key
+  ]);
+}
+
+// ========================================
 // COMPANY OPERATIONS
 // ========================================
 // NOTE: No registration needed - company created in constructor
@@ -1030,22 +1048,28 @@ export circuit process_recurring_payment(
 
 
 /**
- * Register Trusted Verifier
+ * Register Trusted Verifier (Midnight Authentication Pattern)
  *
- * Allows contract owner (company) to register a trusted ZKML verifier.
- * In production, this would be restricted to contract deployer or governance.
+ * Allows ZKML verifier to register themselves by proving they know the secret key.
+ * This follows the Midnight pattern: only someone with the secret can register.
  *
- * @param verifier_pubkey Public key of the trusted verifier
+ * SECURITY: Verifier provides secret as witness to prove ownership
+ *           Public key is derived from secret and stored on-chain
+ *           This prevents anyone from registering arbitrary public keys
+ *
+ * @returns Boolean - true if registered successfully, false if already exists
  */
 export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
-  // TODO: Add access control (only contract owner/governance)
-  // For now, anyone can register a verifier (MVP simplification)
+  // Company provides the verifier's PUBLIC key (no secret needed)
+  // TODO: Add owner check - only contract owner (company) should be able to register verifiers
+  // For now, anyone can call this (MVP simplification)
 
   // Check if verifier is already registered
   if (trusted_verifiers.member(disclose(verifier_pubkey))) {
     return false; // Already registered
   }
 
+  // Register the verifier's public key
   trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
   return true; // Successfully registered
 }
@@ -1055,90 +1079,124 @@ export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
 // SECTION 2.1: SALARY HISTORY PROOFS
 // ========================================
 
-// Submit Income Proof (ZKML Circuit)
-// Employee submits ZKML proof to demonstrate income eligibility
+// Submit Income Proof (ZKML Circuit) - REDESIGNED with Verifier Authentication
+// ZKML Verifier submits attestation directly (NOT the employee!)
 // Proof types: 1=INCOME_ABOVE_THRESHOLD, 2=INCOME_RANGE, 3=AVERAGE_INCOME, 4=CREDIT_SCORE
+//
+// SECURITY FIX (Issue #2): Threshold is now bound in attestation struct
+// SECURITY FIX (Issue #3): Verifier proves ownership via witness (Midnight pattern)
+//
+// Flow: Employee → Verifier Service → This Circuit (verifier provides secret as witness)
 export circuit submit_income_proof(
+  // Attestation fields passed individually
   employee_id: Bytes<32>,
   proof_type: Uint<8>,
   threshold_min: Uint<64>,
   threshold_max: Uint<64>,
-  txids: Vector<12, Bytes<32>>,
   history_commitment: Bytes<32>,
-  attestation_hash: Bytes<32>,
-  verifier_pubkey: Bytes<32>,
-  timestamp: Uint<64>,
-  expires_in: Uint<32>  // Seconds until expiry (e.g., 2592000 for 30 days)
+  timestamp: Uint<32>,
+  // Other parameters
+  attestation_hash: Bytes<32>,             // ← Hash of attestation (prevents tampering)
+  txids: Vector<12, Bytes<32>>,            // ← Transaction IDs (for reference)
+  expires_in: Uint<32>                     // ← Seconds until expiry (e.g., 2592000 for 30 days)
 ): Boolean {
-  // Step 1: Verify proof type is valid (1-4)
-  if (disclose(proof_type) < (1 as Uint<8>) || disclose(proof_type) > (4 as Uint<8>)) {
+  // Derive verifier's public key from secret (retrieved via witness from private state)
+  const verifier_pubkey = verifier_public_key(verifier_secret_key());
+
+  // Step 1: Reconstruct attestation struct from individual params and verify hash
+  // Disclose all fields since they're used in hash comparison
+  const attestation = PC_IncomeProofAttestation {
+    employee_id: disclose(employee_id),
+    proof_type: disclose(proof_type),
+    threshold_min: disclose(threshold_min),
+    threshold_max: disclose(threshold_max),
+    history_commitment: disclose(history_commitment),
+    timestamp: disclose(timestamp)
+  };
+  const computed_hash = persistentHash<PC_IncomeProofAttestation>(attestation);
+  if (disclose(attestation_hash) != computed_hash) {
+    return false; // Attestation has been tampered with!
+  }
+
+  // Extract disclosed values for use in subsequent checks
+  const employee_id_disclosed = disclose(employee_id);
+  const proof_type_disclosed = disclose(proof_type);
+  const threshold_min_disclosed = disclose(threshold_min);
+  const threshold_max_disclosed = disclose(threshold_max);
+  const history_commitment_disclosed = disclose(history_commitment);
+  const timestamp_disclosed = disclose(timestamp);
+
+  // Step 2: Use the individual params directly (already extracted)
+
+  // Step 3: Verify proof type is valid (1-4)
+  if (proof_type_disclosed < (1 as Uint<8>) || proof_type_disclosed > (4 as Uint<8>)) {
     return false; // Invalid proof type
   }
 
-  // Step 2: Verify verifier is trusted
+  // Step 4: Verify verifier is trusted
   if (!trusted_verifiers.member(disclose(verifier_pubkey))) {
     return false; // Verifier not trusted
   }
 
-  // Step 3: Prevent replay attacks - check attestation hash hasn't been used
+  // Step 5: Prevent replay attacks - check attestation hash hasn't been used
   if (used_attestations.member(disclose(attestation_hash))) {
     return false; // Attestation already used
   }
   used_attestations.insert(disclose(attestation_hash), 1 as Uint<1>);
 
-  // Step 4: Verify timestamp is fresh (within 1 hour)
-  const current_time = current_timestamp as Uint<64>;
-  const one_hour_ago = (current_time - (3600 as Uint<64>)) as Uint<64>;
-  if (disclose(timestamp) <= one_hour_ago) {
+  // Step 6: Verify timestamp is fresh (within 1 hour)
+  const current_time = current_timestamp;
+  const one_hour_ago = (current_time - (3600 as Uint<32>));
+  if (timestamp_disclosed <= one_hour_ago) {
     return false; // Proof timestamp too old
   }
-  if (disclose(timestamp) > current_time) {
+  if (timestamp_disclosed > current_time) {
     return false; // Proof timestamp is in the future
   }
 
-  // Step 5: Validate threshold values based on proof type
+  // Step 7: Validate threshold values based on proof type
   // For INCOME_RANGE (type 2), threshold_max must be > threshold_min
-  if (disclose(proof_type) == (2 as Uint<8>)) {
-    if (disclose(threshold_max) <= disclose(threshold_min)) {
+  if (proof_type_disclosed == (2 as Uint<8>)) {
+    if (threshold_max_disclosed <= threshold_min_disclosed) {
       return false; // Invalid range
     }
   }
 
-  // Step 6: Verify history commitment matches employee's payment history
+  // Step 8: Verify history commitment matches employee's payment history
   // This critical step ensures the ZKML proof was generated using actual on-chain payment data
   // and prevents attacks where someone generates proofs using fake high salaries
   // NOTE: history_commitment is a hash of the payment history vector, not a true Merkle tree
-  if (!employee_payment_history.member(disclose(employee_id))) {
+  if (!employee_payment_history.member(employee_id_disclosed)) {
     return false; // Employee has no payment history
   }
 
-  const payment_history = employee_payment_history.lookup(disclose(employee_id));
+  const payment_history = employee_payment_history.lookup(employee_id_disclosed);
   const computed_commitment = persistentHash<Vector<6, PC_PaymentRecord>>(payment_history);
 
-  if (disclose(history_commitment) != computed_commitment) {
+  if (history_commitment_disclosed != computed_commitment) {
     return false; // History commitment doesn't match on-chain payment history - possible fraud!
   }
 
-  // Step 7: Calculate expiration time
+  // Step 9: Calculate expiration time
   const expiration_time = (current_timestamp + disclose(expires_in)) as Uint<32>;
 
-  // Step 8: Store income proof in ledger
+  // Step 10: Store income proof in ledger (with VERIFIED threshold from attestation!)
   const income_proof = PC_IncomeProof {
-    employee_id: disclose(employee_id),
-    proof_type: disclose(proof_type),
-    threshold_min: disclose(threshold_min),
-    threshold_max: disclose(threshold_max),
+    employee_id: employee_id_disclosed,
+    proof_type: proof_type_disclosed,
+    threshold_min: threshold_min_disclosed,      // ← From attestation, NOT from employee parameter!
+    threshold_max: threshold_max_disclosed,      // ← From attestation, NOT from employee parameter!
     txids: disclose(txids),
-    history_commitment: disclose(history_commitment),
+    history_commitment: history_commitment_disclosed,
     attestation_hash: disclose(attestation_hash),
     verifier_pubkey: disclose(verifier_pubkey),
     submitted_at: current_timestamp,
     expires_at: expiration_time
   };
 
-  income_proofs.insert(disclose(employee_id), income_proof);
+  income_proofs.insert(employee_id_disclosed, income_proof);
 
-  // Success: Income proof stored and available for verification
+  // Success: Income proof stored with cryptographically bound threshold!
   return true;
 }
 

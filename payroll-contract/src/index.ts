@@ -21,16 +21,28 @@ export * from './utils/calendar';
 // Create initial private state for payroll
 // NOTE: Payment history now stored on public ledger (not witnesses) following bank.compact pattern
 // Balances are encrypted on public ledger
-// Private state is now empty - all data on ledger
-export const createPayrollPrivateState = (): PayrollPrivateState => ({
-  employeePaymentHistory: new Map()
+// Verifier secret key for ZKML attestation signing (Midnight authentication pattern)
+//
+// IMPORTANT: The verifierSecretKey parameter is OPTIONAL:
+// - Regular participants (companies, employees): Call without arguments - uses default test value
+// - Verifier participant: Call with loadVerifierSecretFromEnv() to use real secret from environment
+export const createPayrollPrivateState = (verifierSecretKey?: Uint8Array): PayrollPrivateState => ({
+  employeePaymentHistory: new Map(),
+  // Default to test value if not provided (for non-verifier participants)
+  verifierSecretKey: verifierSecretKey || stringToBytes32('test-verifier-secret-12345')
 });
 
 // Payroll witness functions
-// NOTE: All witness functions removed - following bank.compact pattern
-// Payment history is stored on public ledger so company can update when paying employee
+// NOTE: Payment history is stored on public ledger so company can update when paying employee
+// verifier_secret_key: Used by ZKML verifier to prove ownership (Midnight pattern)
 export const payrollWitnesses = {
-  // No witnesses needed - all data on ledger (encrypted balances + payment history)
+  verifier_secret_key: ({ privateState }: WitnessContext<Ledger, PayrollPrivateState>): [PayrollPrivateState, Uint8Array] => {
+    console.log('[payrollWitnesses.verifier_secret_key] Witness called, returning secret:', {
+      secretLength: privateState.verifierSecretKey.length,
+      secretHex: Buffer.from(privateState.verifierSecretKey).toString('hex').substring(0, 16) + '...'
+    });
+    return [privateState, privateState.verifierSecretKey];
+  }
 };
 
 // Utility functions
@@ -49,12 +61,31 @@ export function stringToBytes32(str: string): Uint8Array {
   return bytes;
 }
 
+/**
+ * Load verifier secret key from environment variable
+ * This should be called by the zkml-verifier service at startup
+ *
+ * @param envVarName - Name of environment variable (default: 'VERIFIER_SECRET_KEY')
+ * @returns Uint8Array secret key for use in private state
+ */
+export function loadVerifierSecretFromEnv(envVarName: string = 'VERIFIER_SECRET_KEY'): Uint8Array {
+  const secret = process.env[envVarName];
+  if (!secret) {
+    throw new Error(`${envVarName} environment variable not set`);
+  }
+  return stringToBytes32(secret);
+}
+
+// Export attestation utilities
+export { computeAttestationHash, hashToHex, computeVerifierPubkey, computeVerifierPubkeyFromString } from './utils/attestation-hash.js';
+
 export default {
   Contract,
   ledger,
   pureCircuits,
   payrollWitnesses,
   createPayrollPrivateState,
+  loadVerifierSecretFromEnv,
   generateCompanyId,
   generateEmployeeId,
   stringToBytes32

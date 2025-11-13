@@ -16,6 +16,7 @@ import {
   type PayrollPrivateState,
   Contract,
   createPayrollPrivateState,
+  loadVerifierSecretFromEnv,
   ledger,
   payrollWitnesses,
   type PaymentRecord,
@@ -97,6 +98,7 @@ export interface DeployedPayrollAPI {
   verifyEmployment(employeeId: string, verifierId: string): Promise<boolean>;
 
   // ZKML Income Proofs (Phase 2.1)
+  // Company registers verifier by PUBLIC key (no secret needed)
   registerTrustedVerifier(verifierPubkey: string): Promise<boolean>;
   submitIncomeProof(
     employeeId: string,
@@ -106,7 +108,6 @@ export interface DeployedPayrollAPI {
     txids: Array<string>,
     historyCommitment: string,
     attestationHash: string,
-    verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number
   ): Promise<boolean>;
@@ -211,6 +212,28 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // ========================================
 
   /**
+   * Helper function to create private state
+   * If VERIFIER_SECRET_KEY env var exists, this API instance is acting as the verifier
+   * Otherwise, it's a regular participant (company/employee)
+   */
+  private static getPrivateState(): PayrollPrivateState {
+    try {
+      // Try to load verifier secret from environment
+      const verifierSecret = loadVerifierSecretFromEnv();
+      // If we get here, VERIFIER_SECRET_KEY exists - this is a verifier participant
+      console.log('[PayrollAPI.getPrivateState] Loaded verifier secret from env:', {
+        secretLength: verifierSecret.length,
+        secretHex: Buffer.from(verifierSecret).toString('hex').substring(0, 16) + '...'
+      });
+      return createPayrollPrivateState(verifierSecret);
+    } catch (error) {
+      // No VERIFIER_SECRET_KEY - this is a regular participant, use default
+      console.log('[PayrollAPI.getPrivateState] No VERIFIER_SECRET_KEY found, using default');
+      return createPayrollPrivateState();
+    }
+  }
+
+  /**
    * Deploy a new payroll contract
    * Following bank-api deploy pattern with retry logic
    * @param companyId - Unique identifier for the company
@@ -239,7 +262,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
         deployedPayrollContract = await deployContract(providers, {
           contract: payrollContract,
           privateStateId: `payroll-${companyId}` as AccountId,
-          initialPrivateState: createPayrollPrivateState(),
+          initialPrivateState: PayrollAPI.getPrivateState(),
           args: [companyIdBytes, companyNameBytes, initialTimestamp],
         });
         break;
@@ -284,7 +307,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
       contractAddress,
       contract: payrollContract,
       privateStateId: stateKey,
-      initialPrivateState: createPayrollPrivateState(),
+      initialPrivateState: PayrollAPI.getPrivateState(),
     }) as DeployedPayrollContract;
 
     const payrollAPI = new PayrollAPI(stateKey, normalizedUserId, deployedPayrollContract, providers, logger);
@@ -1025,6 +1048,7 @@ export class PayrollAPI implements DeployedPayrollAPI {
   async registerTrustedVerifier(verifierPubkey: string): Promise<boolean> {
     this.logger?.info({ registerTrustedVerifier: { verifierPubkey } });
 
+    // Company provides verifier's PUBLIC key (no secret needed for registration)
     const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
 
     const result = await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
@@ -1040,7 +1064,6 @@ export class PayrollAPI implements DeployedPayrollAPI {
     txids: Array<string>,
     historyCommitment: string,
     attestationHash: string,
-    verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number
   ): Promise<boolean> {
@@ -1056,10 +1079,17 @@ export class PayrollAPI implements DeployedPayrollAPI {
       },
     });
 
+    // CRITICAL: Update contract timestamp to current time BEFORE submitting proof
+    // The circuit validates that the attestation timestamp is within 1 hour of current_timestamp
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    this.logger?.info({ action: 'update_timestamp_before_submit', timestamp: currentTimestamp });
+    await this.circuits.update_timestamp(BigInt(currentTimestamp));
+    this.logger?.info({ action: 'timestamp_updated', timestamp: currentTimestamp });
+
     const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
     const historyCommitmentBytes = utils.hexToBytes32(historyCommitment);
     const attestationHashBytes = utils.hexToBytes32(attestationHash);
-    const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
+    // verifierPubkey is now derived from witness in the contract
 
     // Convert txids array to Vector<12, Bytes<32>>
     const txidVector: Uint8Array[] = txids.map((txid) => utils.hexToBytes32(txid));
@@ -1068,20 +1098,55 @@ export class PayrollAPI implements DeployedPayrollAPI {
       txidVector.push(new Uint8Array(32));
     }
 
+    // IMPORTANT: ZKML thresholds are normalized integers (8 = $80k/year normalized by 10k)
+    // Do NOT use parseAmount() which multiplies by 1e6 - just parse the integer
+    const thresholdMinInt = BigInt(Math.floor(parseFloat(thresholdMin)));
+    const thresholdMaxInt = BigInt(Math.floor(parseFloat(thresholdMax)));
+
+    // DEBUG: Log all bytes being sent to circuit
+    const currentTime = Math.floor(Date.now() / 1000);
+    this.logger?.info({
+      CIRCUIT_DEBUG_PARAMS: {
+        employee_id_bytes: Buffer.from(employeeIdBytes).toString('hex'),
+        proof_type: proofType.toString(),
+        threshold_min: thresholdMinInt.toString(),
+        threshold_max: thresholdMaxInt.toString(),
+        history_commitment_bytes: Buffer.from(historyCommitmentBytes).toString('hex'),
+        timestamp: timestamp.toString(),
+        attestation_hash_bytes: Buffer.from(attestationHashBytes).toString('hex'),
+        txids_count: txidVector.length,
+        expires_in: expiresIn.toString(),
+        // Timestamp validation debug
+        current_wall_clock_time: currentTime,
+        timestamp_diff_from_wall_clock: Number(timestamp) - currentTime,
+        one_hour_seconds: 3600
+      }
+    });
+
+    // Pass all parameters individually (no struct)
+    // Circuit: submit_income_proof(employee_id, proof_type, threshold_min, threshold_max, history_commitment, timestamp, attestation_hash, txids, expires_in)
     const result = await this.circuits.submit_income_proof(
-      employeeIdBytes,
-      proofType,
-      utils.parseAmount(thresholdMin),
-      utils.parseAmount(thresholdMax),
-      txidVector,
-      historyCommitmentBytes,
-      attestationHashBytes,
-      verifierPubkeyBytes,
-      timestamp,
-      BigInt(expiresIn)
+      employeeIdBytes,           // 1. employee_id
+      proofType,                  // 2. proof_type
+      thresholdMinInt,            // 3. threshold_min
+      thresholdMaxInt,            // 4. threshold_max
+      historyCommitmentBytes,     // 5. history_commitment
+      timestamp,                  // 6. timestamp
+      attestationHashBytes,       // 7. attestation_hash
+      txidVector,                 // 8. txids
+      BigInt(expiresIn)           // 9. expires_in
     );
     // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata
-    return result.private.result;
+    const circuitResult = result.private.result;
+    this.logger?.info({
+      CIRCUIT_RESULT: {
+        success: circuitResult,
+        resultType: typeof circuitResult,
+        hasPrivate: !!result.private,
+        hasPublic: !!result.public
+      }
+    });
+    return circuitResult;
   }
 
   async verifyIncomeProof(
@@ -1093,10 +1158,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
 
+    // IMPORTANT: ZKML thresholds are normalized integers (8 = $80k/year normalized by 10k)
+    // Do NOT use parseAmount() which multiplies by 1e6 - just parse the integer
+    const thresholdInt = BigInt(Math.floor(parseFloat(requiredThreshold)));
+
     const result = await this.circuits.verify_income_proof(
       employeeIdBytes,
       requiredProofType,
-      utils.parseAmount(requiredThreshold)
+      thresholdInt
     );
 
     // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata

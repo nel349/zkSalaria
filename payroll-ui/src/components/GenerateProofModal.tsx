@@ -242,11 +242,6 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       console.log(`[GenerateProof] Payment amounts (last 6): [$${paymentAmounts[0]}, ..., $${paymentAmounts[5]}]`);
       console.log(`[GenerateProof] Selected proof type: "${proofType}"`);
 
-      // Compute history commitment
-      console.log('[GenerateProof] Computing history commitment...');
-      const historyCommitment = await api.computeHistoryCommitment(employeeId);
-      console.log(`[GenerateProof] History commitment: ${historyCommitment}`);
-
       // CRITICAL: ALL models now use input_scale:14 and require normalization
       // All payment amounts and thresholds must be divided by 10000
       // Precision: 2^-14 ≈ 0.000061 (~$0.61 resolution after denormalization)
@@ -260,24 +255,43 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       normalizedPayments = paymentAmounts.map(p => p / NORMALIZATION_FACTOR);
 
       // Threshold conversion and normalization
-      if (proofType === 'first_time_loan') {
-        // Threshold is already a ratio (0-1), no conversion needed
-        thresholdMinDollars = Number(minThreshold);
-        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) : undefined;
-      } else if (proofType === 'income_above' || proofType === 'income_range') {
+      if (proofType === 'income_range') {
+        // INCOME_RANGE (Type 2): Requires BOTH min and max thresholds
         // Convert annual threshold to 6-month total, then normalize
         thresholdMinDollars = (Number(minThreshold) / 2) / NORMALIZATION_FACTOR;
         thresholdMaxDollars = maxThreshold ? (Number(maxThreshold) / 2) / NORMALIZATION_FACTOR : undefined;
-      } else {
-        // average_income: normalize threshold directly
+      } else if (proofType === 'income_above') {
+        // INCOME_ABOVE_THRESHOLD (Type 1): Only minimum threshold
+        // Convert annual threshold to 6-month total, then normalize
+        thresholdMinDollars = (Number(minThreshold) / 2) / NORMALIZATION_FACTOR;
+        thresholdMaxDollars = undefined; // Explicitly no max for income_above
+      } else if (proofType === 'average_income') {
+        // AVERAGE_INCOME (Type 3): Only minimum threshold
+        // Normalize threshold directly (no annual->6month conversion)
         thresholdMinDollars = Number(minThreshold) / NORMALIZATION_FACTOR;
-        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) / NORMALIZATION_FACTOR : undefined;
+        thresholdMaxDollars = undefined; // Explicitly no max for average_income
+      } else {
+        // FIRST_TIME_LOAN (Type 4): Only minimum threshold (ratio 0-1)
+        // Threshold is already a ratio, just normalize for EZKL
+        thresholdMinDollars = Number(minThreshold) / NORMALIZATION_FACTOR;
+        thresholdMaxDollars = undefined; // Explicitly no max for first_time_loan
       }
 
       console.log(`[GenerateProof] Normalized for ${proofType}: payments=[${normalizedPayments[0].toFixed(4)}...${normalizedPayments[5].toFixed(4)}], threshold=${thresholdMinDollars.toFixed(4)}`);
 
-      // Call verifier service to generate ZKML proof + attestation
-      console.log('[GenerateProof] Generating ZKML proof (this may take 10-30 seconds)...');
+      // Get contract address to send to verifier
+      const employerContract = getCurrentEmployer();
+      if (!employerContract) {
+        throw new Error('No employer contract found. Please ensure you are connected to a company.');
+      }
+
+      // NEW SCHEMA: Call verifier service to generate ZKML proof + attestation AND submit to blockchain
+      // The verifier service will sign and submit the proof using its trusted key
+      console.log('[GenerateProof] Calling verifier service to generate proof and submit to blockchain...');
+      console.log('[GenerateProof] Contract address:', employerContract);
+
+      const expiresInSeconds = expirationDays === '0' ? 0 : Number(expirationDays) * 24 * 60 * 60;
+
       const proofResponse = await fetch(`${VERIFIER_SERVICE_URL}/api/zkml/generate-proof`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -288,7 +302,9 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
           threshold_max: thresholdMaxDollars,
           employee_id: employeeId,
           txids: txids,
-          history_commitment: historyCommitment
+          // history_commitment will be computed by verifier service
+          contract_address: employerContract,
+          expires_in: expiresInSeconds
         })
       });
 
@@ -324,56 +340,24 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       const attestationHash = '0x' + attestation_hash;
       const verifierPubkey = '0x' + verifier_pubkey;
 
-      console.log('[GenerateProof] ✅ ZKML Proof generated successfully!');
+      console.log('[GenerateProof] ✅ ZKML Proof generated and submitted by verifier!');
       console.log(`  - Attestation Hash: ${attestationHash.substring(0, 18)}...`);
       console.log(`  - Verifier Pubkey: ${verifierPubkey.substring(0, 18)}...`);
       console.log(`  - Duration: ${proofData.duration}ms`);
 
-      // Register verifier if not already registered (idempotent operation)
-      console.log('[GenerateProof] Registering trusted verifier...');
-      try {
-        await api.registerTrustedVerifier(verifierPubkey);
-        console.log('[GenerateProof] ✓ Verifier registered');
-      } catch (error) {
-        // Might fail if already registered or if not authorized - continue anyway
-        console.warn('[GenerateProof] Verifier registration warning (may already be registered):', error);
-      }
-
-      // Update contract timestamp to current time (prevents "timestamp in future" rejection)
-      console.log('[GenerateProof] Syncing contract timestamp...');
-      const currentTimestamp = Math.floor(Date.now() / 1000);
-      await api.updateTimestamp(currentTimestamp);
-      console.log(`[GenerateProof] ✓ Contract timestamp updated to ${currentTimestamp}`);
-
-      console.log('[GenerateProof] Submitting income proof to contract...');
-      const expiresInSeconds = expirationDays === '0' ? 0 : Number(expirationDays) * 24 * 60 * 60;
-
-      // Contract expects thresholds as dollar strings (will be parsed to atomic units by API)
-      const submitted = await api.submitIncomeProof(
-        employeeId,
-        proofTypeNum,
-        minThreshold, // Original threshold in dollars
-        maxThreshold || '0',
-        txids,
-        historyCommitment,
-        attestationHash,
-        verifierPubkey,
-        BigInt(timestamp),
-        expiresInSeconds
-      );
-
-      if (!submitted) {
-        throw new Error('Proof submission failed - contract returned false');
-      }
-
-      console.log('[GenerateProof] Proof submitted successfully!');
+      // NEW SCHEMA: Verifier service already submitted the proof to blockchain
+      // Employee doesn't need to submit - the verifier did it for them
+      // This prevents manipulation attacks where employee could change thresholds
+      console.log('[GenerateProof] ✅ Verifier service has already submitted proof to blockchain');
+      console.log('[GenerateProof] Employee does not sign - verifier signs with trusted key');
       clearInterval(progressInterval);
       setProgress(100);
 
       // Generate proof ID and shareable link using full attestation hash
+      // Include employeeId in URL so verifiers can look up the proof
       const hashWithout0x = attestationHash.substring(2); // Remove 0x prefix
       const proofId = `PROOF-${hashWithout0x.substring(0, 8).toUpperCase()}`;
-      const link = `${window.location.origin}/verify/${hashWithout0x}`;
+      const link = `${window.location.origin}/verify/${employeeId}/${hashWithout0x}`;
 
       // Calculate actual total for display
       const actualTotal = paymentAmounts.reduce((sum, p) => sum + p, 0);
@@ -394,9 +378,6 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
       // Query the submitted proof from contract to get full data for PDF
       const submittedProof = await api.getIncomeProof(employeeId);
-
-      // Get current employer contract address
-      const employerContract = getCurrentEmployer();
 
       setGeneratedProofId(proofId);
       setProofLink(link);
@@ -849,13 +830,13 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
             <Box textAlign="center">
               <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary} sx={{ mb: 1 }}>
-                Generating ZKML Proof...
+                Verifier Generating Proof...
               </Typography>
               <Typography variant="body2" color={theme.colors.text.secondary}>
-                Creating zero-knowledge proof of your income. This may take 15-45 seconds.
+                The trusted verifier is creating a zero-knowledge proof and submitting it to the blockchain.
               </Typography>
               <Typography variant="caption" color={theme.colors.text.secondary} sx={{ display: 'block', mt: 1 }}>
-                Please don't close this window.
+                This may take 15-45 seconds. Please don't close this window.
               </Typography>
             </Box>
 
@@ -868,7 +849,7 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
 
             <Alert severity="info" sx={{ width: '100%' }}>
               <Typography variant="caption">
-                We're using zero-knowledge machine learning (ZKML) to generate a cryptographic proof of your income without revealing your exact salary.
+                The trusted verifier uses zero-knowledge machine learning (ZKML) to generate a cryptographic proof of your income without revealing your exact salary. The verifier then submits the proof to the blockchain using their trusted key.
               </Typography>
             </Alert>
           </Stack>

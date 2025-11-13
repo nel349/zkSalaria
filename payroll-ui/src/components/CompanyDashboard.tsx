@@ -27,6 +27,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SpeedIcon from '@mui/icons-material/Speed';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { listCompanies, getCurrentCompany, setCurrentCompany, SavedCompany } from '../utils/CompaniesLocalState';
@@ -43,6 +44,8 @@ import { ProfileSettingsModal } from './ProfileSettingsModal';
 import { PrivacySettingsModal } from './PrivacySettingsModal';
 import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { CompanyDashboardDrawer } from './CompanyDashboardDrawer';
+import { RegisterVerifierModal } from './RegisterVerifierModal';
+import { FundAccountModal } from './FundAccountModal';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
 
@@ -108,6 +111,8 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
   const [privacySettingsOpen, setPrivacySettingsOpen] = useState(false);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [registerVerifierModalOpen, setRegisterVerifierModalOpen] = useState(false);
+  const [fundAccountModalOpen, setFundAccountModalOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -636,6 +641,42 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
                   View Employees
                 </Button>
               </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  startIcon={<VerifiedUserIcon />}
+                  onClick={() => setRegisterVerifierModalOpen(true)}
+                  sx={{
+                    py: 1.5,
+                    bgcolor: theme.colors.success[500],
+                    '&:hover': { bgcolor: theme.colors.success[700] },
+                  }}
+                >
+                  Register Verifier
+                </Button>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<AccountBalanceWalletIcon />}
+                  onClick={() => setFundAccountModalOpen(true)}
+                  sx={{
+                    py: 1.5,
+                    borderColor: theme.colors.primary[500],
+                    color: theme.colors.primary[500],
+                    '&:hover': {
+                      borderColor: theme.colors.primary[700],
+                      bgcolor: `${theme.colors.primary[500]}10`,
+                    },
+                  }}
+                >
+                  Deposit Funds
+                </Button>
+              </Grid>
             </Grid>
           </Paper>
 
@@ -733,6 +774,28 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
         onClose={() => setNotificationSettingsOpen(false)}
         isCompany={true}
         walletAddress={walletAddress}
+      />
+
+      {/* Register ZKML Verifier Modal */}
+      <RegisterVerifierModal
+        open={registerVerifierModalOpen}
+        onClose={() => setRegisterVerifierModalOpen(false)}
+        api={api}
+        currentCompany={currentCompany.contractAddress}
+        onSuccess={() => {
+          console.log('[CompanyDashboard] Verifier registered successfully');
+        }}
+      />
+
+      {/* Fund Account Modal */}
+      <FundAccountModal
+        open={fundAccountModalOpen}
+        onClose={() => setFundAccountModalOpen(false)}
+        api={api}
+        currentCompany={currentCompany.walletAddress}
+        onSuccess={() => {
+          console.log('[CompanyDashboard] Funds deposited, state will refresh automatically');
+        }}
       />
     </Box>
   );

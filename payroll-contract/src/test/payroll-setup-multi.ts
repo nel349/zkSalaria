@@ -8,6 +8,7 @@ import {
 } from '@midnight-ntwrk/compact-runtime';
 import { stringToBytes32, stringToBytes64, hexToBytes32, bytesToHex } from './utils.js';
 import type { RecurringPayment } from '../types.js';
+import { computeAttestationHash } from '../utils/attestation-hash.js';
 
 // Participant represents a company or employee with their own private state
 interface Participant {
@@ -36,14 +37,17 @@ export class PayrollMultiPartyTestSetup {
 
   constructor(
     companyId: string,
-    companyName: string
+    companyName: string,
+    verifierSecretKey?: Uint8Array  // Optional verifier secret for ZKML (defaults to test value)
   ) {
     this.companyId = companyId;
     this.companyName = companyName;
     this.contract = new Contract(payrollWitnesses);
 
-    // Initialize with empty private state
-    const initialPrivateState = createPayrollPrivateState();
+    // Initialize private state with verifier secret (for ZKML authentication)
+    // Default to test verifier secret if not provided
+    const secret = verifierSecretKey || stringToBytes32('test-verifier-secret-12345');
+    const initialPrivateState = createPayrollPrivateState(secret);
 
     // Convert parameters for constructor
     const companyIdBytes = stringToBytes32(companyId);
@@ -726,14 +730,13 @@ export class PayrollMultiPartyTestSetup {
 
   // Register a trusted ZKML verifier
   registerTrustedVerifier(verifierPubkey: string): Ledger {
-    console.log(`🔐 Registering trusted verifier: ${verifierPubkey.substring(0, 16)}...`);
+    console.log(`🔐 Registering trusted verifier: ${verifierPubkey}`);
 
     const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
 
     this.executeAsParticipant(
       this.companyId,
-      (ctx, vpBytes) => this.contract.impureCircuits.register_trusted_verifier(ctx, vpBytes),
-      verifierPubkeyBytes
+      (ctx) => this.contract.impureCircuits.register_trusted_verifier(ctx, verifierPubkeyBytes)
     );
 
     return this.getLedgerState();
@@ -788,9 +791,9 @@ export class PayrollMultiPartyTestSetup {
     txids: string[], // Array of 12 hex strings
     historyCommitment: string,
     attestationHash: string,
-    verifierPubkey: string,
     timestamp: bigint,
     expiresIn: number // Seconds
+    // NOTE: verifierPubkey removed - derived from witness (Issue #3: Midnight authentication)
   ): Ledger {
     console.log(`📝 Submitting income proof for employee ${employeeId} (type: ${proofType})`);
 
@@ -798,35 +801,43 @@ export class PayrollMultiPartyTestSetup {
     const proofTypeU8 = BigInt(proofType); // Convert to bigint for Uint<8>
     const txidsVector = txids.map(tx => hexToBytes32(tx));
     const historyCommitmentBytes = hexToBytes32(historyCommitment);
-    const attestationHashBytes = hexToBytes32(attestationHash);
-    const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
     const expiresInU32 = BigInt(expiresIn); // Convert to bigint for Uint<32>
 
+    // Create attestation struct (Issue #2: Threshold Binding)
+    const attestation = {
+      employee_id: employeeIdBytes,
+      proof_type: proofTypeU8,
+      threshold_min: thresholdMin,
+      threshold_max: thresholdMax,
+      history_commitment: historyCommitmentBytes,
+      timestamp: timestamp,
+    };
+
+    // Compute attestation hash (Issue #2: Prevents threshold manipulation)
+    const computedHash = computeAttestationHash(attestation);
+    const attestationHashBytes = computedHash;
+
+    // Issue #3: verifier_pubkey now derived from witness (Midnight authentication pattern)
+    // The verifier proves ownership by providing secret as witness
+    // Pass attestation fields individually (Compact doesn't support struct parameters)
     this.executeAsParticipant(
       this.companyId,
-      (ctx, empId, pType, thMin, thMax, txs, hc, attHash, vpBytes, ts, exp) =>
+      (ctx, att, attHash, txs, exp) =>
         this.contract.impureCircuits.submit_income_proof(
           ctx,
-          empId,
-          pType,
-          thMin,
-          thMax,
-          txs,
-          hc,
+          att.employee_id,
+          att.proof_type,
+          att.threshold_min,
+          att.threshold_max,
+          att.history_commitment,
+          att.timestamp,
           attHash,
-          vpBytes,
-          ts,
+          txs,
           exp
         ),
-      employeeIdBytes,
-      proofTypeU8,
-      thresholdMin,
-      thresholdMax,
-      txidsVector,
-      historyCommitmentBytes,
+      attestation,
       attestationHashBytes,
-      verifierPubkeyBytes,
-      timestamp,
+      txidsVector,
       expiresInU32
     );
 

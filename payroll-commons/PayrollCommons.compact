@@ -306,4 +306,18 @@ module PayrollCommons {
     const seconds_to_add = (days_to_add * (86400 as Uint<32>)) as Uint<32>;
     return (current_date + seconds_to_add) as Uint<32>;
   }
+
+  // ========================================
+  // ATTESTATION STRUCT (Issue #2 Fix)
+  // ========================================
+  // ZKML verifier creates and signs this attestation
+  // Contract verifies hash matches to ensure threshold is bound
+  export struct IncomeProofAttestation {
+    employee_id: Bytes<32>;
+    proof_type: Uint<8>;
+    threshold_min: Uint<64>;
+    threshold_max: Uint<64>;
+    history_commitment: Bytes<32>;
+    timestamp: Uint<32>;
+  }
 }

@@ -5,12 +5,14 @@
   "author": "Midnight Developer",
   "license": "MIT",
   "private": true,
+  "type": "module",
   "packageManager": "npm@10.0.0",
   "workspaces": [
     "payroll-contract",
     "payroll-api",
     "payroll-ui",
-    "payroll-commons"
+    "payroll-commons",
+    "zkml-verifier"
   ],
   "scripts": {
     "compact": "turbo run compact",
@@ -30,6 +32,8 @@
     "recompile": "turbo run build --filter=@zksalaria/payroll-contract",
     "update-keys": "cd payroll-contract && npm run update-api-resources",
     "copy-keys-to-ui": "cd payroll-api && npm run copy-keys-to-ui",
+    "generate-wallet": "node scripts/generate-wallet.js local",
+    "generate-wallet:testnet": "node scripts/generate-wallet.js testnet",
     "clean": "turbo run clean"
   },
   "dependencies": {
@@ -62,6 +66,7 @@
     "eslint-plugin-import": "^2.28.1",
     "eslint-plugin-prettier": "^5.0.1",
     "prettier": "^3.0.3",
+    "tsx": "^4.7.0",
     "turbo": "^1.10.16",
     "typescript": "^5.2.2",
     "vitest": "^3.2.1"

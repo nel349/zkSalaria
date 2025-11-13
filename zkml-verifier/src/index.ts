@@ -5,6 +5,7 @@
  */
 
 import 'dotenv/config';
+import './config.js'; // CRITICAL: Import config to set NetworkId before any operations
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import verifyRoutes from './routes/verify.js';
@@ -102,3 +103,16 @@ const start = async () => {
 };
 
 start();
+
+// Export types for external consumers (tests, other packages)
+export type {
+  GenerateProofRequest,
+  GenerateProofResponse,
+  VerifyProofRequest,
+  VerifyProofResponse,
+  Attestation,
+  ProofPublicInputs,
+  EZKLProof,
+  HealthResponse
+} from './types.js';
+export { ProofType, ErrorCode } from './types.js';

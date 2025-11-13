@@ -16,7 +16,9 @@ export enum ProofType {
 
 export interface ProofPublicInputs {
   employee_id: string;
+  proof_type: number;
   threshold: number;
+  threshold_max?: number;
   txids: string[];
   history_commitment: string;
 }
@@ -29,6 +31,7 @@ export interface GenerateProofRequest {
   employee_id: string;
   txids: string[];
   history_commitment: string;
+  contract_address: string;  // Contract address to submit proof to
 }
 
 export enum ErrorCode {

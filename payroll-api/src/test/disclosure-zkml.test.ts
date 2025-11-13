@@ -8,12 +8,36 @@ import { TestEnvironment, TestProviders } from './commons.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { currentDir } from './config.js';
+import { computeVerifierPubkeyFromString } from '@zksalaria/payroll-contract';
+import type { GenerateProofResponse } from '@zksalaria/zkml-verifier';
 
 /**
  * E2E tests for Disclosure Management & ZKML Income Proofs
  * Tests full integration with Midnight testnet
  * Consolidated to minimize testnet load while maintaining full coverage
+ *
+ * ZKML VERIFIER AUTHENTICATION MODEL (Midnight Witness Pattern):
+ *
+ * Phase 1 - Registration (Company):
+ *   - Company computes verifier PUBLIC KEY from secret: pubkey = persistentHash([domain, secret])
+ *   - Company calls registerTrustedVerifier(pubkey) to whitelist the verifier
+ *   - No secret is shared or stored on-chain
+ *
+ * Phase 2 - Proof Submission (Verifier/Employee):
+ *   - Verifier has secret in their privateState (witness)
+ *   - When calling submitIncomeProof(), the contract:
+ *     a) Derives pubkey from witness: derived_pubkey = verifier_public_key(verifier_secret_key())
+ *     b) Checks derived_pubkey ∈ trusted_verifiers set
+ *     c) Only accepts proof if verifier can prove ownership via witness
+ *
+ * This is a ZERO-KNOWLEDGE proof of verifier identity - the verifier proves they
+ * know the secret without revealing it, and the contract verifies against the
+ * registered public key.
  */
+
+// Verifier configuration (must match what API uses)
+const VERIFIER_SECRET = 'test-verifier-secret-12345'; // Default from createPayrollPrivateState
+
 describe('Disclosure & ZKML API - E2E Tests', () => {
   let testEnvironment: TestEnvironment;
   let providers: PayrollProviders;
@@ -143,86 +167,104 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
   });
 
   describe('ZKML Income Proofs', () => {
-    test('should register verifier, submit proof, and verify requirements', async () => {
+    test('should register verifier, generate proof via verifier service, and verify requirements', async () => {
       const companyId = `zkml-company-${Date.now()}`;
       const employeeId = `employee-${Date.now()}`;
-      const verifierPubkey = `0x${Buffer.from(utils.randomBytes(32)).toString('hex')}`;
+
+      // Compute verifier pubkey from test secret (matches what witness will derive)
+      const verifierPubkey = '0x' + computeVerifierPubkeyFromString(VERIFIER_SECRET);
 
       logger.info('Deploying contract for ZKML proof test…');
       const contractAddress = await PayrollAPI.deploy(providers, companyId, 'ZKML Test Corp', logger);
       const companyAPI = await PayrollAPI.connect(providers, contractAddress, companyId, logger);
       const employeeAPI = await PayrollAPI.connect(providers, contractAddress, employeeId, logger);
 
-      // Setup: Add employee and establish payment history
-      logger.info('Setting up employee with payment history…');
+      // Setup: Add employee and establish payment history (6 months for ZKML)
+      logger.info('Setting up employee with 6 months of payment history…');
       await companyAPI.addEmployee(companyId, employeeId);
-      await companyAPI.depositCompanyFunds(companyId, '20000.00');
-      await companyAPI.payEmployee(companyId, employeeId, '5000.00');
-      await companyAPI.payEmployee(companyId, employeeId, '5000.00');
-      await companyAPI.payEmployee(companyId, employeeId, '5000.00');
+      await companyAPI.depositCompanyFunds(companyId, '60000.00');
+      await companyAPI.payEmployee(companyId, employeeId, '10000.00'); // Month 1
+      await companyAPI.payEmployee(companyId, employeeId, '10000.00'); // Month 2
+      await companyAPI.payEmployee(companyId, employeeId, '10000.00'); // Month 3
+      await companyAPI.payEmployee(companyId, employeeId, '10000.00'); // Month 4
+      await companyAPI.payEmployee(companyId, employeeId, '10000.00'); // Month 5
+      await companyAPI.payEmployee(companyId, employeeId, '10000.00'); // Month 6
 
-      const paymentHistory = await employeeAPI.getEmployeePaymentHistory(employeeId);
-      expect(paymentHistory.length).toBeGreaterThanOrEqual(3);
+      const paymentHistory = await employeeAPI.getEmployeePaymentHistoryDecrypted(employeeId);
+      expect(paymentHistory.length).toBe(6);
 
-      // Register trusted verifier
-      logger.info('Registering trusted ZKML verifier…');
+      // Register trusted verifier (company registers verifier's PUBLIC key)
+      logger.info(`Registering trusted ZKML verifier: ${verifierPubkey}…`);
       const registered = await companyAPI.registerTrustedVerifier(verifierPubkey);
       expect(registered).toBe(true);
-      logger.info('✅ Trusted verifier registered successfully');
+      logger.info('✅ Trusted verifier registered (public key only, no secret)');
 
       // Sync contract timestamp with real time to avoid "timestamp in future" errors
       const currentTime = Math.floor(Date.now() / 1000);
       await companyAPI.updateTimestamp(currentTime);
 
-      // Submit income proof (INCOME_RANGE type = 2)
-      logger.info('Submitting ZKML income proof…');
-      const proofType = 2n; // INCOME_RANGE (must be 1-4)
-      const thresholdMin = utils.parseAmount('8000.00');
-      const thresholdMax = utils.parseAmount('12000.00');
+      // Call the zkml-verifier service to generate proof and submit to blockchain
+      logger.info('Calling zkml-verifier service to generate and submit proof…');
+      const proofType = 2; // INCOME_RANGE (must be 1-4)
+      const thresholdMin = 80000; // $80k yearly (6 months @ $10k = $60k → annualized = $120k/year, within $80k-$120k)
+      const thresholdMax = 120000; // $120k yearly (INCOME_RANGE checks if annualized 6-month total is within this range)
 
-      const txids = paymentHistory.slice(0, 3).map(p => Buffer.from(p.payment_id).toString('hex'));
-
-      // Compute history commitment: hash of employee's full payment history
-      // This matches the contract's validation: persistentHash<Vector<6, PC_PaymentRecord>>(payment_history)
+      // Normalize payments for ZKML (convert cents→dollars, then normalize by 10000)
+      const payments = paymentHistory.slice(0, 6).map(p => Number(p.decrypted_amount) / 100 / 10000);
+      const txids = paymentHistory.slice(0, 6).map(p => Buffer.from(p.payment_id).toString('hex'));
       const historyCommitment = await employeeAPI.computeHistoryCommitment(employeeId);
 
-      const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
-      const timestamp = BigInt(currentTime);
+      // Call verifier service's /api/zkml/generate-proof endpoint
+      // This will: 1) Generate ZKML proof, 2) Create attestation, 3) Submit to blockchain
+      const verifierResponse = await fetch('http://localhost:3002/api/zkml/generate-proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          proof_type: proofType,
+          payments: payments,
+          threshold_min: thresholdMin / 10000, // Normalized
+          threshold_max: thresholdMax / 10000, // Normalized
+          employee_id: employeeId,
+          txids: txids,
+          history_commitment: historyCommitment,
+          contract_address: contractAddress // Pass contract address to verifier
+        })
+      });
 
-      const submitted = await employeeAPI.submitIncomeProof(
-        employeeId,
-        proofType,
-        thresholdMin.toString(),
-        thresholdMax.toString(),
-        txids,
-        historyCommitment,
-        attestationHash,
-        verifierPubkey,
-        timestamp,
-        86400
-      );
-      expect(submitted).toBe(true);
-      logger.info('✅ ZKML income proof submitted successfully');
+      if (!verifierResponse.ok) {
+        const errorBody = await verifierResponse.json();
+        logger.error('Verifier request failed:', undefined, {
+          status: verifierResponse.status,
+          error: errorBody
+        });
+      }
+      expect(verifierResponse.ok).toBe(true);
+      const verifierResult = await verifierResponse.json() as GenerateProofResponse;
+      expect(verifierResult.success).toBe(true);
+      expect(verifierResult.attestation).toBeDefined();
+      logger.info('✅ Verifier service generated proof, created attestation, and submitted to blockchain');
 
       // Get and verify stored proof
       logger.info('Retrieving submitted income proof…');
       const incomeProof = await employeeAPI.getIncomeProof(employeeId);
       expect(incomeProof).toBeDefined();
       expect(incomeProof.employee_id).toBeDefined();
-      expect(incomeProof.proof_type).toBe(proofType);
+      expect(incomeProof.proof_type).toBe(BigInt(proofType));
       logger.info('✅ Income proof retrieved successfully');
 
       // Verify the proof meets requirements
       logger.info('Verifying income proof meets requirements…');
-      const verified = await companyAPI.verifyIncomeProof(employeeId, proofType, thresholdMin.toString());
+      const verified = await companyAPI.verifyIncomeProof(employeeId, BigInt(proofType), thresholdMin.toString());
       expect(verified).toBe(true);
       logger.info('✅ Income proof verification successful');
-    }, 7 * 60_000);
+    }, 15 * 60_000); // 15 minutes: blockchain setup + 6 payments + ZKML proof + verification
 
-    test('should handle all ZKML proof types (1-4)', async () => {
+    test('should handle all ZKML proof types (1-4) via verifier service', async () => {
       const companyId = `proof-types-${Date.now()}`;
       const employeeId = `employee-${Date.now()}`;
-      const verifierPubkey = `0x${Buffer.from(utils.randomBytes(32)).toString('hex')}`;
+
+      // Compute verifier pubkey from test secret (matches what witness will derive)
+      const verifierPubkey = '0x' + computeVerifierPubkeyFromString(VERIFIER_SECRET);
 
       logger.info('Deploying contract for multiple proof types test…');
       const contractAddress = await PayrollAPI.deploy(providers, companyId, 'Proof Types Corp', logger);
@@ -238,67 +280,73 @@ describe('Disclosure & ZKML API - E2E Tests', () => {
         await companyAPI.payEmployee(companyId, employeeId, '5000.00');
       }
 
-      const paymentHistory = await employeeAPI.getEmployeePaymentHistory(employeeId);
+      const paymentHistory = await employeeAPI.getEmployeePaymentHistoryDecrypted(employeeId);
       expect(paymentHistory.length).toBeGreaterThanOrEqual(6);
 
+      // Register trusted verifier (company provides public key only)
+      logger.info(`Registering trusted verifier: ${verifierPubkey}…`);
       await companyAPI.registerTrustedVerifier(verifierPubkey);
+      logger.info('✅ Trusted verifier registered');
 
       // Sync contract timestamp with real time to avoid "timestamp in future" errors
       const currentTime = Math.floor(Date.now() / 1000);
       await companyAPI.updateTimestamp(currentTime);
 
+      // Prepare data for verifier service
+      const payments = paymentHistory.slice(0, 6).map(p => Number(p.decrypted_amount) / 100 / 10000); // Normalized (cents→dollars→normalized)
+      const txids = paymentHistory.slice(0, 6).map(p => Buffer.from(p.payment_id).toString('hex'));
+      const historyCommitment = await employeeAPI.computeHistoryCommitment(employeeId);
+
       // Test all 4 proof types (1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT_SCORE)
       const proofTypes = [
-        { type: 1n, name: 'INCOME_ABOVE_THRESHOLD', thresholdMin: '4000.00', thresholdMax: '0' },
-        { type: 2n, name: 'INCOME_RANGE', thresholdMin: '8000.00', thresholdMax: '12000.00' },
-        { type: 3n, name: 'AVERAGE_INCOME', thresholdMin: '4500.00', thresholdMax: '0' },
-        { type: 4n, name: 'CREDIT_SCORE', thresholdMin: '600', thresholdMax: '0' },
+        { type: 1, name: 'INCOME_ABOVE_THRESHOLD', thresholdMin: 4000, thresholdMax: 0 },
+        { type: 2, name: 'INCOME_RANGE', thresholdMin: 80000, thresholdMax: 120000 }, // Yearly range $80k-$120k
+        { type: 3, name: 'AVERAGE_INCOME', thresholdMin: 4500, thresholdMax: 0 },
+        { type: 4, name: 'CREDIT_SCORE', thresholdMin: 600, thresholdMax: 0 },
       ];
 
       for (const proofTypeInfo of proofTypes) {
         logger.info(`Testing proof type: ${proofTypeInfo.name}…`);
 
-        const txids = paymentHistory.slice(0, 3).map(p => Buffer.from(p.payment_id).toString('hex'));
+        // Call verifier service to generate proof and submit to blockchain
+        const verifierResponse = await fetch('http://localhost:3002/api/zkml/generate-proof', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            proof_type: proofTypeInfo.type,
+            payments: payments,
+            threshold_min: proofTypeInfo.thresholdMin / 10000, // Normalized
+            threshold_max: proofTypeInfo.thresholdMax / 10000, // Normalized
+            employee_id: employeeId,
+            txids: txids,
+            history_commitment: historyCommitment,
+            contract_address: contractAddress // Pass contract address to verifier
+          })
+        });
 
-        // Compute history commitment: hash of employee's full payment history
-        const historyCommitment = await employeeAPI.computeHistoryCommitment(employeeId);
-
-        const attestationHash = '0x' + Buffer.from(utils.randomBytes(32)).toString('hex');
-        const timestamp = BigInt(currentTime); // Reuse contract timestamp to avoid "timestamp in future" errors
-
-        // Submit proof
-        const submitted = await employeeAPI.submitIncomeProof(
-          employeeId,
-          proofTypeInfo.type,
-          proofTypeInfo.thresholdMin,
-          proofTypeInfo.thresholdMax,
-          txids,
-          historyCommitment,
-          attestationHash,
-          verifierPubkey,
-          timestamp,
-          86400
-        );
-        expect(submitted).toBe(true);
+        expect(verifierResponse.ok).toBe(true);
+        const verifierResult = await verifierResponse.json() as GenerateProofResponse;
+        expect(verifierResult.success).toBe(true);
+        expect(verifierResult.attestation).toBeDefined();
 
         // Verify proof was stored correctly
         const storedProof = await employeeAPI.getIncomeProof(employeeId);
         expect(storedProof).toBeDefined();
-        expect(storedProof.proof_type).toBe(proofTypeInfo.type);
+        expect(storedProof.proof_type).toBe(BigInt(proofTypeInfo.type));
         expect(storedProof.employee_id).toBeDefined();
 
         // Verify proof meets requirements
         const verified = await companyAPI.verifyIncomeProof(
           employeeId,
-          proofTypeInfo.type,
-          proofTypeInfo.thresholdMin
+          BigInt(proofTypeInfo.type),
+          proofTypeInfo.thresholdMin.toString()
         );
         expect(verified).toBe(true);
 
-        logger.info(`✅ ${proofTypeInfo.name} proof submitted, stored, and verified successfully`);
+        logger.info(`✅ ${proofTypeInfo.name} proof generated via verifier, submitted to blockchain, and verified successfully`);
       }
 
-      logger.info('✅ All proof types tested successfully');
+      logger.info('✅ All proof types tested successfully via verifier service');
     }, 10 * 100_000);
   });
 });

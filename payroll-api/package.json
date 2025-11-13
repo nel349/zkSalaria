@@ -35,6 +35,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.10",
+    "@zksalaria/zkml-verifier": "file:../zkml-verifier",
     "testcontainers": "^10.9.0",
     "typescript": "^5.2.2",
     "vitest": "^1.0.0",

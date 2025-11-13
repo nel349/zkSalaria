@@ -82,9 +82,11 @@ export interface RecurringPayment {
 
 // Private state structure for payroll system
 // NOTE: Balances are now encrypted on public ledger (bank contract pattern)
-// Only payment history remains in private state (for ZKML training)
+// Payment history remains in private state (for ZKML training)
+// Verifier secret key for ZKML attestation signing (Midnight pattern)
 export interface PayrollPrivateState {
   readonly employeePaymentHistory: Map<string, PaymentRecord[]>;
+  readonly verifierSecretKey: Uint8Array;  // For ZKML verifier authentication
 }
 
 // Company data
