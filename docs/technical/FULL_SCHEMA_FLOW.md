@@ -45,28 +45,35 @@
          │                                │ 4. Create Attestation         │
          │                                │    (CRITICAL STEP)            │
          │                                │                               │
+         │                                │    // IMPORTANT: Denormalize  │
+         │                                │    // thresholds BEFORE hash  │
+         │                                │    denormalizedMin = 80000    │
+         │                                │    denormalizedMax = 120000   │
+         │                                │                               │
          │                                │    attestation = {            │
          │                                │      employee_id,             │
          │                                │      proof_type: 2,           │
-         │                                │      threshold_min: 8.0, ◄────┼── Threshold BOUND
-         │                                │      threshold_max: 12.0,     │   inside attestation
+         │                                │      threshold_min: 80000,◄───┼── Threshold BOUND
+         │                                │      threshold_max: 120000,   │   (denormalized)
          │                                │      txids: [...],            │
          │                                │      history_commitment,      │
-         │                                │      timestamp,               │
-         │                                │      proof_json               │
+         │                                │      timestamp                │
          │                                │    }                          │
          │                                │                               │
          │                                │    attestation_hash =         │
-         │                                │      hash(attestation)        │
+         │                                │      persistentHash(attestation)│
          │                                │                               │
          │                                │ 5. Submit to Blockchain       │
          │                                │    (Verifier does this!)      │
          │                                │                               │
+         │                                │    // Update timestamp first! │
+         │                                │    await update_timestamp()   │
+         │                                │                               │
          │                                │    api.submitIncomeProof(     │
          │                                │      employeeId,              │
          │                                │      proofType: 2n,           │
-         │                                │      thresholdMin: "8.0",     │
-         │                                │      thresholdMax: "12.0",    │
+         │                                │      thresholdMin: "80000",   │
+         │                                │      thresholdMax: "120000",  │
          │                                │      txids,                   │
          │                                │      historyCommitment,       │
          │                                │      attestation_hash,        │
@@ -76,11 +83,19 @@
          │                                │───────────────────────────────>│
          │                                │                               │
          │                                │                               │ 6. Contract Validation
+         │                                │                               │    (8 checks in order)
          │                                │                               │
-         │                                │                               │ ✓ Verify verifier trusted
-         │                                │                               │ ✓ Verify witness derives
-         │                                │                               │   verifierPubkey
-         │                                │                               │ ✓ Verify attestation_hash
+         │                                │                               │ ✓ 1. Attestation hash
+         │                                │                               │      (reconstructs & verifies)
+         │                                │                               │ ✓ 2. Proof type (1-4)
+         │                                │                               │ ✓ 3. Verifier trusted
+         │                                │                               │      (via witness pattern)
+         │                                │                               │ ✓ 4. No replay attack
+         │                                │                               │ ✓ 5. Timestamp fresh
+         │                                │                               │      (within 1 hour)
+         │                                │                               │ ✓ 6. Range validation
+         │                                │                               │ ✓ 7. Employee exists
+         │                                │                               │ ✓ 8. History commitment
          │                                │                               │
          │                                │                               │ 7. Store proof on ledger
          │                                │                               │
@@ -182,15 +197,33 @@
   ---
   Step 5: Verifier Service Submits to Blockchain (SECURE BY DESIGN)
 
-  ✅ SECURE FLOW:
-  // Verifier service (NOT employee) submits to blockchain
-  // This eliminates manipulation vector entirely!
+  ✅ SECURE FLOW (zkml-verifier/src/routes/verify.ts):
 
+  // 1. Denormalize thresholds (ZKML uses normalized, contract uses denormalized)
+  const NORMALIZATION_FACTOR = 10000;
+  const denormalizedMin = Math.floor(threshold_min * NORMALIZATION_FACTOR);  // 3 → 30000
+  const denormalizedMax = Math.floor(threshold_max * NORMALIZATION_FACTOR);  // 12 → 120000
+
+  // 2. Create attestation WITH DENORMALIZED thresholds
+  //    (This ensures attestation hash matches circuit reconstruction)
+  const attestation = await signer.createAttestation({
+    employee_id,
+    proof_type,
+    threshold: denormalizedMin,      // 30000 (NOT 3!)
+    threshold_max: denormalizedMax,  // 120000 (NOT 12!)
+    txids,
+    history_commitment
+  });
+
+  // 3. Update contract timestamp (CRITICAL for timestamp validation)
+  await api.circuits.update_timestamp(BigInt(currentTimestamp));
+
+  // 4. Submit to blockchain (verifier service does this, NOT employee)
   const success = await api.submitIncomeProof(
     employeeId,
-    BigInt(proofType),              // 2
-    thresholdMin.toString(),        // "8.0" ← From attestation
-    thresholdMax.toString(),        // "12.0" ← From attestation
+    BigInt(proofType),
+    denormalizedMin.toString(),     // "30000" ← Matches attestation
+    denormalizedMax.toString(),     // "120000" ← Matches attestation
     txids,
     historyCommitment,
     attestation.attestation_hash,
@@ -200,73 +233,125 @@
 
   Security Guarantees:
   1. Employee cannot manipulate submission - verifier does it
-  2. Verifier wallet (VERIFIER_SEED) signs the transaction
-  3. Witness derives verifierPubkey from transaction context
-  4. Contract validates verifier is trusted before accepting
-  5. Thresholds in submission match ZKML proof parameters
+  2. Verifier proves ownership via witness (Midnight pattern)
+  3. Contract validates verifier is trusted via witness-derived pubkey
+  4. Attestation hash binds thresholds cryptographically
+  5. Timestamp validation ensures proof freshness
+  6. History commitment prevents fake payment data
 
   ❌ ATTACK PREVENTED:
   // Employee cannot intercept and modify thresholds
   // because they never submit to blockchain directly!
 
   ---
-  Step 8: Contract Extracts Threshold
+  Step 6: Circuit Validation (ACTUAL IMPLEMENTATION)
 
-  // Smart Contract (payroll.compact)
+  // Smart Contract (payroll.compact:1090-1201)
   export circuit submit_income_proof(
     employee_id: Bytes<32>,
-    attestation_data: Bytes<256>,   // ← Packed attestation
+    proof_type: Uint<8>,
+    threshold_min: Uint<64>,
+    threshold_max: Uint<64>,
+    history_commitment: Bytes<32>,
+    timestamp: Uint<32>,
     attestation_hash: Bytes<32>,
-    signature: Bytes<64>,
-    verifier_pubkey: Bytes<32>
+    txids: Vector<12, Bytes<32>>,
+    expires_in: Uint<32>
   ): Boolean {
 
-    // 1. Verify verifier is trusted
+    // Derive verifier's public key from witness (Midnight pattern)
+    const verifier_pubkey = verifier_public_key(verifier_secret_key());
+
+    // Step 1: Reconstruct attestation and verify hash
+    const attestation = PC_IncomeProofAttestation {
+      employee_id: disclose(employee_id),
+      proof_type: disclose(proof_type),
+      threshold_min: disclose(threshold_min),
+      threshold_max: disclose(threshold_max),
+      history_commitment: disclose(history_commitment),
+      timestamp: disclose(timestamp)
+    };
+    const computed_hash = persistentHash<PC_IncomeProofAttestation>(attestation);
+    if (disclose(attestation_hash) != computed_hash) {
+      return false;  // Attestation tampered!
+    }
+
+    // Step 2: Validate proof type (1-4)
+    if (proof_type_disclosed < 1 || proof_type_disclosed > 4) {
+      return false;
+    }
+
+    // Step 3: Verify verifier is trusted (via witness-derived pubkey)
     if (!trusted_verifiers.member(disclose(verifier_pubkey))) {
       return false;
     }
 
-    // 2. Verify signature (attestation_hash signed by verifier)
-    if (!verify_signature(attestation_hash, signature, verifier_pubkey)) {
-      return false;  // Invalid or tampered attestation
+    // Step 4: Prevent replay attacks
+    if (used_attestations.member(disclose(attestation_hash))) {
+      return false;
+    }
+    used_attestations.insert(disclose(attestation_hash), 1);
+
+    // Step 5: Verify timestamp freshness (within 1 hour)
+    const current_time = current_timestamp;
+    if (timestamp_disclosed <= (current_time - 3600) ||
+        timestamp_disclosed > current_time) {
+      return false;
     }
 
-    // 3. Verify hash matches data
-    if (persistentHash(attestation_data) != attestation_hash) {
-      return false;  // Data was modified
+    // Step 6: Range validation (for type 2)
+    if (proof_type == 2 && threshold_max <= threshold_min) {
+      return false;
     }
 
-    // 4. Extract threshold FROM attestation (employee cannot manipulate)
-    const threshold_min = extract_threshold_min(attestation_data);
-    const threshold_max = extract_threshold_max(attestation_data);
+    // Step 7: Verify employee has payment history
+    if (!employee_payment_history.member(employee_id_disclosed)) {
+      return false;
+    }
 
-    // 5. Store proof with VERIFIED threshold
-    income_proofs.insert(employee_id, IncomeProof {
-      threshold_min: threshold_min,  // ← From signed attestation, not param!
-      threshold_max: threshold_max,
+    // Step 8: Verify history commitment matches on-chain data
+    const payment_history = employee_payment_history.lookup(employee_id_disclosed);
+    const computed_commitment = persistentHash<Vector<6, PC_PaymentRecord>>(payment_history);
+    if (history_commitment_disclosed != computed_commitment) {
+      return false;  // History commitment mismatch - possible fraud!
+    }
+
+    // All checks passed - store proof with VERIFIED thresholds
+    income_proofs.insert(employee_id_disclosed, PC_IncomeProof {
+      threshold_min: threshold_min_disclosed,  // ← From attestation hash verification
+      threshold_max: threshold_max_disclosed,
       ...
     });
 
     return true;
   }
 
-  Security Guarantee: Contract trusts threshold because it's extracted from verified attestation
+  Security Guarantee: 8-step validation ensures cryptographic integrity at every level
 
   ---
   📦 Data Structures
 
-  Attestation Data Format (Bytes<256>)
+  PC_IncomeProofAttestation (Compact struct for hashing)
 
-  Offset  | Size    | Field
-  --------|---------|------------------
-  0-31    | 32      | employee_id
-  32      | 1       | proof_type (1=ABOVE_THRESHOLD, 2=RANGE, 3=AVERAGE, 4=CREDIT)
-  33-40   | 8       | threshold_min (Uint<64>)
-  41-48   | 8       | threshold_max (Uint<64>)
-  49-80   | 32      | history_commitment
-  81-464  | 384     | txids (12 × 32 bytes)
-  465-468 | 4       | timestamp (Uint<32>)
-  469-255 | -       | (reserved/padding)
+  struct PC_IncomeProofAttestation {
+    employee_id: Bytes<32>,           // SHA-256 hash of wallet address
+    proof_type: Uint<8>,              // 1=ABOVE, 2=RANGE, 3=AVERAGE, 4=CREDIT
+    threshold_min: Uint<64>,          // Denormalized (e.g., 30000 for $30k)
+    threshold_max: Uint<64>,          // Denormalized (0 for types 1,3,4)
+    history_commitment: Bytes<32>,    // Hash of payment history
+    timestamp: Uint<32>               // Unix timestamp (seconds)
+  }
+
+  // Attestation hash computed via:
+  attestation_hash = persistentHash<PC_IncomeProofAttestation>(attestation)
+
+  Binary Serialization (for hashing):
+  - employee_id: 32 bytes
+  - proof_type: 1 byte
+  - threshold_min: 8 bytes (little-endian)
+  - threshold_max: 8 bytes (little-endian)
+  - history_commitment: 32 bytes
+  - timestamp: 4 bytes (little-endian)
 
   IncomeProof Record (On-Chain)
 

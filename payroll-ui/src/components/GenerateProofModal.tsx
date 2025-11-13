@@ -354,9 +354,10 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       setProgress(100);
 
       // Generate proof ID and shareable link using full attestation hash
+      // Include employeeId in URL so verifiers can look up the proof
       const hashWithout0x = attestationHash.substring(2); // Remove 0x prefix
       const proofId = `PROOF-${hashWithout0x.substring(0, 8).toUpperCase()}`;
-      const link = `${window.location.origin}/verify/${hashWithout0x}`;
+      const link = `${window.location.origin}/verify/${employeeId}/${hashWithout0x}`;
 
       // Calculate actual total for display
       const actualTotal = paymentAmounts.reduce((sum, p) => sum + p, 0);

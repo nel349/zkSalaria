@@ -43,10 +43,10 @@ interface IncomeProof {
 /**
  * Public Proof Verification Page
  * Allows anyone with a link to verify an income proof on-chain
- * URL: /verify/:attestationHash
+ * URL: /verify/:employeeId/:attestationHash
  */
 export const VerifyProofPage: React.FC = () => {
-  const { attestationHash } = useParams<{ attestationHash: string }>();
+  const { employeeId, attestationHash } = useParams<{ employeeId: string; attestationHash: string }>();
   const navigate = useNavigate();
   const { mode } = useTheme();
   const theme = useThemeValues();
@@ -60,8 +60,8 @@ export const VerifyProofPage: React.FC = () => {
 
   useEffect(() => {
     const loadProof = async () => {
-      if (!attestationHash) {
-        setError('Invalid verification link: Missing attestation hash');
+      if (!attestationHash || !employeeId) {
+        setError('Invalid verification link: Missing employee ID or attestation hash');
         setLoading(false);
         return;
       }
@@ -92,15 +92,11 @@ export const VerifyProofPage: React.FC = () => {
           logger
         );
 
-        // TODO: This is a temporary implementation
-        // In a full implementation, we would:
-        // 1. Add a contract method to query proofs by attestation_hash
-        // 2. Or include the employee address in the verification URL
-        // For now, we'll try to get the proof using the wallet address
-        // This means verifiers need to connect with the employee's wallet (not ideal)
-
-        console.log('[VerifyProof] Querying proof with hash:', attestationHash);
-        const fetchedProof = await api.getIncomeProof(walletAddress);
+        // Query proof using employee ID from URL (not connected wallet)
+        // This allows landlords/lenders to verify without needing employee's wallet
+        console.log('[VerifyProof] Querying proof for employee:', employeeId);
+        console.log('[VerifyProof] Expected attestation hash:', attestationHash);
+        const fetchedProof = await api.getIncomeProof(employeeId);
 
         if (!fetchedProof) {
           setError('Proof not found. This proof may not exist or has been revoked.');
@@ -129,7 +125,7 @@ export const VerifyProofPage: React.FC = () => {
     };
 
     loadProof();
-  }, [attestationHash, walletAddress, providers]);
+  }, [employeeId, attestationHash, walletAddress, providers]);
 
   const handleConnectWallet = async () => {
     try {

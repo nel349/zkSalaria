@@ -179,10 +179,11 @@ export const MyIncomeProofsModal: React.FC<MyIncomeProofsModalProps> = ({
             setContractAddress(employerContract);
 
             // Generate shareable link
+            // Include employeeId in URL so verifiers can look up the proof
             const hashHex = (Array.from(proof.attestation_hash) as number[])
               .map((b) => b.toString(16).padStart(2, '0'))
               .join('');
-            const link = `${window.location.origin}/verify/${hashHex}`;
+            const link = `${window.location.origin}/verify/${walletAddress}/${hashHex}`;
 
             // Add on-chain proof as a ProofAttempt
             allAttempts.push({

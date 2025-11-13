@@ -83,9 +83,11 @@ export const ProofVerificationCard: React.FC<ProofVerificationCardProps> = ({
   };
 
   const formatAmount = (amount: bigint): string => {
-    return `$${(Number(amount) / 100).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+    // Income proof thresholds are stored as whole dollars (NOT cents)
+    // e.g., 12500n = $12,500 (not $125.00)
+    return `$${Number(amount).toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })}`;
   };
 

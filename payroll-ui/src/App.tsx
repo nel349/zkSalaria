@@ -82,7 +82,7 @@ export const App: React.FC = () => {
           <Route path="/dashboard" element={<DashboardPage />} />
 
           {/* Public Proof Verification */}
-          <Route path="/verify/:attestationHash" element={<VerifyProofPage />} />
+          <Route path="/verify/:employeeId/:attestationHash" element={<VerifyProofPage />} />
 
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
