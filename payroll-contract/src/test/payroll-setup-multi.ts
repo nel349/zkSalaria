@@ -819,12 +819,18 @@ export class PayrollMultiPartyTestSetup {
 
     // Issue #3: verifier_pubkey now derived from witness (Midnight authentication pattern)
     // The verifier proves ownership by providing secret as witness
+    // Pass attestation fields individually (Compact doesn't support struct parameters)
     this.executeAsParticipant(
       this.companyId,
       (ctx, att, attHash, txs, exp) =>
         this.contract.impureCircuits.submit_income_proof(
           ctx,
-          att,
+          att.employee_id,
+          att.proof_type,
+          att.threshold_min,
+          att.threshold_max,
+          att.history_commitment,
+          att.timestamp,
           attHash,
           txs,
           exp

@@ -221,9 +221,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
       // Try to load verifier secret from environment
       const verifierSecret = loadVerifierSecretFromEnv();
       // If we get here, VERIFIER_SECRET_KEY exists - this is a verifier participant
+      console.log('[PayrollAPI.getPrivateState] Loaded verifier secret from env:', {
+        secretLength: verifierSecret.length,
+        secretHex: Buffer.from(verifierSecret).toString('hex').substring(0, 16) + '...'
+      });
       return createPayrollPrivateState(verifierSecret);
     } catch (error) {
       // No VERIFIER_SECRET_KEY - this is a regular participant, use default
+      console.log('[PayrollAPI.getPrivateState] No VERIFIER_SECRET_KEY found, using default');
       return createPayrollPrivateState();
     }
   }
@@ -1074,6 +1079,13 @@ export class PayrollAPI implements DeployedPayrollAPI {
       },
     });
 
+    // CRITICAL: Update contract timestamp to current time BEFORE submitting proof
+    // The circuit validates that the attestation timestamp is within 1 hour of current_timestamp
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    this.logger?.info({ action: 'update_timestamp_before_submit', timestamp: currentTimestamp });
+    await this.circuits.update_timestamp(BigInt(currentTimestamp));
+    this.logger?.info({ action: 'timestamp_updated', timestamp: currentTimestamp });
+
     const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
     const historyCommitmentBytes = utils.hexToBytes32(historyCommitment);
     const attestationHashBytes = utils.hexToBytes32(attestationHash);
@@ -1086,19 +1098,55 @@ export class PayrollAPI implements DeployedPayrollAPI {
       txidVector.push(new Uint8Array(32));
     }
 
+    // IMPORTANT: ZKML thresholds are normalized integers (8 = $80k/year normalized by 10k)
+    // Do NOT use parseAmount() which multiplies by 1e6 - just parse the integer
+    const thresholdMinInt = BigInt(Math.floor(parseFloat(thresholdMin)));
+    const thresholdMaxInt = BigInt(Math.floor(parseFloat(thresholdMax)));
+
+    // DEBUG: Log all bytes being sent to circuit
+    const currentTime = Math.floor(Date.now() / 1000);
+    this.logger?.info({
+      CIRCUIT_DEBUG_PARAMS: {
+        employee_id_bytes: Buffer.from(employeeIdBytes).toString('hex'),
+        proof_type: proofType.toString(),
+        threshold_min: thresholdMinInt.toString(),
+        threshold_max: thresholdMaxInt.toString(),
+        history_commitment_bytes: Buffer.from(historyCommitmentBytes).toString('hex'),
+        timestamp: timestamp.toString(),
+        attestation_hash_bytes: Buffer.from(attestationHashBytes).toString('hex'),
+        txids_count: txidVector.length,
+        expires_in: expiresIn.toString(),
+        // Timestamp validation debug
+        current_wall_clock_time: currentTime,
+        timestamp_diff_from_wall_clock: Number(timestamp) - currentTime,
+        one_hour_seconds: 3600
+      }
+    });
+
+    // Pass all parameters individually (no struct)
+    // Circuit: submit_income_proof(employee_id, proof_type, threshold_min, threshold_max, history_commitment, timestamp, attestation_hash, txids, expires_in)
     const result = await this.circuits.submit_income_proof(
-      employeeIdBytes,
-      proofType,
-      utils.parseAmount(thresholdMin),
-      utils.parseAmount(thresholdMax),
-      txidVector,
-      historyCommitmentBytes,
-      attestationHashBytes,
-      timestamp,
-      BigInt(expiresIn)
+      employeeIdBytes,           // 1. employee_id
+      proofType,                  // 2. proof_type
+      thresholdMinInt,            // 3. threshold_min
+      thresholdMaxInt,            // 4. threshold_max
+      historyCommitmentBytes,     // 5. history_commitment
+      timestamp,                  // 6. timestamp
+      attestationHashBytes,       // 7. attestation_hash
+      txidVector,                 // 8. txids
+      BigInt(expiresIn)           // 9. expires_in
     );
     // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata
-    return result.private.result;
+    const circuitResult = result.private.result;
+    this.logger?.info({
+      CIRCUIT_RESULT: {
+        success: circuitResult,
+        resultType: typeof circuitResult,
+        hasPrivate: !!result.private,
+        hasPublic: !!result.public
+      }
+    });
+    return circuitResult;
   }
 
   async verifyIncomeProof(
@@ -1110,10 +1158,14 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     const employeeIdBytes = await utils.walletAddressToEmployeeId(employeeId);
 
+    // IMPORTANT: ZKML thresholds are normalized integers (8 = $80k/year normalized by 10k)
+    // Do NOT use parseAmount() which multiplies by 1e6 - just parse the integer
+    const thresholdInt = BigInt(Math.floor(parseFloat(requiredThreshold)));
+
     const result = await this.circuits.verify_income_proof(
       employeeIdBytes,
       requiredProofType,
-      utils.parseAmount(requiredThreshold)
+      thresholdInt
     );
 
     // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata

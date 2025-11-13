@@ -67,10 +67,10 @@ export interface PayrollCircuitCalls {
     proofType: bigint,
     thresholdMin: bigint,
     thresholdMax: bigint,
-    txids: Uint8Array[],
     historyCommitment: Uint8Array,
-    attestationHash: Uint8Array,
     timestamp: bigint,
+    attestationHash: Uint8Array,
+    txids: Uint8Array[],
     expiresIn: bigint
   ): Promise<CircuitResults<PayrollPrivateState, boolean>>;
   verify_income_proof(employeeId: Uint8Array, requiredProofType: bigint, requiredThreshold: bigint): Promise<CircuitResults<PayrollPrivateState, boolean>>;

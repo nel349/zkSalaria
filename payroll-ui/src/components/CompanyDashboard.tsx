@@ -45,6 +45,7 @@ import { PrivacySettingsModal } from './PrivacySettingsModal';
 import { NotificationSettingsModal } from './NotificationSettingsModal';
 import { CompanyDashboardDrawer } from './CompanyDashboardDrawer';
 import { RegisterVerifierModal } from './RegisterVerifierModal';
+import { FundAccountModal } from './FundAccountModal';
 import { type PaymentMetadata, type EmployeeMetadata } from '../types/payment';
 import pino from 'pino';
 
@@ -111,6 +112,7 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [registerVerifierModalOpen, setRegisterVerifierModalOpen] = useState(false);
+  const [fundAccountModalOpen, setFundAccountModalOpen] = useState(false);
 
   // Connect to contract and load stats
   useEffect(() => {
@@ -655,6 +657,26 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
                   Register Verifier
                 </Button>
               </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<AccountBalanceWalletIcon />}
+                  onClick={() => setFundAccountModalOpen(true)}
+                  sx={{
+                    py: 1.5,
+                    borderColor: theme.colors.primary[500],
+                    color: theme.colors.primary[500],
+                    '&:hover': {
+                      borderColor: theme.colors.primary[700],
+                      bgcolor: `${theme.colors.primary[500]}10`,
+                    },
+                  }}
+                >
+                  Deposit Funds
+                </Button>
+              </Grid>
             </Grid>
           </Paper>
 
@@ -762,6 +784,17 @@ export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({
         currentCompany={currentCompany.contractAddress}
         onSuccess={() => {
           console.log('[CompanyDashboard] Verifier registered successfully');
+        }}
+      />
+
+      {/* Fund Account Modal */}
+      <FundAccountModal
+        open={fundAccountModalOpen}
+        onClose={() => setFundAccountModalOpen(false)}
+        api={api}
+        currentCompany={currentCompany.walletAddress}
+        onSuccess={() => {
+          console.log('[CompanyDashboard] Funds deposited, state will refresh automatically');
         }}
       />
     </Box>

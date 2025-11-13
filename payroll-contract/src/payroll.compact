@@ -1088,29 +1088,48 @@ export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
 //
 // Flow: Employee → Verifier Service → This Circuit (verifier provides secret as witness)
 export circuit submit_income_proof(
-  attestation: PC_IncomeProofAttestation,  // ← Attestation struct (threshold bound inside)
+  // Attestation fields passed individually
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  history_commitment: Bytes<32>,
+  timestamp: Uint<32>,
+  // Other parameters
   attestation_hash: Bytes<32>,             // ← Hash of attestation (prevents tampering)
   txids: Vector<12, Bytes<32>>,            // ← Transaction IDs (for reference)
   expires_in: Uint<32>                     // ← Seconds until expiry (e.g., 2592000 for 30 days)
 ): Boolean {
   // Derive verifier's public key from secret (retrieved via witness from private state)
   const verifier_pubkey = verifier_public_key(verifier_secret_key());
-  // Step 1: Verify attestation_hash matches attestation struct (prevents tampering)
-  const computed_hash = persistentHash<PC_IncomeProofAttestation>(disclose(attestation));
+
+  // Step 1: Reconstruct attestation struct from individual params and verify hash
+  // Disclose all fields since they're used in hash comparison
+  const attestation = PC_IncomeProofAttestation {
+    employee_id: disclose(employee_id),
+    proof_type: disclose(proof_type),
+    threshold_min: disclose(threshold_min),
+    threshold_max: disclose(threshold_max),
+    history_commitment: disclose(history_commitment),
+    timestamp: disclose(timestamp)
+  };
+  const computed_hash = persistentHash<PC_IncomeProofAttestation>(attestation);
   if (disclose(attestation_hash) != computed_hash) {
     return false; // Attestation has been tampered with!
   }
 
-  // Step 2: Extract fields FROM attestation struct (employee cannot manipulate these!)
-  const employee_id = disclose(attestation).employee_id;
-  const proof_type = disclose(attestation).proof_type;
-  const threshold_min = disclose(attestation).threshold_min;
-  const threshold_max = disclose(attestation).threshold_max;
-  const history_commitment = disclose(attestation).history_commitment;
-  const timestamp = disclose(attestation).timestamp;
+  // Extract disclosed values for use in subsequent checks
+  const employee_id_disclosed = disclose(employee_id);
+  const proof_type_disclosed = disclose(proof_type);
+  const threshold_min_disclosed = disclose(threshold_min);
+  const threshold_max_disclosed = disclose(threshold_max);
+  const history_commitment_disclosed = disclose(history_commitment);
+  const timestamp_disclosed = disclose(timestamp);
+
+  // Step 2: Use the individual params directly (already extracted)
 
   // Step 3: Verify proof type is valid (1-4)
-  if (proof_type < (1 as Uint<8>) || proof_type > (4 as Uint<8>)) {
+  if (proof_type_disclosed < (1 as Uint<8>) || proof_type_disclosed > (4 as Uint<8>)) {
     return false; // Invalid proof type
   }
 
@@ -1128,17 +1147,17 @@ export circuit submit_income_proof(
   // Step 6: Verify timestamp is fresh (within 1 hour)
   const current_time = current_timestamp;
   const one_hour_ago = (current_time - (3600 as Uint<32>));
-  if (timestamp <= one_hour_ago) {
+  if (timestamp_disclosed <= one_hour_ago) {
     return false; // Proof timestamp too old
   }
-  if (timestamp > current_time) {
+  if (timestamp_disclosed > current_time) {
     return false; // Proof timestamp is in the future
   }
 
   // Step 7: Validate threshold values based on proof type
   // For INCOME_RANGE (type 2), threshold_max must be > threshold_min
-  if (proof_type == (2 as Uint<8>)) {
-    if (threshold_max <= threshold_min) {
+  if (proof_type_disclosed == (2 as Uint<8>)) {
+    if (threshold_max_disclosed <= threshold_min_disclosed) {
       return false; // Invalid range
     }
   }
@@ -1147,14 +1166,14 @@ export circuit submit_income_proof(
   // This critical step ensures the ZKML proof was generated using actual on-chain payment data
   // and prevents attacks where someone generates proofs using fake high salaries
   // NOTE: history_commitment is a hash of the payment history vector, not a true Merkle tree
-  if (!employee_payment_history.member(employee_id)) {
+  if (!employee_payment_history.member(employee_id_disclosed)) {
     return false; // Employee has no payment history
   }
 
-  const payment_history = employee_payment_history.lookup(employee_id);
+  const payment_history = employee_payment_history.lookup(employee_id_disclosed);
   const computed_commitment = persistentHash<Vector<6, PC_PaymentRecord>>(payment_history);
 
-  if (history_commitment != computed_commitment) {
+  if (history_commitment_disclosed != computed_commitment) {
     return false; // History commitment doesn't match on-chain payment history - possible fraud!
   }
 
@@ -1163,19 +1182,19 @@ export circuit submit_income_proof(
 
   // Step 10: Store income proof in ledger (with VERIFIED threshold from attestation!)
   const income_proof = PC_IncomeProof {
-    employee_id: employee_id,
-    proof_type: proof_type,
-    threshold_min: threshold_min,      // ← From attestation, NOT from employee parameter!
-    threshold_max: threshold_max,      // ← From attestation, NOT from employee parameter!
+    employee_id: employee_id_disclosed,
+    proof_type: proof_type_disclosed,
+    threshold_min: threshold_min_disclosed,      // ← From attestation, NOT from employee parameter!
+    threshold_max: threshold_max_disclosed,      // ← From attestation, NOT from employee parameter!
     txids: disclose(txids),
-    history_commitment: history_commitment,
+    history_commitment: history_commitment_disclosed,
     attestation_hash: disclose(attestation_hash),
     verifier_pubkey: disclose(verifier_pubkey),
     submitted_at: current_timestamp,
     expires_at: expiration_time
   };
 
-  income_proofs.insert(employee_id, income_proof);
+  income_proofs.insert(employee_id_disclosed, income_proof);
 
   // Success: Income proof stored with cryptographically bound threshold!
   return true;

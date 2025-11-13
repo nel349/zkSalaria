@@ -23,80 +23,92 @@
       Employee                    ZKML Verifier Service              Smart Contract
          │                                │                               │
          │ 2. Request income proof        │                               │
+         │    POST /api/zkml/generate-proof                               │
          │    - employeeId                │                               │
-         │    - proofType                 │                               │
-         │    - thresholdMin: $40,000 ◄───┼───────────────────────────────┼── Employee sets
-         │    - thresholdMax: 0           │                               │   desired threshold
-         │    - payments: [...]           │                               │
+         │    - proofType: 2              │                               │
+         │    - thresholdMin: 8.0 (norm)  │◄──────────────────────────────┼── Employee sets
+         │    - thresholdMax: 12.0 (norm) │                               │   desired threshold
+         │    - payments: [1,1,1,1,1,1]   │                               │   (6 months normalized)
+         │    - txids: [...]              │                               │
+         │    - historyCommitment         │                               │
+         │    - contract_address          │                               │
          │───────────────────────────────>│                               │
          │                                │                               │
-         │                                │ 3. Generate ZK Proof          │
+         │                                │ 3. Generate ZKML Proof        │
          │                                │    (using EZKL)               │
-         │                                │    - Proves: income ≥ $40k    │
+         │                                │    - Proves: annualized       │
+         │                                │      6mo income (120k/yr)     │
+         │                                │      is within [80k, 120k]    │
          │                                │    - Without revealing amount │
+         │                                │    - Returns: proof.json      │
          │                                │                               │
          │                                │ 4. Create Attestation         │
          │                                │    (CRITICAL STEP)            │
          │                                │                               │
-         │                                │    attestation_data = pack({  │
-         │                                │      employeeId,              │
-         │                                │      proofType: 1,            │
-         │                                │      thresholdMin: $40k, ◄────┼── Threshold BOUND
-         │                                │      thresholdMax: 0,         │   inside attestation
-         │                                │      historyCommitment,       │
+         │                                │    attestation = {            │
+         │                                │      employee_id,             │
+         │                                │      proof_type: 2,           │
+         │                                │      threshold_min: 8.0, ◄────┼── Threshold BOUND
+         │                                │      threshold_max: 12.0,     │   inside attestation
          │                                │      txids: [...],            │
-         │                                │      timestamp                │
-         │                                │    })                         │
+         │                                │      history_commitment,      │
+         │                                │      timestamp,               │
+         │                                │      proof_json               │
+         │                                │    }                          │
          │                                │                               │
          │                                │    attestation_hash =         │
-         │                                │      hash(attestation_data)   │
+         │                                │      hash(attestation)        │
          │                                │                               │
-         │                                │    signature =                │
-         │                                │      sign(attestation_hash)   │
+         │                                │ 5. Submit to Blockchain       │
+         │                                │    (Verifier does this!)      │
          │                                │                               │
-         │ 5. Return signed attestation   │                               │
+         │                                │    api.submitIncomeProof(     │
+         │                                │      employeeId,              │
+         │                                │      proofType: 2n,           │
+         │                                │      thresholdMin: "8.0",     │
+         │                                │      thresholdMax: "12.0",    │
+         │                                │      txids,                   │
+         │                                │      historyCommitment,       │
+         │                                │      attestation_hash,        │
+         │                                │      timestamp,               │
+         │                                │      expiresIn: 30 days       │
+         │                                │    )                          │
+         │                                │───────────────────────────────>│
+         │                                │                               │
+         │                                │                               │ 6. Contract Validation
+         │                                │                               │
+         │                                │                               │ ✓ Verify verifier trusted
+         │                                │                               │ ✓ Verify witness derives
+         │                                │                               │   verifierPubkey
+         │                                │                               │ ✓ Verify attestation_hash
+         │                                │                               │
+         │                                │                               │ 7. Store proof on ledger
+         │                                │                               │
+         │                                │                               │    income_proofs[empId] = {
+         │                                │                               │      proof_type: 2,
+         │                                │                               │      threshold_min: 8.0,
+         │                                │                               │      threshold_max: 12.0,
+         │                                │                               │      attestation_hash,
+         │                                │                               │      submitted_at,
+         │                                │                               │      expires_at
+         │                                │                               │    }
+         │                                │                               │
+         │                                │  ✅ Success                   │
+         │                                │<───────────────────────────────│
+         │                                │                               │
+         │ 8. Return success response     │                               │
          │    {                           │                               │
-         │      attestation_data,         │                               │
-         │      attestation_hash,         │                               │
-         │      signature,                │                               │
-         │      verifier_pubkey           │                               │
+         │      success: true,            │                               │
+         │      attestation: {            │                               │
+         │        attestation_hash,       │                               │
+         │        timestamp               │                               │
+         │      }                         │                               │
          │    }                           │                               │
          │<───────────────────────────────│                               │
          │                                │                               │
-         │ 6. Submit proof to contract    │                               │
-         │    submitIncomeProof({         │                               │
-         │      employeeId,               │                               │
-         │      attestation_data, ◄───────┼───────────────────────────────┼── Attestation passed
-         │      attestation_hash,         │                               │   AS-IS (no threshold
-         │      signature,                │                               │   parameter!)
-         │      verifier_pubkey           │                               │
-         │    })                          │                               │
-         │────────────────────────────────┼──────────────────────────────>│
-         │                                │                               │
-         │                                │                               │ 7. Contract Validation
-         │                                │                               │
-         │                                │                               │ ✓ Verify verifier
-  trusted
-         │                                │                               │ ✓ Verify signature valid
-         │                                │                               │ ✓ Verify hash matches
-         │                                │                               │
-         │                                │                               │ 8. Extract threshold
-         │                                │                               │    FROM attestation
-         │                                │                               │    (not from params!)
-         │                                │                               │
-         │                                │                               │    threshold =
-         │                                │                               │      unpack(attestation)
-         │                                │                               │
-         │                                │                               │ 9. Store proof on ledger
-         │                                │                               │    with extracted
-  threshold
-         │                                │                               │
-         │ ✅ Proof submitted successfully│                               │
-         │<───────────────────────────────┼───────────────────────────────│
-         │                                │                               │
-         │ 10. Share proof URL            │                               │
-         │     /verify/{proofId}          │                               │
-         │     (send to lender)           │                               │
+         │ 9. Share proof with lender     │                               │
+         │    (lender uses contract       │                               │
+         │     to verify via public read) │                               │
          │                                │                               │
 
 
@@ -134,62 +146,68 @@
   ---
   🔒 Security Analysis at Each Step
 
-  Step 4: Attestation Creation (CRITICAL)
+  Step 3-4: ZKML Proof Generation & Attestation Creation (CRITICAL)
 
-  # ZKML Verifier Service
-  attestation_data = {
-      'employee_id': '0xabc...',
-      'proof_type': 1,  # INCOME_ABOVE_THRESHOLD
-      'threshold_min': 40000,  # ← Threshold BOUND here
-      'threshold_max': 0,
-      'history_commitment': '0xdef...',
-      'txids': ['0x123...', '0x456...'],
-      'timestamp': 1762926243
-  }
+  # ZKML Verifier Service (zkml-verifier/src/routes/verify.ts)
 
-  # Pack into bytes (deterministic serialization)
-  packed_data = pack(attestation_data)  # → Bytes<256>
+  // 1. Generate ZKML proof using EZKL
+  const proofResult = await generateIncomeProof(
+    proofType,        // 2 = INCOME_RANGE
+    payments,         // [1.0, 1.0, 1.0, 1.0, 1.0, 1.0] (normalized)
+    thresholdMin,     // 8.0 (80k/year normalized)
+    thresholdMax      // 12.0 (120k/year normalized)
+  );
 
-  # Hash the packed data
-  attestation_hash = hash(packed_data)  # → Bytes<32>
+  // EZKL model annualizes 6-month total (6.0 * 2 = 12.0) and checks:
+  // ✓ 12.0 >= 8.0 (min) ✓ 12.0 <= 12.0 (max)
+  // Returns: { success: true, proof: zkmlProof }
 
-  # Sign the hash with verifier's private key
-  signature = sign(attestation_hash, verifier_private_key)  # → Bytes<64>
+  // 2. Create attestation binding proof to parameters
+  const attestation = {
+    employee_id: employeeId,
+    proof_type: proofType,           // 2
+    threshold_min: thresholdMin,     // 8.0 ← BOUND HERE
+    threshold_max: thresholdMax,     // 12.0 ← BOUND HERE
+    txids: txids,
+    history_commitment: historyCommitment,
+    timestamp: Date.now() / 1000,
+    proof_json: JSON.stringify(proofResult.proof)
+  };
 
-  Security Guarantee: Threshold is cryptographically bound to attestation via signature
+  // 3. Hash attestation for integrity
+  const attestation_hash = hashAttestation(attestation);
+
+  Security Guarantee: Threshold cryptographically bound to ZKML proof via attestation
 
   ---
-  Step 6: Employee Submits Proof
+  Step 5: Verifier Service Submits to Blockchain (SECURE BY DESIGN)
 
-  ❌ OLD (VULNERABLE):
-  // Employee could manipulate threshold
-  await api.submitIncomeProof(
+  ✅ SECURE FLOW:
+  // Verifier service (NOT employee) submits to blockchain
+  // This eliminates manipulation vector entirely!
+
+  const success = await api.submitIncomeProof(
     employeeId,
-    proofType: 1,
-    thresholdMin: 100000,  // ← Employee lies! (proof was for $40k)
-    thresholdMax: 0,
+    BigInt(proofType),              // 2
+    thresholdMin.toString(),        // "8.0" ← From attestation
+    thresholdMax.toString(),        // "12.0" ← From attestation
     txids,
     historyCommitment,
-    attestationHash,
-    signature,
-    verifierPubkey
+    attestation.attestation_hash,
+    BigInt(attestation.timestamp),
+    30 * 24 * 60 * 60              // 30 days expiry
   );
-  // Contract accepts it → SECURITY BREACH
 
-  ✅ NEW (SECURE):
-  // Employee submits attestation AS-IS (no threshold param)
-  await api.submitIncomeProof(employeeId, {
-    attestation_data: '0xabcdef...',  // ← Contains threshold $40k
-    attestation_hash: '0x123...',
-    signature: '0x456...',
-    verifier_pubkey: '0x789...'
-  });
+  Security Guarantees:
+  1. Employee cannot manipulate submission - verifier does it
+  2. Verifier wallet (VERIFIER_SEED) signs the transaction
+  3. Witness derives verifierPubkey from transaction context
+  4. Contract validates verifier is trusted before accepting
+  5. Thresholds in submission match ZKML proof parameters
 
-  // Employee tries to modify attestation_data:
-  attestation_data[threshold_offset] = 100000;  // ← Change $40k → $100k
-  // → attestation_hash no longer matches
-  // → Signature verification FAILS
-  // → Contract REJECTS
+  ❌ ATTACK PREVENTED:
+  // Employee cannot intercept and modify thresholds
+  // because they never submit to blockchain directly!
 
   ---
   Step 8: Contract Extracts Threshold

@@ -5,6 +5,8 @@
  * NEVER use process.env directly in other files - import from this module.
  */
 
+import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+
 export interface VerifierConfig {
   // Server
   port: number;
@@ -74,8 +76,8 @@ export function loadConfig(): VerifierConfig {
       proofServer: process.env.MIDNIGHT_PROOF_SERVER || 'http://127.0.0.1:6300',
     },
 
-    // Contract Configuration
-    zkConfigPath: process.env.ZK_CONFIG_PATH || '../payroll-contract/target/contract/payroll-contract-zk.dat',
+    // Contract Configuration (points to managed directory where ZK config is built)
+    zkConfigPath: process.env.ZK_CONFIG_PATH || '../payroll-api/managed/payroll',
   };
 }
 
@@ -93,6 +95,9 @@ export function validateConfig(config: VerifierConfig): void {
     throw new Error(`Invalid PORT: ${config.port}`);
   }
 }
+
+// Set network ID (must match test environment)
+setNetworkId(NetworkId.Undeployed);
 
 // Export singleton instance
 export const config = loadConfig();

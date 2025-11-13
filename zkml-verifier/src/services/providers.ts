@@ -23,7 +23,7 @@ import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-p
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { type CoinInfo, Transaction, type TransactionId } from '@midnight-ntwrk/ledger';
+import { type CoinInfo, nativeToken, Transaction, type TransactionId } from '@midnight-ntwrk/ledger';
 import * as Rx from 'rxjs';
 import { config } from '../config';
 
@@ -133,16 +133,34 @@ export class ProviderService {
         'warn'
       );
 
-      // Check wallet state
-      this.logger.info('Checking wallet state...');
+      // CRITICAL: Start the wallet to sync with indexer
+      this.wallet.start();
+      this.logger.info('Wallet started, syncing with indexer...');
+
+      // Wait for wallet to sync (like bboard example)
+      this.logger.info('Waiting for wallet to sync...');
+      await Rx.firstValueFrom(
+        this.wallet.state().pipe(
+          Rx.throttleTime(2_000), // Check every 2 seconds
+          Rx.tap((state) => {
+            const synced = state.syncProgress?.synced ?? 0n;
+            const lag = state.syncProgress?.lag?.applyGap ?? 0n;
+            this.logger.info({ synced: synced.toString(), lag: lag.toString() }, 'Sync progress');
+          }),
+          Rx.filter((state) => {
+            // Wait until wallet is close to synced (within 100 blocks)
+            const synced = typeof state.syncProgress?.synced === 'bigint' ? state.syncProgress.synced : 0n;
+            const total = typeof state.syncProgress?.lag?.applyGap === 'bigint' ? state.syncProgress.lag.applyGap : 1_000n;
+            return total - synced < 100n;
+          }),
+          Rx.timeout(60000), // 60 second timeout
+        )
+      );
+
+      // Check wallet state after sync
       const state = await Rx.firstValueFrom(this.wallet.state());
-      if (state && (state as any).balances) {
-        this.logger.info({
-          balance: (state as any).balances.unshieldedBalance?.toString() || '0'
-        }, 'Wallet state retrieved');
-      } else {
-        this.logger.info('Wallet created (state structure may vary without blockchain connection)');
-      }
+      const balance = state.balances[nativeToken()] ?? 0n;
+      this.logger.info({ balance: balance.toString(), address: state.address }, 'Wallet synced and ready');
 
       // Create providers
       const walletAndMidnightProvider = await this.createWalletAndMidnightProvider(this.wallet);
@@ -165,7 +183,7 @@ export class ProviderService {
       // Connect to PayrollAPI with proper providers
       this.api = await PayrollAPI.connect(
         providers,
-        this.config.contractAddress as any,
+        this.config.contractAddress,
         'zkml-verifier-service',
         this.logger
       );

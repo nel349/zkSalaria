@@ -124,7 +124,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
     Body: GenerateProofRequest;
   }>('/generate-proof', async (request, reply) => {
     const startTime = Date.now();
-    const { proof_type, payments, threshold_min, threshold_max, employee_id, txids, history_commitment, contract_address } = request.body;
+    const { proof_type, payments, threshold_min, threshold_max, employee_id, txids, contract_address } = request.body;
 
     // Validate request
     const missingFields = [];
@@ -133,7 +133,7 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
     if (threshold_min === undefined) missingFields.push('threshold_min');
     if (!employee_id) missingFields.push('employee_id');
     if (!txids) missingFields.push('txids');
-    if (!history_commitment) missingFields.push('history_commitment');
+    // history_commitment will be computed by verifier
     if (!contract_address) missingFields.push('contract_address');
 
     if (missingFields.length > 0) {
@@ -230,86 +230,119 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
 
       fastify.log.info('  ✓ ZK proof generated', undefined, { duration: proofResult.duration });
 
-      // Step 2: Create attestation
-      fastify.log.info('  → Creating attestation...');
-      const attestation = await signer.createAttestation({
-        employee_id,
-        threshold: threshold_min,
-        txids,
-        history_commitment
-      });
+      // Step 2: Initialize PayrollAPI to compute history commitment
+      // This MUST happen before creating attestation, as we need the history_commitment
+      if (!contract_address || process.env.ENABLE_BLOCKCHAIN_SUBMISSION !== 'true') {
+        fastify.log.error('  ❌ contract_address and ENABLE_BLOCKCHAIN_SUBMISSION required');
+        return reply.code(400).send({
+          success: false,
+          error: 'Bad Request',
+          error_code: ErrorCode.VALIDATION_ERROR,
+          message: 'contract_address required for proof generation',
+          duration: Date.now() - startTime
+        } as GenerateProofResponse);
+      }
 
-      fastify.log.info('  ✓ Attestation created', undefined, {
-        attestation_hash: attestation.attestation_hash.substring(0, 16) + '...'
-      });
+      try {
+        fastify.log.info('  → Initializing PayrollAPI to compute history commitment...');
 
-      // Step 3: Submit proof to blockchain
-      if (contract_address && process.env.ENABLE_BLOCKCHAIN_SUBMISSION === 'true') {
-        try {
-          fastify.log.info('  → Submitting proof to blockchain...');
+        // Initialize provider service with contract address
+        const config = loadVerifierConfig(contract_address);
+        const providerSvc = new ProviderService(fastify.log as unknown as Logger, config);
+        const api = await providerSvc.initialize();
 
-          // Initialize provider service with contract address
-          const config = loadVerifierConfig(contract_address);
-          const providerSvc = new ProviderService(fastify.log as unknown as Logger, config);
-          const api = await providerSvc.initialize();
+        // Compute history commitment using the verifier's PayrollAPI
+        fastify.log.info('  → Computing history commitment...');
+        const history_commitment = await api.computeHistoryCommitment(employee_id);
+        fastify.log.info(`  ✓ History commitment computed: ${history_commitment.substring(0, 16)}...`);
 
-          // Submit income proof via PayrollAPI
-          const success = await api.submitIncomeProof(
-            employee_id,
-            BigInt(proof_type),
-            threshold_min.toString(),
-            (threshold_max || 0).toString(),
-            txids,
-            history_commitment,
-            attestation.attestation_hash,
-            BigInt(attestation.timestamp),
-            30 * 24 * 60 * 60 // 30 days
-          );
+        // CRITICAL: Denormalize thresholds BEFORE creating attestation
+        // ZKML uses normalized values (÷ 10000), but contract expects denormalized values
+        // The attestation hash MUST be computed with the SAME values that will be sent to the circuit
+        const NORMALIZATION_FACTOR = 10000;
+        const denormalizedMin = Math.floor(threshold_min * NORMALIZATION_FACTOR);
+        const denormalizedMax = threshold_max ? Math.floor(threshold_max * NORMALIZATION_FACTOR) : 0;
 
-          if (!success) {
-            fastify.log.error('  ❌ Failed to submit proof to blockchain');
-            return reply.code(500).send({
-              success: false,
-              error: 'Blockchain Submission Failed',
-              error_code: ErrorCode.INTERNAL_ERROR,
-              message: 'Failed to submit proof to blockchain',
-              duration: Date.now() - startTime
-            } as GenerateProofResponse);
-          }
+        fastify.log.info({
+          normalized: { min: threshold_min, max: threshold_max },
+          denormalized: { min: denormalizedMin, max: denormalizedMax }
+        }, '  → Denormalized thresholds for attestation & blockchain');
 
-          fastify.log.info('  ✅ Proof submitted to blockchain successfully');
+        // Step 3: Create attestation WITH DENORMALIZED THRESHOLDS
+        // This ensures the attestation hash matches what the circuit will reconstruct
+        fastify.log.info('  → Creating attestation...');
+        const attestation = await signer.createAttestation({
+          employee_id,
+          proof_type,
+          threshold: denormalizedMin,
+          threshold_max: denormalizedMax,
+          txids,
+          history_commitment
+        });
 
-          // Cleanup
+        fastify.log.info('  ✓ Attestation created', undefined, {
+          attestation_hash: attestation.attestation_hash.substring(0, 16) + '...'
+        });
+
+        // Step 4: Submit proof to blockchain
+        fastify.log.info('  → Submitting proof to blockchain...');
+
+        // Submit income proof via PayrollAPI
+        const success = await api.submitIncomeProof(
+          employee_id,
+          BigInt(proof_type),
+          denormalizedMin.toString(),
+          denormalizedMax.toString(),
+          txids,
+          history_commitment,
+          attestation.attestation_hash,
+          BigInt(attestation.timestamp),
+          30 * 24 * 60 * 60 // 30 days
+        );
+
+        if (!success) {
+          fastify.log.error('  ❌ Failed to submit proof to blockchain');
           await providerSvc.shutdown();
-        } catch (error) {
-          fastify.log.error({ error }, '  ❌ Blockchain submission error');
           return reply.code(500).send({
             success: false,
             error: 'Blockchain Submission Failed',
             error_code: ErrorCode.INTERNAL_ERROR,
-            message: error instanceof Error ? error.message : 'Unknown blockchain error',
+            message: 'Failed to submit proof to blockchain',
             duration: Date.now() - startTime
           } as GenerateProofResponse);
         }
-      } else {
-        if (!contract_address) {
-          fastify.log.warn('  ⚠️  Blockchain submission skipped - contract_address not provided in request');
-        } else {
-          fastify.log.warn('  ⚠️  Blockchain submission skipped - ENABLE_BLOCKCHAIN_SUBMISSION not set to "true"');
-          fastify.log.warn('  ⚠️  Set ENABLE_BLOCKCHAIN_SUBMISSION=true to enable automatic submission');
-        }
+
+        fastify.log.info('  ✅ Proof submitted to blockchain successfully');
+
+        // Cleanup
+        await providerSvc.shutdown();
+
+        const duration = Date.now() - startTime;
+        fastify.log.info('✅ Proof generation complete', undefined, { total_duration: duration });
+
+        return {
+          success: true,
+          proof_json: proofResult.proof.proofJson,
+          attestation,
+          duration
+        } as GenerateProofResponse;
+
+      } catch (error) {
+        fastify.log.error({
+          error,
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage: error instanceof Error ? error.message : 'Unknown',
+          errorStack: error instanceof Error ? error.stack : undefined,
+          errorDetails: JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+        }, '  ❌ Error in proof generation/submission');
+        return reply.code(500).send({
+          success: false,
+          error: 'Proof Generation Failed',
+          error_code: ErrorCode.INTERNAL_ERROR,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          duration: Date.now() - startTime
+        } as GenerateProofResponse);
       }
-
-      const duration = Date.now() - startTime;
-
-      fastify.log.info('✅ Proof generation complete', undefined, { total_duration: duration });
-
-      return {
-        success: true,
-        proof_json: proofResult.proof.proofJson,
-        attestation,
-        duration
-      } as GenerateProofResponse;
 
     } catch (error) {
       fastify.log.error('Proof generation error:', undefined, error);

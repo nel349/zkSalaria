@@ -36,8 +36,13 @@ export const createPayrollPrivateState = (verifierSecretKey?: Uint8Array): Payro
 // NOTE: Payment history is stored on public ledger so company can update when paying employee
 // verifier_secret_key: Used by ZKML verifier to prove ownership (Midnight pattern)
 export const payrollWitnesses = {
-  verifier_secret_key: ({ privateState }: WitnessContext<Ledger, PayrollPrivateState>): [PayrollPrivateState, Uint8Array] =>
-    [privateState, privateState.verifierSecretKey]
+  verifier_secret_key: ({ privateState }: WitnessContext<Ledger, PayrollPrivateState>): [PayrollPrivateState, Uint8Array] => {
+    console.log('[payrollWitnesses.verifier_secret_key] Witness called, returning secret:', {
+      secretLength: privateState.verifierSecretKey.length,
+      secretHex: Buffer.from(privateState.verifierSecretKey).toString('hex').substring(0, 16) + '...'
+    });
+    return [privateState, privateState.verifierSecretKey];
+  }
 };
 
 // Utility functions
