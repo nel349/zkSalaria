@@ -9,9 +9,14 @@ import {
   CircularProgress,
   Alert,
   Container,
+  TextField,
+  MenuItem,
+  Chip,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VerifiedIcon from '@mui/icons-material/Verified';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { PayrollAPI, type DeployedPayrollAPI } from '@zksalaria/payroll-api';
@@ -57,6 +62,15 @@ export const VerifyProofPage: React.FC = () => {
   const [proof, setProof] = useState<IncomeProof | null>(null);
   const [contractAddress, setContractAddress] = useState<string | null>(null);
   const [needsWallet, setNeedsWallet] = useState(false);
+
+  // Verification requirements state
+  const [requiredProofType, setRequiredProofType] = useState<string>('');
+  const [requiredThreshold, setRequiredThreshold] = useState<string>('');
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     const loadProof = async () => {
@@ -126,6 +140,61 @@ export const VerifyProofPage: React.FC = () => {
 
     loadProof();
   }, [employeeId, attestationHash, walletAddress, providers]);
+
+  const handleVerifyRequirements = async () => {
+    if (!requiredProofType || !requiredThreshold || !proof || !contractAddress || !walletAddress) {
+      return;
+    }
+
+    setVerifying(true);
+    setVerificationResult(null);
+
+    try {
+      // Connect to contract
+      const api = await PayrollAPI.connect(
+        providers,
+        contractAddress,
+        walletAddress,
+        logger
+      );
+
+      // Convert annual threshold to 6-month threshold for contract
+      // Contract stores 6-month thresholds, so we need to divide by 2
+      const sixMonthThreshold = Math.floor(parseFloat(requiredThreshold) / 2);
+
+      console.log('[VerifyRequirements] Converting:', {
+        annualInput: requiredThreshold,
+        sixMonthForContract: sixMonthThreshold
+      });
+
+      // Call verifyIncomeProof with lender's requirements (6-month threshold)
+      const verified = await api.verifyIncomeProof(
+        employeeId!,
+        BigInt(requiredProofType),
+        sixMonthThreshold.toString()
+      );
+
+      if (verified) {
+        setVerificationResult({
+          success: true,
+          message: `The employee's income meets your annual requirement of $${parseFloat(requiredThreshold).toLocaleString()}. The proof is valid and not expired.`
+        });
+      } else {
+        setVerificationResult({
+          success: false,
+          message: `The employee's income does not meet your annual requirement of $${parseFloat(requiredThreshold).toLocaleString()}, or the proof type does not match, or the proof has expired.`
+        });
+      }
+    } catch (err) {
+      console.error('[VerifyRequirements] Error:', err);
+      setVerificationResult({
+        success: false,
+        message: `Verification failed: ${err instanceof Error ? err.message : 'Unknown error'}`
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const handleConnectWallet = async () => {
     try {
@@ -317,6 +386,132 @@ export const VerifyProofPage: React.FC = () => {
           showTechnicalDetails={true}
         />
 
+        {/* Verification Requirements Section */}
+        <Paper
+          elevation={2}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            bgcolor: mode === 'dark' ? theme.colors.background.paper : '#FFFFFF',
+            border: `2px solid ${theme.colors.primary[500]}`,
+          }}
+        >
+          <Typography
+            variant="h6"
+            fontWeight={theme.typography.fontWeight.bold}
+            color={theme.colors.text.primary}
+            sx={{ mb: 1 }}
+          >
+            Verify Against Your Requirements
+          </Typography>
+          <Typography
+            variant="body2"
+            color={theme.colors.text.secondary}
+            sx={{ mb: 3 }}
+          >
+            Enter your specific requirements to verify if this proof meets them. All thresholds are annual (per year).
+          </Typography>
+
+          <Stack spacing={2.5}>
+            {/* Proof Type Selection */}
+            <TextField
+              select
+              fullWidth
+              label="Required Proof Type"
+              value={requiredProofType}
+              onChange={(e) => setRequiredProofType(e.target.value)}
+              helperText="Select the type of proof you require"
+            >
+              <MenuItem value="1">Type 1: Income Above Threshold</MenuItem>
+              <MenuItem value="2">Type 2: Income Range</MenuItem>
+              <MenuItem value="3">Type 3: Average Income</MenuItem>
+              <MenuItem value="4">Type 4: Credit Score</MenuItem>
+            </TextField>
+
+            {/* Threshold Input */}
+            <TextField
+              fullWidth
+              label="Required Annual Income Threshold"
+              value={requiredThreshold}
+              onChange={(e) => setRequiredThreshold(e.target.value)}
+              placeholder="e.g., 30000 for $30k per year"
+              helperText="Enter your minimum annual income requirement (yearly total in whole dollars)"
+              type="number"
+            />
+
+            {/* Verify Button */}
+            <Button
+              variant="contained"
+              size="large"
+              fullWidth
+              onClick={handleVerifyRequirements}
+              disabled={!requiredProofType || !requiredThreshold || verifying}
+              sx={{
+                bgcolor: theme.colors.primary[500],
+                '&:hover': { bgcolor: theme.colors.primary[700] },
+                '&:disabled': {
+                  bgcolor: theme.colors.text.disabled,
+                },
+                py: 1.5,
+                fontSize: '1rem',
+                fontWeight: theme.typography.fontWeight.bold,
+              }}
+            >
+              {verifying ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
+                  Verifying...
+                </>
+              ) : (
+                'Verify Against Requirements'
+              )}
+            </Button>
+
+            {/* Verification Result */}
+            {verificationResult && (
+              <Paper
+                elevation={3}
+                sx={{
+                  p: 3,
+                  borderRadius: 2,
+                  bgcolor: verificationResult.success
+                    ? (mode === 'dark' ? `${theme.colors.success[500]}15` : theme.colors.success[50])
+                    : (mode === 'dark' ? `${theme.colors.error[500]}15` : theme.colors.error[50]),
+                  border: `2px solid ${verificationResult.success ? theme.colors.success[500] : theme.colors.error[500]}`,
+                }}
+              >
+                <Stack spacing={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {verificationResult.success ? (
+                      <CheckCircleIcon sx={{ fontSize: 40, color: theme.colors.success[500] }} />
+                    ) : (
+                      <CancelIcon sx={{ fontSize: 40, color: theme.colors.error[500] }} />
+                    )}
+                    <Box sx={{ flex: 1 }}>
+                      <Typography
+                        variant="h5"
+                        fontWeight={theme.typography.fontWeight.bold}
+                        color={verificationResult.success ? theme.colors.success[700] : theme.colors.error[700]}
+                        sx={{ mb: 0.5 }}
+                      >
+                        {verificationResult.success ? 'APPROVED' : 'REJECTED'}
+                      </Typography>
+                      <Chip
+                        label={verificationResult.success ? '✓ Meets Requirements' : '✗ Does Not Meet Requirements'}
+                        color={verificationResult.success ? 'success' : 'error'}
+                        size="small"
+                      />
+                    </Box>
+                  </Box>
+                  <Typography variant="body1" color={theme.colors.text.primary}>
+                    {verificationResult.message}
+                  </Typography>
+                </Stack>
+              </Paper>
+            )}
+          </Stack>
+        </Paper>
+
         {/* Additional Information for Verifiers */}
         <Paper
           elevation={1}
@@ -343,6 +538,9 @@ export const VerifyProofPage: React.FC = () => {
             </Typography>
             <Typography variant="body2" color={theme.colors.text.secondary}>
               • Actual payment amounts remain private through zero-knowledge proofs
+            </Typography>
+            <Typography variant="body2" color={theme.colors.text.secondary}>
+              • Use the verification tool above to check if the proof meets your specific requirements
             </Typography>
             <Typography variant="body2" color={theme.colors.text.secondary}>
               • Download the PDF report for your records or verification purposes
