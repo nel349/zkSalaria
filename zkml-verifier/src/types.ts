@@ -11,7 +11,8 @@ export enum ProofType {
   INCOME_ABOVE_THRESHOLD = 1,
   INCOME_RANGE = 2,
   AVERAGE_INCOME = 3,
-  CREDIT_SCORE = 4
+  CREDIT_SCORE = 4,
+  TAX_BRACKET = 5
 }
 
 export interface ProofPublicInputs {

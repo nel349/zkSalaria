@@ -111,6 +111,15 @@ export interface DeployedPayrollAPI {
     timestamp: bigint,
     expiresIn: number
   ): Promise<boolean>;
+  generateTaxBracketProof(
+    employeeId: string,
+    bracketNumber: number,
+    txids: Array<string>,
+    historyCommitment: string,
+    attestationHash: string,
+    timestamp: bigint,
+    expiresIn: number
+  ): Promise<boolean>;
   verifyIncomeProof(employeeId: string, requiredProofType: bigint, requiredThreshold: string): Promise<boolean>;
   getIncomeProof(employeeId: string): Promise<any | null>;
   computeHistoryCommitment(employeeId: string): Promise<string>;
@@ -1045,6 +1054,57 @@ export class PayrollAPI implements DeployedPayrollAPI {
   // ZKML INCOME PROOFS (PHASE 2.1)
   // ========================================
 
+  // US Federal Tax Brackets for 2024 (Single Filers)
+  // These are the 7 official IRS tax brackets
+  static readonly TAX_BRACKETS = [
+    { bracket: 1, rate: '10%', min: 0, max: 11600, description: '10% bracket: $0 - $11,600' },
+    { bracket: 2, rate: '12%', min: 11601, max: 47150, description: '12% bracket: $11,601 - $47,150' },
+    { bracket: 3, rate: '22%', min: 47151, max: 100525, description: '22% bracket: $47,151 - $100,525' },
+    { bracket: 4, rate: '24%', min: 100526, max: 191950, description: '24% bracket: $100,526 - $191,950' },
+    { bracket: 5, rate: '32%', min: 191951, max: 243725, description: '32% bracket: $191,951 - $243,725' },
+    { bracket: 6, rate: '35%', min: 243726, max: 609350, description: '35% bracket: $243,726 - $609,350' },
+    { bracket: 7, rate: '37%', min: 609351, max: 999999999, description: '37% bracket: $609,351+' },
+  ] as const;
+
+  /**
+   * Get tax bracket information by bracket number (1-7)
+   * @param bracketNumber - The bracket number (1-7)
+   * @returns Tax bracket information or null if invalid
+   */
+  static getTaxBracketInfo(bracketNumber: number): typeof PayrollAPI.TAX_BRACKETS[number] | null {
+    if (bracketNumber < 1 || bracketNumber > 7) {
+      return null;
+    }
+    return PayrollAPI.TAX_BRACKETS[bracketNumber - 1];
+  }
+
+  /**
+   * Get tax bracket from annual income
+   * @param annualIncome - Annual income in dollars
+   * @returns Tax bracket information
+   */
+  static getTaxBracketFromIncome(annualIncome: number): typeof PayrollAPI.TAX_BRACKETS[number] {
+    for (const bracket of PayrollAPI.TAX_BRACKETS) {
+      if (annualIncome >= bracket.min && annualIncome <= bracket.max) {
+        return bracket;
+      }
+    }
+    // Default to highest bracket if income exceeds all ranges
+    return PayrollAPI.TAX_BRACKETS[6];
+  }
+
+  /**
+   * Validate if min/max values match a valid US federal tax bracket
+   * @param min - Minimum income threshold
+   * @param max - Maximum income threshold
+   * @returns True if it matches a valid bracket, false otherwise
+   */
+  static isValidTaxBracket(min: number, max: number): boolean {
+    return PayrollAPI.TAX_BRACKETS.some(
+      bracket => bracket.min === min && bracket.max === max
+    );
+  }
+
   async registerTrustedVerifier(verifierPubkey: string): Promise<boolean> {
     this.logger?.info({ registerTrustedVerifier: { verifierPubkey } });
 
@@ -1147,6 +1207,57 @@ export class PayrollAPI implements DeployedPayrollAPI {
       }
     });
     return circuitResult;
+  }
+
+  /**
+   * Convenience method for generating Tax Bracket proofs (Type 5)
+   * Validates that the bracket matches one of the 7 official US federal tax brackets
+   *
+   * @param employeeId - Employee wallet address
+   * @param bracketNumber - Tax bracket number (1-7)
+   * @param txids - Array of transaction IDs (payment history)
+   * @param historyCommitment - Hash commitment of payment history
+   * @param attestationHash - Verifier's attestation hash
+   * @param timestamp - Attestation timestamp
+   * @param expiresIn - Proof expiration time in seconds
+   * @returns Promise<boolean> - True if proof submission succeeded
+   */
+  async generateTaxBracketProof(
+    employeeId: string,
+    bracketNumber: number,
+    txids: Array<string>,
+    historyCommitment: string,
+    attestationHash: string,
+    timestamp: bigint,
+    expiresIn: number
+  ): Promise<boolean> {
+    // Validate bracket number
+    const bracketInfo = PayrollAPI.getTaxBracketInfo(bracketNumber);
+    if (!bracketInfo) {
+      throw new Error(`Invalid tax bracket number: ${bracketNumber}. Must be 1-7.`);
+    }
+
+    this.logger?.info({
+      generateTaxBracketProof: {
+        employeeId,
+        bracketNumber,
+        bracketInfo,
+        txidsCount: txids.length,
+      },
+    });
+
+    // Submit proof with Type 5 (TAX_BRACKET)
+    return this.submitIncomeProof(
+      employeeId,
+      5n, // ProofType.TAX_BRACKET
+      bracketInfo.min.toString(),
+      bracketInfo.max.toString(),
+      txids,
+      historyCommitment,
+      attestationHash,
+      timestamp,
+      expiresIn
+    );
   }
 
   async verifyIncomeProof(

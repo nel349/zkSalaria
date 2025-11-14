@@ -1273,6 +1273,13 @@ export circuit verify_income_proof(
     if (disclose(proof.threshold_min) < disclose(required_threshold)) {
       return false;
     }
+  } else if (disclose(required_proof_type) == (5 as Uint<8>)) {
+    // TAX_BRACKET: Check bracket maximum <= required_threshold
+    // This is for programs that require income ≤ X (e.g., housing assistance requires income ≤ $50k)
+    // If employee proves 12% bracket (max $47,150), it qualifies since $47,150 < $50,000
+    if (disclose(proof.threshold_max) > disclose(required_threshold)) {
+      return false;
+    }
   }
 
   // Success: Income proof verified and meets requirements
