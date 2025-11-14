@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "npx tsx test/e2e.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
     "setup": "npx tsx scripts/setup-models.ts",
     "validate": "npx tsx scripts/validate-models.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit test/*.ts"
@@ -25,6 +27,8 @@
     "typescript": "^5.3.3"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0"
+    "@types/node": "^20.11.0",
+    "@vitest/ui": "^4.0.8",
+    "vitest": "^4.0.8"
   }
 }

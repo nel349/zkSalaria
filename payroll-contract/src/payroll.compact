@@ -1128,8 +1128,8 @@ export circuit submit_income_proof(
 
   // Step 2: Use the individual params directly (already extracted)
 
-  // Step 3: Verify proof type is valid (1-4)
-  if (proof_type_disclosed < (1 as Uint<8>) || proof_type_disclosed > (4 as Uint<8>)) {
+  // Step 3: Verify proof type is valid (1-5)
+  if (proof_type_disclosed < (1 as Uint<8>) || proof_type_disclosed > (5 as Uint<8>)) {
     return false; // Invalid proof type
   }
 
@@ -1159,6 +1159,30 @@ export circuit submit_income_proof(
   if (proof_type_disclosed == (2 as Uint<8>)) {
     if (threshold_max_disclosed <= threshold_min_disclosed) {
       return false; // Invalid range
+    }
+  }
+// https://www.irs.gov/filing/federal-income-tax-rates-and-brackets
+  // For TAX_BRACKET (type 5), validate bracket is one of 7 official US federal brackets
+  if (proof_type_disclosed == (5 as Uint<8>)) {
+    // First, verify it's a valid range
+    if (threshold_max_disclosed <= threshold_min_disclosed) {
+      return false; // Invalid bracket range
+    }
+
+    // Verify bracket matches one of the 7 official US federal tax brackets (2024)
+    // Brackets are in dollars, not normalized (e.g., 11601-47150 for 12% bracket)
+    const bracket1 = (threshold_min_disclosed == (0 as Uint<64>) && threshold_max_disclosed == (11600 as Uint<64>));
+    const bracket2 = (threshold_min_disclosed == (11601 as Uint<64>) && threshold_max_disclosed == (47150 as Uint<64>));
+    const bracket3 = (threshold_min_disclosed == (47151 as Uint<64>) && threshold_max_disclosed == (100525 as Uint<64>));
+    const bracket4 = (threshold_min_disclosed == (100526 as Uint<64>) && threshold_max_disclosed == (191950 as Uint<64>));
+    const bracket5 = (threshold_min_disclosed == (191951 as Uint<64>) && threshold_max_disclosed == (243725 as Uint<64>));
+    const bracket6 = (threshold_min_disclosed == (243726 as Uint<64>) && threshold_max_disclosed == (609350 as Uint<64>));
+    const bracket7 = (threshold_min_disclosed == (609351 as Uint<64>) && threshold_max_disclosed == (999999999 as Uint<64>));
+
+    const bracket_valid = bracket1 || bracket2 || bracket3 || bracket4 || bracket5 || bracket6 || bracket7;
+
+    if (!bracket_valid) {
+      return false; // Not a valid US federal tax bracket
     }
   }
 

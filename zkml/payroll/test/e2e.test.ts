@@ -110,6 +110,52 @@ const TEST_CASES: TestCase[] = [
     thresholdMin: 5000,
     expectedPass: false,
     description: 'Mid-level earning $3,250 avg < $5,000 average requirement (should FAIL)'
+  },
+  // TAX BRACKET PROOF TESTS (Type 5)
+  {
+    name: 'Tax Bracket - 12% Bracket (Low Income)',
+    proofType: ProofType.TAX_BRACKET,
+    payments: [2900, 2900, 2900, 2900, 2900, 2900],
+    thresholdMin: 11601,
+    thresholdMax: 47150,
+    expectedPass: true,
+    description: '12% tax bracket: $2,900/month × 6 = $17,400 → $34,800 annualized, within $11,601-$47,150'
+  },
+  {
+    name: 'Tax Bracket - 22% Bracket (Mid Income)',
+    proofType: ProofType.TAX_BRACKET,
+    payments: [5000, 5100, 5200, 5300, 5400, 5500],
+    thresholdMin: 47151,
+    thresholdMax: 100525,
+    expectedPass: true,
+    description: '22% tax bracket: $5,250/month avg × 12 = $63,000 annualized, within $47,151-$100,525'
+  },
+  {
+    name: 'Tax Bracket - 24% Bracket (Upper Mid Income)',
+    proofType: ProofType.TAX_BRACKET,
+    payments: [10000, 10500, 11000, 11500, 12000, 12500],
+    thresholdMin: 100526,
+    thresholdMax: 191950,
+    expectedPass: true,
+    description: '24% tax bracket: $11,250/month avg × 12 = $135,000 annualized, within $100,526-$191,950'
+  },
+  {
+    name: 'NEGATIVE: Tax Bracket - Income Too Low',
+    proofType: ProofType.TAX_BRACKET,
+    payments: [1500, 1600, 1700, 1800, 1900, 2000],
+    thresholdMin: 47151,
+    thresholdMax: 100525,
+    expectedPass: false,
+    description: '22% bracket FAIL: $1,750/month avg × 12 = $21,000 annualized < $47,151 minimum (should FAIL)'
+  },
+  {
+    name: 'NEGATIVE: Tax Bracket - Income Too High',
+    proofType: ProofType.TAX_BRACKET,
+    payments: [5000, 5100, 5200, 5300, 5400, 5500],
+    thresholdMin: 11601,
+    thresholdMax: 47150,
+    expectedPass: false,
+    description: '12% bracket FAIL: $5,250/month avg × 12 = $63,000 annualized > $47,150 maximum (should FAIL)'
   }
 ];
 

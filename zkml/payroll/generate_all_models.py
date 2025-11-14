@@ -42,6 +42,21 @@ class FirstTimeLoanModel(nn.Module):
         is_consistent = (range_ratio < threshold).float()
         return avg * is_consistent
 
+class TaxBracketModel(nn.Module):
+    """
+    Type 5: Tax Bracket Proof
+    Proves annual income falls within specified US federal tax bracket
+    Same logic as IncomeRangeModel but designed for tax bracket bounds
+    """
+    def forward(self, p1, p2, p3, p4, p5, p6, min_threshold, max_threshold):
+        # Sum 6 monthly payments and annualize (6 months → 12 months)
+        total_6_months = p1 + p2 + p3 + p4 + p5 + p6
+        annualized_total = total_6_months * 2.0  # Annualize to yearly
+        # Check if annualized total is within tax bracket [min_threshold, max_threshold]
+        above_min = (annualized_total >= min_threshold).float()
+        below_max = (annualized_total <= max_threshold).float()
+        return above_min * below_max
+
 def run_ezkl_workflow(name, num_inputs):
     """Run complete EZKL workflow for a model"""
     print(f"   → gen-settings...")
@@ -78,11 +93,11 @@ def run_ezkl_workflow(name, num_inputs):
 
 def main():
     print("\n" + "="*70)
-    print("  zkSalaria: Generating all 4 models with EZKL Python API")
+    print("  zkSalaria: Generating all 5 models with EZKL Python API")
     print("="*70)
 
     # Model 1: Income Above Threshold
-    print("\n[1/4] Income Above Threshold")
+    print("\n[1/5] Income Above Threshold")
     os.makedirs("generated/income_above_threshold", exist_ok=True)
     os.chdir("generated/income_above_threshold")
 
@@ -101,7 +116,7 @@ def main():
     os.chdir("../..")
 
     # Model 2: Income Range
-    print("\n[2/4] Income Range")
+    print("\n[2/5] Income Range")
     os.makedirs("generated/income_range", exist_ok=True)
     os.chdir("generated/income_range")
 
@@ -123,7 +138,7 @@ def main():
     os.chdir("../..")
 
     # Model 3: Average Income
-    print("\n[3/4] Average Income")
+    print("\n[3/5] Average Income")
     os.makedirs("generated/average_income", exist_ok=True)
     os.chdir("generated/average_income")
 
@@ -142,7 +157,7 @@ def main():
     os.chdir("../..")
 
     # Model 4: First Time Loan
-    print("\n[4/4] First Time Loan Eligibility")
+    print("\n[4/5] First Time Loan Eligibility")
     os.makedirs("generated/first_time_loan", exist_ok=True)
     os.chdir("generated/first_time_loan")
 
@@ -160,8 +175,30 @@ def main():
     run_ezkl_workflow("first_time_loan", 7)
     os.chdir("../..")
 
+    # Model 5: Tax Bracket
+    print("\n[5/5] Tax Bracket Proof")
+    os.makedirs("generated/tax_bracket", exist_ok=True)
+    os.chdir("generated/tax_bracket")
+
+    model = TaxBracketModel()
+    model.eval()
+    # NORMALIZED VALUES: 12% tax bracket example ($11,601 - $47,150 yearly)
+    # Using $2,900/month × 6 = $17,400 → annualized = $34,800/year (falls in 12% bracket)
+    # Normalized: $2,900 → 0.29, min=$11,601 → 1.1601, max=$47,150 → 4.7150
+    payments = [torch.tensor([[p]], dtype=torch.float32) for p in [0.29, 0.29, 0.29, 0.29, 0.29, 0.29]]
+    min_t = torch.tensor([[1.1601]], dtype=torch.float32)  # $11,601 yearly (12% bracket min)
+    max_t = torch.tensor([[4.7150]], dtype=torch.float32)  # $47,150 yearly (12% bracket max)
+
+    torch.onnx.export(model, tuple(payments + [min_t, max_t]), "tax_bracket.onnx", export_params=True, opset_version=10, do_constant_folding=True, input_names=['input'], output_names=['output'])
+
+    with open("tax_bracket_input.json", "w") as f:
+        json.dump({"input_shapes": [[1]] * 8, "input_data": [[0.29], [0.29], [0.29], [0.29], [0.29], [0.29], [1.1601], [4.7150]]}, f, indent=2)
+
+    run_ezkl_workflow("tax_bracket", 8)
+    os.chdir("../..")
+
     print("\n" + "="*70)
-    print("✅ All 4 models generated successfully!")
+    print("✅ All 5 models generated successfully!")
     print("="*70)
 
 if __name__ == "__main__":

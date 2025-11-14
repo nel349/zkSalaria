@@ -6,7 +6,8 @@ export enum ProofType {
   INCOME_ABOVE_THRESHOLD = 1,
   INCOME_RANGE = 2,
   AVERAGE_INCOME = 3,
-  FIRST_TIME_LOAN_ELIGIBILITY = 4
+  FIRST_TIME_LOAN_ELIGIBILITY = 4,
+  TAX_BRACKET = 5
 }
 
 export interface ProofInput {
@@ -81,5 +82,12 @@ export const MODEL_CONFIGS: Record<ProofType, ModelPaths> = {
     pk: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan_pk.key'),
     vk: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan_vk.key'),
     settings: join(PAYROLL_DIR, 'generated/first_time_loan/first_time_loan_settings.json')
+  },
+  [ProofType.TAX_BRACKET]: {
+    onnx: join(PAYROLL_DIR, 'generated/tax_bracket/tax_bracket.onnx'),
+    compiled: join(PAYROLL_DIR, 'generated/tax_bracket/tax_bracket.compiled'),
+    pk: join(PAYROLL_DIR, 'generated/tax_bracket/tax_bracket_pk.key'),
+    vk: join(PAYROLL_DIR, 'generated/tax_bracket/tax_bracket_vk.key'),
+    settings: join(PAYROLL_DIR, 'generated/tax_bracket/tax_bracket_settings.json')
   }
 };

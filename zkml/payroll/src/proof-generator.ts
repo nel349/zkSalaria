@@ -92,7 +92,7 @@ export class ProofGenerator {
       // });
 
       // Different proof types have different output formats:
-      // - INCOME_ABOVE_THRESHOLD, INCOME_RANGE, AVERAGE_INCOME: boolean (01 = true, 00 = false)
+      // - INCOME_ABOVE_THRESHOLD, INCOME_RANGE, AVERAGE_INCOME, TAX_BRACKET: boolean (01 = true, 00 = false)
       // - FIRST_TIME_LOAN_ELIGIBILITY: number (average income if consistent, 0 if not)
       let zkmlResult: boolean;
       if (proofType === ProofType.FIRST_TIME_LOAN_ELIGIBILITY) {
@@ -101,7 +101,7 @@ export class ProofGenerator {
         const outputValue = parseInt(outputHex.substring(0, 8), 16);
         zkmlResult = outputValue > 0;
       } else {
-        // For other proof types, check if first 2 chars are '01'
+        // For other proof types (including TAX_BRACKET), check if first 2 chars are '01'
         zkmlResult = outputHex.substring(0, 2) === '01';
       }
       // console.log('🔍 RESULT PARSING:', { outputHexPrefix: outputHex.substring(0, 2), zkmlResult });
@@ -156,9 +156,9 @@ export class ProofGenerator {
       throw new Error('Threshold cannot be negative');
     }
 
-    if (proofType === ProofType.INCOME_RANGE) {
+    if (proofType === ProofType.INCOME_RANGE || proofType === ProofType.TAX_BRACKET) {
       if (!input.thresholdMax) {
-        throw new Error('INCOME_RANGE requires thresholdMax');
+        throw new Error('INCOME_RANGE and TAX_BRACKET require thresholdMax');
       }
       if (input.thresholdMax <= input.thresholdMin) {
         throw new Error('thresholdMax must be greater than thresholdMin');
@@ -183,8 +183,9 @@ export class ProofGenerator {
         return [...payments, thresholdMin];
 
       case ProofType.INCOME_RANGE:
+      case ProofType.TAX_BRACKET:
         if (!thresholdMax) {
-          throw new Error('INCOME_RANGE requires thresholdMax');
+          throw new Error('INCOME_RANGE and TAX_BRACKET require thresholdMax');
         }
         return [...payments, thresholdMin, thresholdMax];
 
