@@ -230,8 +230,10 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
 
       fastify.log.info('  ✓ ZK proof generated', undefined, { duration: proofResult.duration });
 
-      // Step 2: Initialize PayrollAPI to compute history commitment
-      // This MUST happen before creating attestation, as we need the history_commitment
+      // Step 2: Pre-flight validation (before blockchain submission)
+      // Validate all circuit requirements to provide clear error messages
+      fastify.log.info('  → Running pre-flight validation...');
+
       if (!contract_address || process.env.ENABLE_BLOCKCHAIN_SUBMISSION !== 'true') {
         fastify.log.error('  ❌ contract_address and ENABLE_BLOCKCHAIN_SUBMISSION required');
         return reply.code(400).send({
@@ -243,32 +245,106 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
         } as GenerateProofResponse);
       }
 
+      // Validation 1: Proof type must be 1-5
+      if (proof_type < 1 || proof_type > 5) {
+        fastify.log.error(`  ❌ Invalid proof type: ${proof_type} (must be 1-5)`);
+        return reply.code(400).send({
+          success: false,
+          error: 'Validation Error',
+          error_code: ErrorCode.VALIDATION_ERROR,
+          message: `Invalid proof type: ${proof_type}. Must be 1 (INCOME_ABOVE_THRESHOLD), 2 (INCOME_RANGE), 3 (AVERAGE_INCOME), 4 (CREDIT_SCORE), or 5 (TAX_BRACKET)`,
+          duration: Date.now() - startTime
+        } as GenerateProofResponse);
+      }
+
+      // Validation 2: Denormalize thresholds and validate ranges
+      const NORMALIZATION_FACTOR = 10000;
+      const denormalizedMin = Math.round(threshold_min * NORMALIZATION_FACTOR);
+      const denormalizedMax = threshold_max ? Math.round(threshold_max * NORMALIZATION_FACTOR) : 0;
+
+      fastify.log.info({
+        normalized: { min: threshold_min, max: threshold_max },
+        denormalized: { min: denormalizedMin, max: denormalizedMax }
+      }, '  → Denormalized thresholds');
+
+      // Validation 3: For INCOME_RANGE (type 2), threshold_max must be > threshold_min
+      if (proof_type === 2) {
+        if (denormalizedMax <= denormalizedMin) {
+          fastify.log.error(`  ❌ Invalid INCOME_RANGE: max (${denormalizedMax}) must be > min (${denormalizedMin})`);
+          return reply.code(400).send({
+            success: false,
+            error: 'Validation Error',
+            error_code: ErrorCode.VALIDATION_ERROR,
+            message: `Invalid INCOME_RANGE: threshold_max (${denormalizedMax}) must be greater than threshold_min (${denormalizedMin})`,
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        }
+      }
+
+      // Validation 4: For TAX_BRACKET (type 5), validate it matches one of 7 US federal brackets
+      if (proof_type === 5) {
+        const validBrackets = [
+          { min: 0, max: 11600, name: '10% bracket ($0 - $11,600)' },
+          { min: 11601, max: 47150, name: '12% bracket ($11,601 - $47,150)' },
+          { min: 47151, max: 100525, name: '22% bracket ($47,151 - $100,525)' },
+          { min: 100526, max: 191950, name: '24% bracket ($100,526 - $191,950)' },
+          { min: 191951, max: 243725, name: '32% bracket ($191,951 - $243,725)' },
+          { min: 243726, max: 609350, name: '35% bracket ($243,726 - $609,350)' },
+          { min: 609351, max: 999999999, name: '37% bracket ($609,351+)' },
+        ];
+
+        const isValidBracket = validBrackets.some(
+          b => b.min === denormalizedMin && b.max === denormalizedMax
+        );
+
+        if (!isValidBracket) {
+          const bracketNames = validBrackets.map(b => b.name).join(', ');
+          fastify.log.error(`  ❌ Invalid TAX_BRACKET: min=${denormalizedMin}, max=${denormalizedMax} does not match any US federal tax bracket`);
+          return reply.code(400).send({
+            success: false,
+            error: 'Validation Error',
+            error_code: ErrorCode.VALIDATION_ERROR,
+            message: `Invalid TAX_BRACKET: (${denormalizedMin}, ${denormalizedMax}) does not match any of the 7 US federal tax brackets. Valid brackets: ${bracketNames}`,
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        }
+        fastify.log.info(`  ✓ Valid TAX_BRACKET: ${validBrackets.find(b => b.min === denormalizedMin)?.name}`);
+      }
+
+      fastify.log.info('  ✓ Pre-flight validation passed');
+
       try {
-        fastify.log.info('  → Initializing PayrollAPI to compute history commitment...');
+        fastify.log.info('  → Initializing PayrollAPI for contract state checks...');
 
         // Initialize provider service with contract address
         const config = loadVerifierConfig(contract_address);
         const providerSvc = new ProviderService(fastify.log as unknown as Logger, config);
         const api = await providerSvc.initialize();
 
-        // Compute history commitment using the verifier's PayrollAPI
+        // Pre-flight check 1: Verify that this verifier is trusted
+        fastify.log.info('  → Checking if verifier is trusted...');
+        const verifierPubkey = signer.getPublicKey();
+        const isTrusted = await api.isTrustedVerifier(verifierPubkey);
+
+        if (!isTrusted) {
+          fastify.log.error(`  ❌ Verifier not trusted: ${verifierPubkey}`);
+          await providerSvc.shutdown();
+          return reply.code(403).send({
+            success: false,
+            error: 'Forbidden',
+            error_code: ErrorCode.VALIDATION_ERROR,
+            message: `Verifier ${verifierPubkey.substring(0, 16)}... is not registered as a trusted verifier for this contract`,
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        }
+        fastify.log.info(`  ✓ Verifier is trusted: ${verifierPubkey.substring(0, 16)}...`);
+
+        // Pre-flight check 2: Compute and verify history commitment
         fastify.log.info('  → Computing history commitment...');
         const history_commitment = await api.computeHistoryCommitment(employee_id);
         fastify.log.info(`  ✓ History commitment computed: ${history_commitment.substring(0, 16)}...`);
 
-        // CRITICAL: Denormalize thresholds BEFORE creating attestation
-        // ZKML uses normalized values (÷ 10000), but contract expects denormalized values
-        // The attestation hash MUST be computed with the SAME values that will be sent to the circuit
-        const NORMALIZATION_FACTOR = 10000;
-        const denormalizedMin = Math.floor(threshold_min * NORMALIZATION_FACTOR);
-        const denormalizedMax = threshold_max ? Math.floor(threshold_max * NORMALIZATION_FACTOR) : 0;
-
-        fastify.log.info({
-          normalized: { min: threshold_min, max: threshold_max },
-          denormalized: { min: denormalizedMin, max: denormalizedMax }
-        }, '  → Denormalized thresholds for attestation & blockchain');
-
-        // Step 3: Create attestation WITH DENORMALIZED THRESHOLDS
+        // Step 3: Create attestation WITH DENORMALIZED THRESHOLDS (already computed in pre-flight validation)
         // This ensures the attestation hash matches what the circuit will reconstruct
         fastify.log.info('  → Creating attestation...');
         const attestation = await signer.createAttestation({

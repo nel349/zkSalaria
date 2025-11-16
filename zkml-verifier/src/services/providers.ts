@@ -5,7 +5,7 @@
  * Creates a wallet from VERIFIER_SECRET_KEY and uses it to create providers for PayrollAPI.
  */
 
-import { PayrollAPI, type PayrollProviders } from '@zksalaria/payroll-api';
+import { DeployedPayrollAPI, PayrollAPI, type PayrollProviders } from '@zksalaria/payroll-api';
 import type { Logger } from 'pino';
 import type { Wallet } from '@midnight-ntwrk/wallet-api';
 import { type Resource, WalletBuilder } from '@midnight-ntwrk/wallet';
@@ -104,7 +104,7 @@ export class ProviderService {
   /**
    * Initialize Midnight providers and PayrollAPI
    */
-  async initialize(): Promise<any> {
+  async initialize(): Promise<DeployedPayrollAPI> {
     if (this.api) {
       this.logger.warn('API already initialized');
       return this.api;

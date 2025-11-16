@@ -100,6 +100,7 @@ export interface DeployedPayrollAPI {
   // ZKML Income Proofs (Phase 2.1)
   // Company registers verifier by PUBLIC key (no secret needed)
   registerTrustedVerifier(verifierPubkey: string): Promise<boolean>;
+  isTrustedVerifier(verifierPubkey: string): Promise<boolean>;
   submitIncomeProof(
     employeeId: string,
     proofType: bigint,
@@ -1116,6 +1117,31 @@ export class PayrollAPI implements DeployedPayrollAPI {
     return result.private.result;
   }
 
+  async isTrustedVerifier(verifierPubkey: string): Promise<boolean> {
+    this.logger?.info({ isTrustedVerifier: { verifierPubkey } });
+
+    const state = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!state) {
+      this.logger?.warn('No contract state available for isTrustedVerifier');
+      return false;
+    }
+
+    const ledgerState = ledger(state.data);
+    const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
+
+    // Check if verifier pubkey exists in trusted_verifiers map
+    const isTrusted = ledgerState.trusted_verifiers.member(verifierPubkeyBytes);
+
+    this.logger?.info({
+      isTrustedVerifier: {
+        verifierPubkey,
+        isTrusted,
+      }
+    });
+
+    return isTrusted;
+  }
+
   async submitIncomeProof(
     employeeId: string,
     proofType: bigint,
@@ -1160,8 +1186,9 @@ export class PayrollAPI implements DeployedPayrollAPI {
 
     // IMPORTANT: ZKML thresholds are normalized integers (8 = $80k/year normalized by 10k)
     // Do NOT use parseAmount() which multiplies by 1e6 - just parse the integer
-    const thresholdMinInt = BigInt(Math.floor(parseFloat(thresholdMin)));
-    const thresholdMaxInt = BigInt(Math.floor(parseFloat(thresholdMax)));
+    // Use Math.round() to avoid floating point precision issues (e.g., 4.7151 * 10000 = 47150.9999...)
+    const thresholdMinInt = BigInt(Math.round(parseFloat(thresholdMin)));
+    const thresholdMaxInt = BigInt(Math.round(parseFloat(thresholdMax)));
 
     // DEBUG: Log all bytes being sent to circuit
     const currentTime = Math.floor(Date.now() / 1000);
