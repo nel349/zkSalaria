@@ -1,3 +1,6 @@
+// IMPORTANT: Load polyfills first before any other imports
+import './globals';
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { viteCommonjs } from '@originjs/vite-plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
   cacheDir: './.vite',
@@ -27,6 +28,15 @@ export default defineConfig({
     preserveSymlinks: true,
   },
   plugins: [
+    nodePolyfills({
+      // Only polyfill module imports, not globals (handled in src/globals.ts)
+      globals: {
+        Buffer: false,
+        global: false,
+        process: false,
+      },
+      protocolImports: true,
+    }),
     react(),
     // Transform CJS (including workspace .cjs files) before wasm/top-level-await handling
     viteCommonjs({
@@ -62,6 +72,7 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+    'process.env': {},
   },
 });
 

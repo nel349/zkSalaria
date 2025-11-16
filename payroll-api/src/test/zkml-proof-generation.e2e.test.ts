@@ -368,4 +368,105 @@ describe('ZKML Proof Generation E2E Tests', () => {
     logger.info(`✅ All ${activeTestCases.length} proof types validated successfully`);
     logger.info(`   Total duration: ${(results.reduce((sum, r) => sum + r.duration, 0) / 1000).toFixed(2)}s`);
   }, 120_000); // 2 minutes for all 4 proof types
+
+  /**
+   * E2E Test: Tax Bracket Proof (Type 5)
+   * Minimal test covering both success and failure cases
+   */
+  test('should generate Tax Bracket proof (Type 5) - 12% bracket and validate rejection for out-of-bracket income', async () => {
+    logger.info('\n🏛️  Tax Bracket Proof E2E Test (Type 5)');
+    logger.info('========================================\n');
+
+    // Test Case 1: Valid 12% bracket ($11,601 - $47,150)
+    // 6 months × $2,900/month = $17,400 → annualized = $34,800 (falls in 12% bracket)
+    const paymentsRaw = [2900, 2900, 2900, 2900, 2900, 2900];
+    const thresholdMinRaw = 11601;  // 12% bracket min (ANNUAL)
+    const thresholdMaxRaw = 47150;  // 12% bracket max (ANNUAL)
+
+    const validCase = {
+      name: '12% Tax Bracket ($34,800/year)',
+      proof_type: 5,
+      payments: paymentsRaw.map(p => p / NORMALIZATION_FACTOR),  // NORMALIZE payments
+      threshold_min: thresholdMinRaw / NORMALIZATION_FACTOR,      // NORMALIZE thresholds
+      threshold_max: thresholdMaxRaw / NORMALIZATION_FACTOR,
+      expectedSuccess: true,
+    };
+
+    logger.info(`Test 1: ${validCase.name}`);
+    logger.info(`  Income: 6mo × $${paymentsRaw[0]} = $${paymentsRaw.reduce((a, b) => a + b, 0)}`);
+    logger.info(`  Annualized: $${paymentsRaw.reduce((a, b) => a + b, 0) * 2}`);
+    logger.info(`  Bracket: $${thresholdMinRaw.toLocaleString()} - $${thresholdMaxRaw.toLocaleString()}`);
+
+    const response1 = await fetch(`${VERIFIER_SERVICE_URL}/api/zkml/generate-proof`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        proof_type: validCase.proof_type,
+        payments: validCase.payments,  // Normalized
+        threshold_min: validCase.threshold_min,  // Normalized
+        threshold_max: validCase.threshold_max,  // Normalized
+        employee_id: 'TAX_BRACKET_TEST_001',
+        txids: Array(12).fill('0x0000000000000000000000000000000000000000000000000000000000000001'),
+        history_commitment: '0x' + '1'.repeat(64),
+        contract_address: 'ct1test' + '0'.repeat(56),
+      }),
+    });
+
+    const result1: GenerateProofResponse = await response1.json() as GenerateProofResponse;
+
+    logger.info(`  Result: ${result1.success ? '✅ PASS' : '❌ FAIL'}`);
+    if (!result1.success) {
+      logger.error(`  Error: ${result1.error || result1.message}`);
+    }
+    expect(result1.success).toBe(true);
+    expect(result1.proof_json).toBeTruthy();
+    expect(result1.attestation).toBeTruthy();
+    expect(result1.attestation?.threshold).toBe('11601'); // Min threshold (denormalized)
+    logger.info(`  Proof generated in ${(result1.duration! / 1000).toFixed(2)}s\n`);
+
+    // Test Case 2: Invalid - Income too low for 22% bracket
+    // Same income ($34,800) but trying to prove 22% bracket ($47,151 - $100,525)
+    const invalidMinRaw = 47151;
+    const invalidMaxRaw = 100525;
+
+    const invalidCase = {
+      name: '22% Tax Bracket (income too low)',
+      proof_type: 5,
+      payments: paymentsRaw.map(p => p / NORMALIZATION_FACTOR),  // NORMALIZE payments
+      threshold_min: invalidMinRaw / NORMALIZATION_FACTOR,        // NORMALIZE thresholds
+      threshold_max: invalidMaxRaw / NORMALIZATION_FACTOR,
+      expectedSuccess: false,
+    };
+
+    logger.info(`Test 2: ${invalidCase.name}`);
+    logger.info(`  Income: $${paymentsRaw.reduce((a, b) => a + b, 0) * 2} (annualized)`);
+    logger.info(`  Bracket: $${invalidMinRaw.toLocaleString()} - $${invalidMaxRaw.toLocaleString()}`);
+    logger.info(`  Expected: FAIL (income $34,800 < bracket min $47,151)`);
+
+    const response2 = await fetch(`${VERIFIER_SERVICE_URL}/api/zkml/generate-proof`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        proof_type: invalidCase.proof_type,
+        payments: invalidCase.payments,  // Normalized
+        threshold_min: invalidCase.threshold_min,  // Normalized
+        threshold_max: invalidCase.threshold_max,  // Normalized
+        employee_id: 'TAX_BRACKET_TEST_002',
+        txids: Array(12).fill('0x0000000000000000000000000000000000000000000000000000000000000002'),
+        history_commitment: '0x' + '2'.repeat(64),
+        contract_address: 'ct1test' + '0'.repeat(56),
+      }),
+    });
+
+    const result2: GenerateProofResponse = await response2.json() as GenerateProofResponse;
+
+    logger.info(`  Result: ${!result2.success ? '✅ PASS (correctly rejected)' : '❌ FAIL (should have been rejected)'}`);
+    expect(result2.success).toBe(false);
+    expect(result2.error || result2.message).toBeTruthy();
+    logger.info(`  ${result2.error || result2.message}\n`);
+
+    logger.info('✅ Tax Bracket E2E Test Complete');
+    logger.info('   - Valid 12% bracket: PASS');
+    logger.info('   - Out-of-bracket rejection: PASS');
+  }, 120_000); // 2 minutes timeout
 });

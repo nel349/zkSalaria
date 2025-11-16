@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -45,10 +45,26 @@ interface GenerateProofModalProps {
   api: DeployedPayrollAPI | null;
 }
 
-type ProofType = 'income_above' | 'income_range' | 'average_income' | 'first_time_loan';
+type ProofType = 'income_above' | 'income_range' | 'average_income' | 'first_time_loan' | 'tax_bracket';
 
 // Verifier service configuration
 const VERIFIER_SERVICE_URL = import.meta.env.VITE_VERIFIER_SERVICE_URL || 'http://localhost:3002';
+
+// US Federal Tax Brackets (2024, Single Filer)
+const TAX_BRACKETS = [
+  { bracket: 1, rate: '10%', min: 0, max: 11600, description: '$0 - $11,600', programs: ['Medicaid', 'SNAP', 'LIHEAP'] },
+  { bracket: 2, rate: '12%', min: 11601, max: 47150, description: '$11,601 - $47,150', programs: ['Section 8', 'Student Loan Forgiveness', 'EITC'] },
+  { bracket: 3, rate: '22%', min: 47151, max: 100525, description: '$47,151 - $100,525', programs: ['ACA Subsidies'] },
+  { bracket: 4, rate: '24%', min: 100526, max: 191950, description: '$100,526 - $191,950', programs: [] },
+  { bracket: 5, rate: '32%', min: 191951, max: 243725, description: '$191,951 - $243,725', programs: [] },
+  { bracket: 6, rate: '35%', min: 243726, max: 609350, description: '$243,726 - $609,350', programs: [] },
+  { bracket: 7, rate: '37%', min: 609351, max: 999999999, description: '$609,351+', programs: [] },
+];
+
+// Get tax bracket from annual income
+const getTaxBracket = (annualIncome: number) => {
+  return TAX_BRACKETS.find(b => annualIncome >= b.min && annualIncome <= b.max) || TAX_BRACKETS[0];
+};
 
 enum ErrorCode {
   THRESHOLD_NOT_MET = 'THRESHOLD_NOT_MET',
@@ -98,6 +114,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
   const [includeCompany, setIncludeCompany] = useState(true);
   const [expirationDays, setExpirationDays] = useState('30');
   const [verifierEmail, setVerifierEmail] = useState('');
+  const [detectedBracket, setDetectedBracket] = useState<typeof TAX_BRACKETS[0] | null>(null);
+  const [annualizedIncome, setAnnualizedIncome] = useState<number | null>(null);
 
   // Processing state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -144,6 +162,12 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       description: 'Prove 6 months of stable, consistent salary history',
       example: 'I qualify for a loan with my stable income history',
     },
+    {
+      value: 'tax_bracket' as ProofType,
+      label: 'Tax Bracket Proof',
+      description: 'Prove your income falls within a specific US federal tax bracket',
+      example: 'My income qualifies for government assistance programs',
+    },
   ];
 
   const expirationOptions = [
@@ -155,6 +179,31 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
   ];
 
   const selectedProofType = proofTypes.find((pt) => pt.value === proofType);
+
+  // Auto-detect tax bracket when tax_bracket proof type is selected
+  useEffect(() => {
+    if (proofType === 'tax_bracket' && api && open) {
+      const detectBracket = async () => {
+        try {
+          const paymentHistory = await api.getEmployeePaymentHistoryDecrypted(employeeId);
+          if (paymentHistory.length >= 6) {
+            const last6 = paymentHistory.slice(-6);
+            const sixMonthTotal = last6.reduce((sum, p) => sum + Number(p.decrypted_amount) / 100, 0);
+            const annualized = sixMonthTotal * 2; // Annualize from 6 months
+            const bracket = getTaxBracket(annualized);
+
+            setAnnualizedIncome(annualized);
+            setDetectedBracket(bracket);
+            setMinThreshold(bracket.min.toString());
+            setMaxThreshold(bracket.max.toString());
+          }
+        } catch (error) {
+          console.error('Failed to detect tax bracket:', error);
+        }
+      };
+      detectBracket();
+    }
+  }, [proofType, api, employeeId, open]);
 
   const getProofStatement = (): string => {
     const employmentText = includeEmployment ? ' and is currently employed' : '';
@@ -169,6 +218,11 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         return `${employeeName}'s average monthly income is at least $${Number(minThreshold).toLocaleString()}/month${employmentText}${companyText}.`;
       case 'first_time_loan':
         return `${employeeName} has 6 consecutive months of consistent salary${employmentText}${companyText}.`;
+      case 'tax_bracket':
+        if (detectedBracket) {
+          return `${employeeName}'s income falls within the ${detectedBracket.rate} tax bracket (${detectedBracket.description})${employmentText}${companyText}.`;
+        }
+        return `${employeeName}'s income qualifies for a specific tax bracket${employmentText}${companyText}.`;
       default:
         return '';
     }
@@ -217,12 +271,13 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
     try {
       console.log('[GenerateProof] Starting real proof generation...');
 
-      // Map UI proof types to contract types (1-4)
+      // Map UI proof types to contract types (1-5)
       const proofTypeNum =
         proofType === 'income_above' ? 1n :
         proofType === 'income_range' ? 2n :
         proofType === 'average_income' ? 3n :
-        4n; // first_time_loan
+        proofType === 'first_time_loan' ? 4n :
+        5n; // tax_bracket
 
       // Fetch employee payment history with decrypted amounts
       console.log('[GenerateProof] Fetching payment history...');
@@ -257,12 +312,13 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       // Threshold conversion and normalization
       if (proofType === 'income_range') {
         // INCOME_RANGE (Type 2): Requires BOTH min and max thresholds
-        // Convert annual threshold to 6-month total, then normalize
-        thresholdMinDollars = (Number(minThreshold) / 2) / NORMALIZATION_FACTOR;
-        thresholdMaxDollars = maxThreshold ? (Number(maxThreshold) / 2) / NORMALIZATION_FACTOR : undefined;
+        // Thresholds are ANNUAL values, model annualizes 6-month data (same as Type 5)
+        // Normalize annual thresholds directly (model will annualize payments)
+        thresholdMinDollars = Number(minThreshold) / NORMALIZATION_FACTOR;
+        thresholdMaxDollars = maxThreshold ? Number(maxThreshold) / NORMALIZATION_FACTOR : undefined;
       } else if (proofType === 'income_above') {
         // INCOME_ABOVE_THRESHOLD (Type 1): Only minimum threshold
-        // Convert annual threshold to 6-month total, then normalize
+        // Convert annual threshold to 6-month total, then normalize (model does NOT annualize)
         thresholdMinDollars = (Number(minThreshold) / 2) / NORMALIZATION_FACTOR;
         thresholdMaxDollars = undefined; // Explicitly no max for income_above
       } else if (proofType === 'average_income') {
@@ -270,6 +326,12 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
         // Normalize threshold directly (no annual->6month conversion)
         thresholdMinDollars = Number(minThreshold) / NORMALIZATION_FACTOR;
         thresholdMaxDollars = undefined; // Explicitly no max for average_income
+      } else if (proofType === 'tax_bracket') {
+        // TAX_BRACKET (Type 5): Requires BOTH min and max thresholds (bracket bounds)
+        // Thresholds are ANNUAL values, model annualizes 6-month data
+        // Normalize annual thresholds directly
+        thresholdMinDollars = Number(minThreshold) / NORMALIZATION_FACTOR;
+        thresholdMaxDollars = Number(maxThreshold) / NORMALIZATION_FACTOR;
       } else {
         // FIRST_TIME_LOAN (Type 4): Only minimum threshold (ratio 0-1)
         // Threshold is already a ratio, just normalize for EZKL
@@ -418,6 +480,9 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
             break;
           case 'income_above':
           case 'income_range':
+          case 'tax_bracket':
+            actualValue = total * 2; // Annualize for tax bracket
+            break;
           default:
             actualValue = total;
             break;
@@ -428,7 +493,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
           proofType === 'income_above' ? 1 :
           proofType === 'income_range' ? 2 :
           proofType === 'average_income' ? 3 :
-          4; // first_time_loan
+          proofType === 'first_time_loan' ? 4 :
+          5; // tax_bracket
 
         // Store failed proof attempt in localStorage
         console.log('[GenerateProof] About to store failed proof attempt...');
@@ -709,7 +775,8 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
       1: 'Income Above Threshold',
       2: 'Income Range',
       3: 'Average Income',
-      4: 'First-Time Loan Eligibility'
+      4: 'First-Time Loan Eligibility',
+      5: 'Tax Bracket Proof'
     };
 
     return (
@@ -948,7 +1015,34 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
             </Typography>
 
             <Stack spacing={2}>
-              {proofType === 'first_time_loan' ? (
+              {proofType === 'tax_bracket' ? (
+                <Box sx={{ p: 2, bgcolor: theme.colors.background.surface, borderRadius: 1, border: `1px solid ${theme.colors.primary[500]}` }}>
+                  {detectedBracket && annualizedIncome !== null ? (
+                    <>
+                      <Typography variant="body2" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary} sx={{ mb: 1 }}>
+                        Detected Tax Bracket: {detectedBracket.rate} ({detectedBracket.description})
+                      </Typography>
+                      <Typography variant="caption" color={theme.colors.text.secondary} sx={{ display: 'block', mb: 1 }}>
+                        Based on annualized income of ${annualizedIncome.toLocaleString()}/year from your last 6 months of payments
+                      </Typography>
+                      {detectedBracket.programs.length > 0 && (
+                        <Box sx={{ mt: 2, p: 1.5, bgcolor: mode === 'dark' ? theme.colors.background.paper : theme.colors.primary[50], borderRadius: 1 }}>
+                          <Typography variant="caption" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
+                            Programs you may qualify for:
+                          </Typography>
+                          <Typography variant="caption" color={theme.colors.text.secondary} sx={{ display: 'block', mt: 0.5 }}>
+                            {detectedBracket.programs.join(', ')}
+                          </Typography>
+                        </Box>
+                      )}
+                    </>
+                  ) : (
+                    <Typography variant="body2" color={theme.colors.text.secondary}>
+                      Detecting your tax bracket...
+                    </Typography>
+                  )}
+                </Box>
+              ) : proofType === 'first_time_loan' ? (
                 <Box sx={{ p: 2, bgcolor: theme.colors.background.surface, borderRadius: 1 }}>
                   <Typography variant="body2" color={theme.colors.text.primary}>
                     This proof demonstrates you have 6 consecutive months of consistent salary payments, which qualifies you for first-time loan eligibility.

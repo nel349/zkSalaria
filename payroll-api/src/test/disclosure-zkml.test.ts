@@ -9,7 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { currentDir } from './config.js';
 import { computeVerifierPubkeyFromString } from '@zksalaria/payroll-contract';
-import type { GenerateProofResponse } from '@zksalaria/zkml-verifier';
+import type { GenerateProofResponse } from './zkml-types.js';
 
 /**
  * E2E tests for Disclosure Management & ZKML Income Proofs
