@@ -32,7 +32,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import { useTheme, useThemeValues } from '../theme';
 import { toast } from 'react-hot-toast';
 import { type DeployedPayrollAPI, utils } from '@zksalaria/payroll-api';
-import { generateProofPDF, generateFailureReport } from '../utils/pdfGenerator';
+import { generateProofPDF, generateFailureReport, PROOF_TYPE_NAMES } from '../utils/pdfGenerator';
 import { getCurrentEmployer } from '../utils/EmployerContractsLocalState';
 import { storeProofAttempt } from './MyIncomeProofsModal';
 
@@ -64,6 +64,18 @@ const TAX_BRACKETS = [
 // Get tax bracket from annual income
 const getTaxBracket = (annualIncome: number) => {
   return TAX_BRACKETS.find(b => annualIncome >= b.min && annualIncome <= b.max) || TAX_BRACKETS[0];
+};
+
+// Convert ProofType string to numeric value for display
+const getProofTypeNumeric = (proofType: ProofType): number => {
+  const mapping: Record<ProofType, number> = {
+    income_above: 1,
+    income_range: 2,
+    average_income: 3,
+    first_time_loan: 4,
+    tax_bracket: 5,
+  };
+  return mapping[proofType];
 };
 
 enum ErrorCode {
@@ -664,6 +676,16 @@ export const GenerateProofModal: React.FC<GenerateProofModalProps> = ({
               </Typography>
               <Typography variant="h6" fontWeight={theme.typography.fontWeight.semibold} color={theme.colors.text.primary}>
                 {generatedProofId}
+              </Typography>
+            </Box>
+
+            {/* Verification Type */}
+            <Box>
+              <Typography variant="body2" color={theme.colors.text.secondary} sx={{ mb: 1 }}>
+                Verification Type
+              </Typography>
+              <Typography variant="body1" fontWeight={theme.typography.fontWeight.medium} color={theme.colors.text.primary}>
+                {PROOF_TYPE_NAMES[getProofTypeNumeric(proofType)] || `Type ${getProofTypeNumeric(proofType)}`}
               </Typography>
             </Box>
 

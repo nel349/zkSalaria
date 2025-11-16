@@ -18,6 +18,7 @@ const PROOF_TYPE_NAMES: Record<number, string> = {
   2: 'Income Range',
   3: 'Average Income',
   4: 'First-Time Loan Eligibility',
+  5: 'Tax Bracket Verification',
 };
 
 const PROOF_TYPE_DESCRIPTIONS: Record<number, string> = {
@@ -25,6 +26,7 @@ const PROOF_TYPE_DESCRIPTIONS: Record<number, string> = {
   2: 'Proves monthly income falls within specified range',
   3: 'Proves average income over 6 months meets minimum',
   4: 'Proves income consistency for loan eligibility',
+  5: 'Proves annual income falls within specific tax bracket',
 };
 
 const formatTimestamp = (timestamp: bigint): string => {
@@ -521,3 +523,6 @@ export const generateFailureReport = async (
   const filename = `zkSalaria-Verification-Failed-${Date.now()}.pdf`;
   doc.save(filename);
 };
+
+// Export proof type mappings for use in UI
+export { PROOF_TYPE_NAMES, PROOF_TYPE_DESCRIPTIONS };
