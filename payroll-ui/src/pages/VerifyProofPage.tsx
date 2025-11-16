@@ -64,7 +64,6 @@ export const VerifyProofPage: React.FC = () => {
   const [needsWallet, setNeedsWallet] = useState(false);
 
   // Verification requirements state
-  const [requiredProofType, setRequiredProofType] = useState<string>('');
   const [requiredThreshold, setRequiredThreshold] = useState<string>('');
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<{
@@ -142,7 +141,7 @@ export const VerifyProofPage: React.FC = () => {
   }, [employeeId, attestationHash, walletAddress, providers]);
 
   const handleVerifyRequirements = async () => {
-    if (!requiredProofType || !requiredThreshold || !proof || !contractAddress || !walletAddress) {
+    if (!requiredThreshold || !proof) {
       return;
     }
 
@@ -150,39 +149,74 @@ export const VerifyProofPage: React.FC = () => {
     setVerificationResult(null);
 
     try {
-      // Connect to contract
-      const api = await PayrollAPI.connect(
-        providers,
-        contractAddress,
-        walletAddress,
-        logger
-      );
+      const proofTypeNum = Number(proof.proof_type);
+      const requiredThresholdNum = parseFloat(requiredThreshold);
 
-      // Convert annual threshold to 6-month threshold for contract
-      // Contract stores 6-month thresholds, so we need to divide by 2
-      const sixMonthThreshold = Math.floor(parseFloat(requiredThreshold) / 2);
+      // Convert threshold based on proof type (same as contract logic):
+      // - Types 1-4: Use 6-month data, so divide annual by 2
+      // - Type 5 (Tax Bracket): Uses annual data, no conversion
+      const contractThreshold = proofTypeNum === 5
+        ? BigInt(Math.floor(requiredThresholdNum))
+        : BigInt(Math.floor(requiredThresholdNum / 2));
 
-      console.log('[VerifyRequirements] Converting:', {
-        annualInput: requiredThreshold,
-        sixMonthForContract: sixMonthThreshold
+      console.log('[VerifyRequirements] Client-side validation:', {
+        proofType: proofTypeNum,
+        requiredThreshold: contractThreshold.toString(),
+        proofMin: proof.threshold_min.toString(),
+        proofMax: proof.threshold_max.toString(),
+        expiresAt: Number(proof.expires_at),
+        now: Math.floor(Date.now() / 1000)
       });
 
-      // Call verifyIncomeProof with lender's requirements (6-month threshold)
-      const verified = await api.verifyIncomeProof(
-        employeeId!,
-        BigInt(requiredProofType),
-        sixMonthThreshold.toString()
-      );
+      // Client-side validation (matches contract verify_income_proof circuit logic)
+      let verified = true;
+      let reason = '';
+
+      // Step 1: Verify proof hasn't expired
+      const now = BigInt(Math.floor(Date.now() / 1000));
+      if (proof.expires_at !== 0n && proof.expires_at <= now) {
+        verified = false;
+        reason = 'Proof has expired';
+      }
+
+      // Step 2: Verify threshold based on proof type
+      if (verified) {
+        if (proofTypeNum === 1) {
+          // INCOME_ABOVE_THRESHOLD: threshold_min >= required
+          if (proof.threshold_min < contractThreshold) {
+            verified = false;
+            reason = `Minimum income ($${Number(proof.threshold_min).toLocaleString()}) is below required threshold ($${requiredThresholdNum.toLocaleString()})`;
+          }
+        } else if (proofTypeNum === 2) {
+          // INCOME_RANGE: required is within [min, max]
+          if (contractThreshold < proof.threshold_min || contractThreshold > proof.threshold_max) {
+            verified = false;
+            reason = `Required threshold ($${requiredThresholdNum.toLocaleString()}) is outside proven range ($${Number(proof.threshold_min).toLocaleString()} - $${Number(proof.threshold_max).toLocaleString()})`;
+          }
+        } else if (proofTypeNum === 3 || proofTypeNum === 4) {
+          // AVERAGE_INCOME / CREDIT_SCORE: threshold_min >= required
+          if (proof.threshold_min < contractThreshold) {
+            verified = false;
+            reason = `Proven value ($${Number(proof.threshold_min).toLocaleString()}) is below required threshold ($${requiredThresholdNum.toLocaleString()})`;
+          }
+        } else if (proofTypeNum === 5) {
+          // TAX_BRACKET: threshold_max <= required (income must be at or below bracket max)
+          if (proof.threshold_max > contractThreshold) {
+            verified = false;
+            reason = `Tax bracket maximum ($${Number(proof.threshold_max).toLocaleString()}) exceeds required threshold ($${requiredThresholdNum.toLocaleString()})`;
+          }
+        }
+      }
 
       if (verified) {
         setVerificationResult({
           success: true,
-          message: `The employee's income meets your annual requirement of $${parseFloat(requiredThreshold).toLocaleString()}. The proof is valid and not expired.`
+          message: `✓ The employee's proof meets your requirement of $${requiredThresholdNum.toLocaleString()} (annual). The proof is valid and not expired.`
         });
       } else {
         setVerificationResult({
           success: false,
-          message: `The employee's income does not meet your annual requirement of $${parseFloat(requiredThreshold).toLocaleString()}, or the proof type does not match, or the proof has expired.`
+          message: `✗ Verification failed: ${reason}`
         });
       }
     } catch (err) {
@@ -413,29 +447,26 @@ export const VerifyProofPage: React.FC = () => {
           </Typography>
 
           <Stack spacing={2.5}>
-            {/* Proof Type Selection */}
-            <TextField
-              select
-              fullWidth
-              label="Required Proof Type"
-              value={requiredProofType}
-              onChange={(e) => setRequiredProofType(e.target.value)}
-              helperText="Select the type of proof you require"
-            >
-              <MenuItem value="1">Type 1: Income Above Threshold</MenuItem>
-              <MenuItem value="2">Type 2: Income Range</MenuItem>
-              <MenuItem value="3">Type 3: Average Income</MenuItem>
-              <MenuItem value="4">Type 4: Credit Score</MenuItem>
-            </TextField>
-
             {/* Threshold Input */}
             <TextField
               fullWidth
-              label="Required Annual Income Threshold"
+              label={
+                proof && Number(proof.proof_type) === 5
+                  ? "Required Maximum Annual Income"
+                  : "Required Annual Income Threshold"
+              }
               value={requiredThreshold}
               onChange={(e) => setRequiredThreshold(e.target.value)}
-              placeholder="e.g., 30000 for $30k per year"
-              helperText="Enter your minimum annual income requirement (yearly total in whole dollars)"
+              placeholder={
+                proof && Number(proof.proof_type) === 5
+                  ? "e.g., 50000 (program requires income ≤ $50k)"
+                  : "e.g., 30000 for $30k per year"
+              }
+              helperText={
+                proof && Number(proof.proof_type) === 5
+                  ? "For Tax Bracket proofs: Enter the maximum income allowed for your program (in whole dollars)"
+                  : "Enter your minimum annual income requirement (yearly total in whole dollars)"
+              }
               type="number"
             />
 
@@ -445,7 +476,7 @@ export const VerifyProofPage: React.FC = () => {
               size="large"
               fullWidth
               onClick={handleVerifyRequirements}
-              disabled={!requiredProofType || !requiredThreshold || verifying}
+              disabled={!requiredThreshold || verifying}
               sx={{
                 bgcolor: theme.colors.primary[500],
                 '&:hover': { bgcolor: theme.colors.primary[700] },

@@ -39,6 +39,7 @@ const PROOF_TYPE_NAMES: Record<number, string> = {
   2: 'Income Range',
   3: 'Average Income',
   4: 'First-Time Loan Eligibility',
+  5: 'Tax Bracket Verification',
 };
 
 const PROOF_TYPE_DESCRIPTIONS: Record<number, string> = {
@@ -46,6 +47,7 @@ const PROOF_TYPE_DESCRIPTIONS: Record<number, string> = {
   2: 'Proves monthly income falls within specified range',
   3: 'Proves average income over 6 months meets minimum',
   4: 'Proves income consistency for loan eligibility',
+  5: 'Proves annual income falls within specific tax bracket',
 };
 
 interface ProofVerificationCardProps {
@@ -213,12 +215,14 @@ export const ProofVerificationCard: React.FC<ProofVerificationCardProps> = ({
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                {Number(proof.proof_type) === 2
+                {Number(proof.proof_type) === 2 || Number(proof.proof_type) === 5
                   ? `${formatAmount(proof.threshold_min)} - ${formatAmount(proof.threshold_max)}`
                   : `≥ ${formatAmount(proof.threshold_min)}`}
               </Typography>
               <Typography variant="caption" color={theme.colors.text.disabled}>
-                {Number(proof.proof_type) === 2 ? 'Income Range' : 'Minimum Income'}
+                {Number(proof.proof_type) === 2 ? 'Income Range' :
+                 Number(proof.proof_type) === 5 ? 'Tax Bracket Range (Annual)' :
+                 'Minimum Income'}
               </Typography>
             </Paper>
           </Grid>
