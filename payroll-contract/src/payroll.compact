@@ -2,12 +2,38 @@ pragma language_version >= 0.13.0;
 
 import CompactStandardLibrary;
 import "../../payroll-commons/PayrollCommons" prefix PC_;
-import "../../payroll-commons/BulletproofVerifier" prefix BP_;
+// BULLETPROOF SUPPORT - Commented out for MVP (signature-based auditor model)
+// Can be re-enabled later for premium tier with cryptographic threshold verification
+// import "../../payroll-commons/BulletproofVerifier" prefix BP_;
 
 // zkSalaria - Private Payroll System
 // Privacy-preserving payroll with real token operations
 
 export { CoinInfo };
+
+// ========================================
+// AUDITOR/VERIFIER STRUCTS
+// ========================================
+
+/**
+ * Trusted Verifier (Auditor) Record
+ * Stores metadata and reputation for licensed auditors who verify ZKML proofs
+ */
+struct TrustedVerifier {
+  pubkey: Bytes<32>,              // Auditor's public key
+  name: String,                   // e.g., "Deloitte Crypto Audit Division"
+  license: String,                // e.g., "CPA #123456, Delaware"
+  verifier_type: Uint<8>,         // 1=Big4, 2=Regional, 3=CryptoNative
+  registration_date: Uint<32>,    // Unix timestamp when registered
+  is_active: Boolean,             // Can be deactivated if misbehaving
+
+  // Reputation tracking
+  total_verifications: Uint<32>,      // Total proofs verified
+  successful_verifications: Uint<32>, // Proofs that passed
+  failed_verifications: Uint<32>,     // Proofs that failed
+  reputation_score: Uint<16>,         // 0-1000 scale (success_rate * 1000)
+  last_verification_date: Uint<32>    // Last activity timestamp
+}
 
 // ========================================
 // LEDGER STATE (Public)
@@ -61,10 +87,10 @@ export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
 export ledger recurring_payment_ids: List<Bytes<32>>;
 
 // ZKML Attestation System (Phase 2: ZKML Integration)
-// Stores trusted verifier public keys and tracks used attestations
-// Using Map<Key, Uint<1>> pattern (0=false, 1=true) since Compact Sets have limited operations
-export ledger trusted_verifiers: Map<Bytes<32>, Uint<1>>;       // verifier_pubkey -> 1
-export ledger used_attestations: Map<Bytes<32>, Uint<1>>;       // attestation_hash -> 1
+// Stores trusted auditor/verifiers with reputation tracking
+// Tracks used attestations to prevent replay attacks
+export ledger trusted_verifiers: Map<Bytes<32>, TrustedVerifier>;  // verifier_pubkey -> TrustedVerifier
+export ledger used_attestations: Map<Bytes<32>, Uint<1>>;          // attestation_hash -> 1
 
 // ZKML Income Proofs (Section 2.1: Salary History Proofs)
 // Stores comprehensive income proofs for lender/landlord verification
@@ -1060,8 +1086,12 @@ export circuit process_recurring_payment(
  *
  * @returns Boolean - true if registered successfully, false if already exists
  */
-export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
-  // Company provides the verifier's PUBLIC key (no secret needed)
+export circuit register_trusted_verifier(
+  verifier_pubkey: Bytes<32>,
+  verifier_name: String,
+  verifier_license: String,
+  verifier_type: Uint<8>
+): Boolean {
   // TODO: Add owner check - only contract owner (company) should be able to register verifiers
   // For now, anyone can call this (MVP simplification)
 
@@ -1070,8 +1100,26 @@ export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
     return false; // Already registered
   }
 
-  // Register the verifier's public key
-  trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
+  // Create verifier record with perfect initial reputation
+  const verifier = TrustedVerifier {
+    pubkey: disclose(verifier_pubkey),
+    name: disclose(verifier_name),
+    license: disclose(verifier_license),
+    verifier_type: disclose(verifier_type),
+    registration_date: current_timestamp,
+    is_active: true,
+
+    // Initialize reputation (start with perfect score)
+    total_verifications: 0 as Uint<32>,
+    successful_verifications: 0 as Uint<32>,
+    failed_verifications: 0 as Uint<32>,
+    reputation_score: 1000 as Uint<16>,  // Perfect score (1000/1000)
+    last_verification_date: 0 as Uint<32>
+  };
+
+  // Store verifier record
+  trusted_verifiers.insert(disclose(verifier_pubkey), verifier);
+
   return true; // Successfully registered
 }
 
@@ -1134,9 +1182,14 @@ export circuit submit_income_proof(
     return false; // Invalid proof type
   }
 
-  // Step 4: Verify verifier is trusted
+  // Step 4: Verify verifier is trusted and active
   if (!trusted_verifiers.member(disclose(verifier_pubkey))) {
-    return false; // Verifier not trusted
+    return false; // Verifier not registered
+  }
+
+  const verifier_record = trusted_verifiers.lookup(disclose(verifier_pubkey));
+  if (!verifier_record.is_active) {
+    return false; // Verifier has been deactivated
   }
 
   // Step 5: Prevent replay attacks - check attestation hash hasn't been used
@@ -1221,7 +1274,32 @@ export circuit submit_income_proof(
 
   income_proofs.insert(employee_id_disclosed, income_proof);
 
+  // Step 11: Update auditor reputation (successful verification)
+  const updated_verifier = TrustedVerifier {
+    pubkey: verifier_record.pubkey,
+    name: verifier_record.name,
+    license: verifier_record.license,
+    verifier_type: verifier_record.verifier_type,
+    registration_date: verifier_record.registration_date,
+    is_active: verifier_record.is_active,
+
+    // Update reputation counters
+    total_verifications: (verifier_record.total_verifications + (1 as Uint<32>)),
+    successful_verifications: (verifier_record.successful_verifications + (1 as Uint<32>)),
+    failed_verifications: verifier_record.failed_verifications,  // No change
+
+    // Recalculate reputation score (0-1000 scale)
+    // score = (successful / total) * 1000
+    reputation_score: (((verifier_record.successful_verifications + (1 as Uint<32>)) * (1000 as Uint<32>)) / (verifier_record.total_verifications + (1 as Uint<32>))) as Uint<16>,
+
+    last_verification_date: current_timestamp
+  };
+
+  // Save updated verifier record
+  trusted_verifiers.insert(disclose(verifier_pubkey), updated_verifier);
+
   // Success: Income proof stored with cryptographically bound threshold!
+  // Auditor reputation updated with successful verification
   return true;
 }
 
@@ -1290,6 +1368,9 @@ export circuit verify_income_proof(
 // ========================================
 // HYBRID EZKL + BULLETPROOF VERIFICATION
 // ========================================
+// COMMENTED OUT FOR MVP - SIGNATURE-BASED AUDITOR MODEL FIRST
+// Can be re-enabled later for premium tier with stronger cryptographic guarantees
+/*
 
 /**
  * Submit Income Proof with Bulletproof Range Verification (TRUSTLESS!)
@@ -1473,6 +1554,8 @@ export circuit submit_income_proof_bulletproof(
   // - History commitment bound everything to real payment data
   return true;
 }
+*/
+// END OF COMMENTED BULLETPROOF CIRCUIT
 
 // ========================================
 // UTILITY FUNCTIONS
