@@ -236,6 +236,87 @@ if (proof.history_commitment != computed_commitment) {
 
 ---
 
+### ⚖️ Security Trade-offs: What IS and ISN'T Cryptographically Enforced
+
+#### ✅ **Cryptographically Protected (Strong Guarantees)**
+
+**Payment Data Integrity:**
+- ✅ **History commitment binding** - Employee CANNOT use fake payment data
+- ✅ **On-chain verification** - Proof must match actual blockchain payment history
+- ✅ **Tamper-proof** - Cryptographic hash prevents data manipulation
+
+**This is the MOST critical protection** - prevents the highest-risk fraud vector (fake salary claims).
+
+---
+
+#### ⚠️ **Not Cryptographically Enforced (Mitigated by Incentives)**
+
+**Auditor Verification Enforcement:**
+- ⚠️ **Gap**: Auditor could theoretically sign without checking EZKL proof validity
+- ⚠️ **No on-chain verification** - Contract trusts auditor's signature (doesn't verify proof math on-chain)
+
+**Why This Gap Exists:**
+- Midnight blockchain doesn't yet support pairing functions (BLS12-381, KZG verification)
+- On-chain EZKL verification requires cryptographic primitives not available in Compact
+
+**Why This Is Acceptable for MVP:**
+
+1. **Reputation System** (Economic Incentive)
+   - Lazy auditor gets caught via sample audits, disputes, pattern analysis
+   - Reputation score drops → Less clients → Less revenue
+   - Market forces punish dishonest behavior
+
+2. **Legal Accountability** (Real-world Consequences)
+   - Licensed CPAs have professional liability insurance
+   - Can be sued for negligence/fraud ($millions in damages)
+   - Criminal prosecution for intentional fraud
+   - Professional licenses revoked (career-ending)
+
+3. **Admin Controls** (Governance Layer)
+   - Misbehaving auditors deactivated immediately
+   - Community governance enforces quality standards
+   - Random sample audits catch lazy verifiers
+
+4. **History Commitment Still Protects** (Cryptographic Fallback)
+   - Even if auditor doesn't verify proof, they can't fake payment data
+   - Employee must use real blockchain history
+   - Most fraud vectors still prevented
+
+**Risk Assessment:**
+```
+Worst case scenario: Auditor signs invalid proof
+- Employee still can't fake payment amounts (history commitment prevents this)
+- Auditor faces reputation loss, legal liability, deactivation
+- Probability: LOW (strong disincentives)
+- Impact: MEDIUM (proof may not meet threshold, but no fake data)
+- Overall Risk: ACCEPTABLE for MVP
+```
+
+---
+
+#### 🔮 **Future: Fully Trustless Verification**
+
+**When Midnight adds cryptographic primitives:**
+- ✅ BLS12-381 pairing operations
+- ✅ KZG commitment verification
+- ✅ On-chain SNARK verifiers
+
+**Then:**
+```
+Employee → EZKL Proof → Smart Contract Verifier → ✅ Cryptographically Verified
+                              ↑
+                  (No auditor needed - pure math!)
+```
+
+**Benefits:**
+- ✅ Auditor CANNOT skip verification (on-chain enforcement)
+- ✅ Zero trust assumptions (fully cryptographic)
+- ✅ Auditors evolve to value-added services (compliance, model validation)
+
+**Timeline:** See [Evolution Roadmap](docs/PROJECT_FLOW_EXPLANATION.md#-evolution-to-fully-trustless-verification)
+
+---
+
 ## 📊 System Architecture
 
 ```
