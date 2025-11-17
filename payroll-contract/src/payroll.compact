@@ -21,8 +21,8 @@ export { CoinInfo };
  */
 struct TrustedVerifier {
   pubkey: Bytes<32>,              // Auditor's public key
-  name: String,                   // e.g., "Deloitte Crypto Audit Division"
-  license: String,                // e.g., "CPA #123456, Delaware"
+  name: Bytes<64>,                // e.g., "Deloitte Crypto Audit Division"
+  license: Bytes<64>,             // e.g., "CPA #123456, Delaware"
   verifier_type: Uint<8>,         // 1=Big4, 2=Regional, 3=CryptoNative
   registration_date: Uint<32>,    // Unix timestamp when registered
   is_active: Boolean,             // Can be deactivated if misbehaving
@@ -1088,8 +1088,8 @@ export circuit process_recurring_payment(
  */
 export circuit register_trusted_verifier(
   verifier_pubkey: Bytes<32>,
-  verifier_name: String,
-  verifier_license: String,
+  verifier_name: Bytes<64>,
+  verifier_license: Bytes<64>,
   verifier_type: Uint<8>
 ): Boolean {
   // TODO: Add owner check - only contract owner (company) should be able to register verifiers
@@ -1275,6 +1275,14 @@ export circuit submit_income_proof(
   income_proofs.insert(employee_id_disclosed, income_proof);
 
   // Step 11: Update auditor reputation (successful verification)
+  // Calculate new counters with explicit type casts
+  const new_total = (verifier_record.total_verifications + (1 as Uint<32>)) as Uint<32>;
+  const new_successful = (verifier_record.successful_verifications + (1 as Uint<32>)) as Uint<32>;
+
+  // Calculate reputation score: (successful / total) * 1000
+  // Simplified for now: just track counters, reputation calculated off-chain
+  const new_reputation = (1000 as Uint<16>);  // Placeholder: 1000 = perfect score
+
   const updated_verifier = TrustedVerifier {
     pubkey: verifier_record.pubkey,
     name: verifier_record.name,
@@ -1284,13 +1292,12 @@ export circuit submit_income_proof(
     is_active: verifier_record.is_active,
 
     // Update reputation counters
-    total_verifications: (verifier_record.total_verifications + (1 as Uint<32>)),
-    successful_verifications: (verifier_record.successful_verifications + (1 as Uint<32>)),
+    total_verifications: new_total,
+    successful_verifications: new_successful,
     failed_verifications: verifier_record.failed_verifications,  // No change
 
-    // Recalculate reputation score (0-1000 scale)
-    // score = (successful / total) * 1000
-    reputation_score: (((verifier_record.successful_verifications + (1 as Uint<32>)) * (1000 as Uint<32>)) / (verifier_record.total_verifications + (1 as Uint<32>))) as Uint<16>,
+    // Reputation score (0-1000 scale) - calculated off-chain for now
+    reputation_score: new_reputation,
 
     last_verification_date: current_timestamp
   };
@@ -1372,8 +1379,7 @@ export circuit verify_income_proof(
 // Can be re-enabled later for premium tier with stronger cryptographic guarantees
 /*
 
-/**
- * Submit Income Proof with Bulletproof Range Verification (TRUSTLESS!)
+// Submit Income Proof with Bulletproof Range Verification (TRUSTLESS!)
  *
  * This is an enhanced version of submit_income_proof that achieves PARTIAL TRUSTLESSNESS
  * by verifying threshold claims on-chain using Bulletproofs.
@@ -1406,7 +1412,7 @@ export circuit verify_income_proof(
  * @param expires_in - Seconds until proof expires
  *
  * @returns true if proof verified and stored, false otherwise
- */
+
 export circuit submit_income_proof_bulletproof(
   // Standard attestation fields (same as submit_income_proof)
   employee_id: Bytes<32>,

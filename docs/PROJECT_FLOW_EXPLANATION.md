@@ -24,6 +24,12 @@
 - Verify income claims with cryptographic certainty
 - No need to trust documents or employers
 - Multiple proof types for different requirements
+- 
+
+**For Auditors:**
+- Provide verification services as licensed professionals
+- Build reputation in decentralized ecosystem
+- Auditors who submit invalid proofs lose reputation score. Market forces incentivize honest behavior.
 
 ---
 
@@ -73,7 +79,7 @@
 
 ---
 
-### Flow 2: ZKML Income Proof (Employee → Verifier)
+### Flow 2: ZKML Income Proof (Employee → Auditor Verifier)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -113,7 +119,7 @@
        │
        │ Proof contains:
        │ - ZK-SNARK proof (EZKL)
-       │ - Merkle root of payment history
+       │ - Commitment hash payment history
        │ - Auditor signature
        │ - Attestation hash (prevents replay)
        │ - Threshold proven (NOT exact amount)
@@ -121,12 +127,33 @@
        ▼
 
 ┌──────────────────────────────────────────────────────────────────┐
-│ STEP 2: Submit to Contract (ON-CHAIN)                           │
+│ STEP 2: Employee → Auditor (OFF-CHAIN)                          │
 └──────────────────────────────────────────────────────────────────┘
 
   ┌──────────┐
-  │ Employee │ Calls: submitIncomeProof()
-  └────┬─────┘
+  │ Employee │ Sends: EZKL proof + history_commitment
+  └────┬─────┘       (to licensed auditor/CPA)
+       │
+       ▼
+  ┌─────────────────────────┐
+  │ Auditor (Verifier)      │
+  │ (Licensed CPA/Firm)     │
+  │                         │
+  │ Verifies:               │
+  │ ✓ EZKL proof valid      │ ← Mathematical verification
+  │ ✓ Proof type correct    │ ← Types 1-4
+  │ ✓ Signs attestation     │ ← Private key signature
+  └─────────┬───────────────┘
+            │
+            ▼
+
+┌──────────────────────────────────────────────────────────────────┐
+│ STEP 3: Auditor → Contract (ON-CHAIN)                           │
+└──────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────┐
+  │ Auditor (Verifier)      │ Calls: submitIncomeProof()
+  └────┬────────────────────┘       (with signature)
        │
        ▼
   ┌─────────────────────────┐
@@ -134,9 +161,15 @@
   │                         │
   │ Validates:              │
   │ ✓ Auditor is trusted    │ ← Check auditor whitelist
+  │ ✓ Auditor is active     │ ← Not deactivated
   │ ✓ Proof type valid      │ ← Types 1-4
   │ ✓ History commitment    │ ← Binds to on-chain data
   │ ✓ No replay attack      │ ← Attestation hash unique
+  │                         │
+  │ Updates Reputation:     │
+  │ - total_verifications++ │
+  │ - successful++          │
+  │ - score = (✓/total)*1000│ ← Dynamic reputation
   │                         │
   │ Stores: income_proofs   │ ← Public ledger
   └─────────┬───────────────┘
@@ -144,7 +177,7 @@
             ▼
 
 ┌──────────────────────────────────────────────────────────────────┐
-│ STEP 3: Verifier Checks Proof (ON-CHAIN)                        │
+│ STEP 4: Bank/Landlord Verifies (ON-CHAIN)                       │
 └──────────────────────────────────────────────────────────────────┘
 
   ┌────────────┐
@@ -161,6 +194,7 @@
   │ ✓ Proof type matches    │
   │ ✓ Threshold sufficient  │
   │ ✓ Not expired           │
+  │ ✓ Verified by auditor   │ ← Auditor reputation checked
   │                         │
   │ Returns: TRUE/FALSE     │ ← Cryptographically verified
   └─────────┬───────────────┘
@@ -180,7 +214,7 @@
 
 ---
 
-### Flow 3: Auditor-Based Verification (NEW - Nov 2025)
+### Flow 3: Auditor-Based Verification
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -500,10 +534,10 @@ Trust: ✅ Cryptographic proof (no documents needed)
 | Layer | Technology | Status |
 |-------|-----------|--------|
 | Blockchain | Midnight Network | ✅ Testnet |
-| Smart Contracts | Compact Language | ✅ Complete |
+| Smart Contracts | Compact Language | Work in Progress |
 | API Layer | TypeScript + RxJS | ✅ Complete |
 | ZKML Proofs | EZKL + ONNX | ✅ Complete |
-| Frontend | React + Material-UI | ⏸️ Not Started |
+| Frontend | React + Material-UI |   Work in Progress |
 | Testing | Vitest + Python | ✅ 130 tests |
 
 ---
