@@ -10,15 +10,35 @@ import { AttestationSigner } from '../services/attestation-signer.js';
 import { ProviderService, loadVerifierConfig } from '../services/providers.js';
 import { generateIncomeProof, ProofType as ZKMLProofType } from '@zksalaria/zkml-payroll';
 import { Logger } from 'pino';
+import { join } from 'path';
+
+/**
+ * Get proof type-specific VK and settings paths
+ */
+function getProofTypePaths(proofType: number): { vkPath: string; settingsPath: string; modelName: string } {
+  const baseDir = process.env.ZKML_MODELS_DIR || '../zkml/payroll/generated';
+
+  const proofTypeMap: Record<number, string> = {
+    1: 'income_above_threshold',
+    2: 'income_range',
+    3: 'average_income',
+    4: 'first_time_loan',
+    5: 'tax_bracket'
+  };
+
+  const modelName = proofTypeMap[proofType];
+  if (!modelName) {
+    throw new Error(`Invalid proof type: ${proofType}. Must be 1-5.`);
+  }
+
+  return {
+    vkPath: join(baseDir, modelName, `${modelName}_vk.key`),
+    settingsPath: join(baseDir, modelName, `${modelName}_settings.json`),
+    modelName
+  };
+}
 
 const verifyRoutes: FastifyPluginAsync = async (fastify) => {
-  // Initialize services
-  const verifier = new EZKLVerifier({
-    vkPath: process.env.VK_PATH || '../zkml/examples/01-simple-threshold/vk.key',
-    settingsPath: process.env.SETTINGS_PATH || '../zkml/examples/01-simple-threshold/settings.json',
-    ezklPath: process.env.EZKL_PATH
-  });
-
   const signer = new AttestationSigner(
     process.env.VERIFIER_SECRET_KEY || 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   );
@@ -50,6 +70,15 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Step 1: Verify EZKL proof
       fastify.log.info('Verifying EZKL proof...');
+
+      // Get proof type-specific VK and settings
+      const paths = getProofTypePaths(publicInputs.proof_type);
+      const verifier = new EZKLVerifier({
+        vkPath: paths.vkPath,
+        settingsPath: paths.settingsPath,
+        ezklPath: process.env.EZKL_PATH
+      });
+
       const isValid = await verifier.verify(proof);
 
       if (!isValid) {
@@ -230,7 +259,55 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
 
       fastify.log.info('  ✓ ZK proof generated', undefined, { duration: proofResult.duration });
 
-      // Step 2: Pre-flight validation (before blockchain submission)
+      // Step 2: Verify the EZKL proof
+      fastify.log.info('  → Verifying EZKL proof...');
+
+      try {
+        // Get proof type-specific VK and settings
+        const paths = getProofTypePaths(proof_type);
+        fastify.log.info(`  → Using model: ${paths.modelName}`, undefined, {
+          vkPath: paths.vkPath,
+          settingsPath: paths.settingsPath
+        });
+
+        // Parse the proof JSON to EZKLProof object
+        const proofObj = JSON.parse(proofResult.proof.proofJson);
+
+        // Create verifier with correct VK and settings for this proof type
+        const verifier = new EZKLVerifier({
+          vkPath: paths.vkPath,
+          settingsPath: paths.settingsPath,
+          ezklPath: process.env.EZKL_PATH
+        });
+
+        // Verify the proof (verify() handles temp file creation internally)
+        const isValid = await verifier.verify(proofObj);
+
+        if (!isValid) {
+          fastify.log.error('  ❌ EZKL proof verification FAILED');
+          return reply.code(500).send({
+            success: false,
+            error: 'Proof Verification Failed',
+            error_code: ErrorCode.PROOF_GENERATION_FAILED,
+            message: 'Generated EZKL proof failed cryptographic verification. This indicates a bug in proof generation.',
+            duration: Date.now() - startTime
+          } as GenerateProofResponse);
+        }
+
+        fastify.log.info('  ✅ EZKL proof cryptographically verified');
+
+      } catch (verifyError) {
+        fastify.log.error('  ❌ EZKL proof verification error:', undefined, verifyError);
+        return reply.code(500).send({
+          success: false,
+          error: 'Proof Verification Error',
+          error_code: ErrorCode.INTERNAL_ERROR,
+          message: verifyError instanceof Error ? verifyError.message : 'Failed to verify EZKL proof',
+          duration: Date.now() - startTime
+        } as GenerateProofResponse);
+      }
+
+      // Step 3: Pre-flight validation (before blockchain submission)
       // Validate all circuit requirements to provide clear error messages
       fastify.log.info('  → Running pre-flight validation...');
 
@@ -434,6 +511,14 @@ const verifyRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /status
   fastify.get('/status', async () => {
+    // Create a default verifier just to check EZKL availability
+    const paths = getProofTypePaths(1); // Use proof type 1 for availability check
+    const verifier = new EZKLVerifier({
+      vkPath: paths.vkPath,
+      settingsPath: paths.settingsPath,
+      ezklPath: process.env.EZKL_PATH
+    });
+
     const ezklAvailable = await verifier.checkAvailability();
 
     return {
