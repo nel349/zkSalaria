@@ -67,7 +67,18 @@ def run_ezkl_workflow(name, num_inputs):
     py_run_args.input_scale = 14  # Precision: 2^-14 ≈ 0.000061 (~$0.61 resolution)
 
     ezkl.gen_settings(f"{name}.onnx", f"{name}_settings.json", py_run_args=py_run_args)
-    print(f"   ✓ Settings")
+
+    # Use KZG commitment (works reliably in EZKL)
+    # On-chain verification will use Bulletproofs, ZKML is for complex off-chain computation
+    import json
+    with open(f"{name}_settings.json", "r") as f:
+        settings = json.load(f)
+    # KZG is the default, but we'll explicitly set it for clarity
+    settings["run_args"]["commitment"] = "KZG"
+    with open(f"{name}_settings.json", "w") as f:
+        json.dump(settings, f, indent=2)
+
+    print(f"   ✓ Settings (KZG commitment)")
 
     print(f"   → calibrate (forcing input_scale: 14)...")
     # IMPORTANT: Force input_scale to 14 for better precision
@@ -87,9 +98,9 @@ def run_ezkl_workflow(name, num_inputs):
     ezkl.compile_circuit(f"{name}.onnx", f"{name}.compiled", f"{name}_settings.json")
     print(f"   ✓ Compiled")
 
-    print(f"   → setup keys...")
-    ezkl.setup(f"{name}.compiled", f"{name}_vk.key", f"{name}_pk.key", srs_path="../../kzg.srs")
-    print(f"   ✓ Keys")
+    print(f"   → setup keys (KZG commitment)...")
+    ezkl.setup(f"{name}.compiled", f"{name}_vk.key", f"{name}_pk.key")
+    print(f"   ✓ Keys (KZG)")
 
 def main():
     print("\n" + "="*70)

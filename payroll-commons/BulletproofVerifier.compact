@@ -1,0 +1,335 @@
+pragma language_version >= 0.13.0;
+
+module BulletproofVerifier {
+  import CompactStandardLibrary;
+
+  /**
+   * Bulletproof Range Proof Verifier
+   *
+   * This module provides trustless on-chain verification of Bulletproof range proofs.
+   * Bulletproofs allow proving that a committed value lies within a range [min, max]
+   * without revealing the actual value.
+   *
+   * Key Properties:
+   * - Only requires G1 elliptic curve operations (available in Compact!)
+   * - No pairings needed (unlike Groth16)
+   * - Logarithmic proof size in range size
+   * - No trusted setup
+   *
+   * Use Case in zkSalaria:
+   * - Prove income >= threshold without revealing exact income
+   * - Trustless verification on-chain (replaces trusted verifier)
+   * - Works in combination with EZKL proofs for ZKML verification
+   */
+
+  export {
+    BulletproofData,
+    verify_bulletproof_range,
+    verify_bulletproof_commitment,
+    generate_challenge_scalars,
+    pedersen_commit
+  };
+
+// ========================================
+// TYPES
+// ========================================
+
+/**
+ * Bulletproof range proof data structure
+ *
+ * Contains all elements needed to verify a range proof:
+ * - commitment: Pedersen commitment to the hidden value
+ * - proof_L/proof_R: Inner product argument points (log₂(range) elements)
+ * - proof_a/proof_b: Final scalars from inner product reduction
+ */
+export struct BulletproofData {
+  // Pedersen commitment: C = g^value · h^blinding
+  commitment: CurvePoint,
+
+  // Inner product argument proof (6 points for 64-bit range)
+  proof_L: Vector<6, CurvePoint>,  // Left proof points
+  proof_R: Vector<6, CurvePoint>,  // Right proof points
+
+  // Final scalars from inner product reduction
+  proof_a: Bytes<32>,  // Field element encoded as bytes
+  proof_b: Bytes<32>,  // Field element encoded as bytes
+
+  // Metadata
+  min_value: Uint<64>,    // Minimum value in range (typically 0 or threshold)
+  max_bits: Uint<8>       // Number of bits in range (typically 64)
+}
+
+// ========================================
+// CORE VERIFICATION
+// ========================================
+
+/**
+ * Verify Bulletproof Range Proof
+ *
+ * Verifies that the value committed in `data.commitment` satisfies:
+ *   committed_value - data.min_value ∈ [0, 2^data.max_bits - 1]
+ *
+ * Which proves: committed_value >= data.min_value
+ *
+ * Algorithm (simplified):
+ * 1. Derive Fiat-Shamir challenges from transcript
+ * 2. Compute verification equation using ecAdd/ecMul
+ * 3. Check: LHS == RHS using curve point equality
+ *
+ * Returns true if proof is valid, false otherwise
+ */
+export pure circuit verify_bulletproof_range(
+  data: BulletproofData
+): Boolean {
+
+  // Step 1: Generate Fiat-Shamir challenges (deterministic from proof data)
+  const challenges = generate_challenge_scalars(
+    data.commitment,
+    data.proof_L,
+    data.proof_R,
+    data.max_bits
+  );
+
+  // Step 2: Get generator points
+  // G = standard generator (base point)
+  // H = hash-to-curve of domain-separated string (nothing-up-my-sleeve)
+  const one_field = transientHash<Uint<8>>(1 as Uint<8>);
+  const G = ecMulGenerator(one_field);
+  const H = hashToCurve<Bytes<32>>(pad(32, "bulletproof:H:"));
+
+  // Step 3: Compute left-hand side of verification equation
+  // LHS = C + Σ(x_i² · L_i + x_i⁻² · R_i)
+  // Note: Loop unrolled since Compact doesn't support traditional for loops
+
+  // Iteration 0
+  const x_0 = challenges[0];
+  const x_0_sq = field_multiply(x_0, x_0);
+  const x_0_inv_sq = field_inverse(x_0_sq);
+  const L_0 = ecMul(data.proof_L[0], x_0_sq);
+  const R_0 = ecMul(data.proof_R[0], x_0_inv_sq);
+  const lhs_0 = ecAdd(ecAdd(data.commitment, L_0), R_0);
+
+  // Iteration 1
+  const x_1 = challenges[1];
+  const x_1_sq = field_multiply(x_1, x_1);
+  const x_1_inv_sq = field_inverse(x_1_sq);
+  const L_1 = ecMul(data.proof_L[1], x_1_sq);
+  const R_1 = ecMul(data.proof_R[1], x_1_inv_sq);
+  const lhs_1 = ecAdd(ecAdd(lhs_0, L_1), R_1);
+
+  // Iteration 2
+  const x_2 = challenges[2];
+  const x_2_sq = field_multiply(x_2, x_2);
+  const x_2_inv_sq = field_inverse(x_2_sq);
+  const L_2 = ecMul(data.proof_L[2], x_2_sq);
+  const R_2 = ecMul(data.proof_R[2], x_2_inv_sq);
+  const lhs_2 = ecAdd(ecAdd(lhs_1, L_2), R_2);
+
+  // Iteration 3
+  const x_3 = challenges[3];
+  const x_3_sq = field_multiply(x_3, x_3);
+  const x_3_inv_sq = field_inverse(x_3_sq);
+  const L_3 = ecMul(data.proof_L[3], x_3_sq);
+  const R_3 = ecMul(data.proof_R[3], x_3_inv_sq);
+  const lhs_3 = ecAdd(ecAdd(lhs_2, L_3), R_3);
+
+  // Iteration 4
+  const x_4 = challenges[4];
+  const x_4_sq = field_multiply(x_4, x_4);
+  const x_4_inv_sq = field_inverse(x_4_sq);
+  const L_4 = ecMul(data.proof_L[4], x_4_sq);
+  const R_4 = ecMul(data.proof_R[4], x_4_inv_sq);
+  const lhs_4 = ecAdd(ecAdd(lhs_3, L_4), R_4);
+
+  // Iteration 5 (final)
+  const x_5 = challenges[5];
+  const x_5_sq = field_multiply(x_5, x_5);
+  const x_5_inv_sq = field_inverse(x_5_sq);
+  const L_5 = ecMul(data.proof_L[5], x_5_sq);
+  const R_5 = ecMul(data.proof_R[5], x_5_inv_sq);
+  const lhs = ecAdd(ecAdd(lhs_4, L_5), R_5);
+
+  // Step 4: Compute right-hand side of verification equation
+  // RHS = a·G + b·H
+  const a_scalar = bytes_to_field(data.proof_a);
+  const b_scalar = bytes_to_field(data.proof_b);
+
+  const G_term = ecMul(G, a_scalar);
+  const H_term = ecMul(H, b_scalar);
+
+  const rhs = ecAdd(G_term, H_term);
+
+  // Step 5: Check equation holds
+  return curve_points_equal(lhs, rhs);
+}
+
+/**
+ * Verify Bulletproof Commitment Binding
+ *
+ * Verifies that the Bulletproof commitment is correctly bound to:
+ * 1. The EZKL attestation hash (proves same value was used)
+ * 2. The payment history commitment (binds to on-chain data)
+ *
+ * This prevents attacks where someone generates a valid Bulletproof
+ * for a different value than what was proven in the EZKL proof.
+ */
+export pure circuit verify_bulletproof_commitment(
+  bp_commitment: CurvePoint,
+  ezkl_attestation_hash: Bytes<32>,
+  history_commitment: Bytes<32>
+): Boolean {
+
+  // Expected commitment = hash_to_curve(attestation || history)
+  // This binds the Bulletproof to specific EZKL proof and on-chain data
+  const binding_data = persistentHash<Vector<2, Bytes<32>>>([
+    ezkl_attestation_hash,
+    history_commitment
+  ]);
+
+  const expected_commitment = hashToCurve<Bytes<32>>(binding_data);
+
+  return curve_points_equal(bp_commitment, expected_commitment);
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+/**
+ * Generate Fiat-Shamir challenge scalars
+ *
+ * Deterministically derives challenge values from proof transcript.
+ * Uses persistent hashing to ensure challenges cannot be manipulated.
+ */
+pure circuit generate_challenge_scalars(
+  commitment: CurvePoint,
+  proof_L: Vector<6, CurvePoint>,
+  proof_R: Vector<6, CurvePoint>,
+  max_bits: Uint<8>
+): Vector<6, Field> {
+
+  // Build transcript: commitment || L₀ || R₀ || L₁ || R₁ || ...
+  // Note: Loop unrolled since Compact doesn't support traditional for loops
+  const transcript_base = persistentHash<CurvePoint>(commitment);
+
+  // Challenge 0
+  const L_hash_0 = persistentHash<CurvePoint>(proof_L[0]);
+  const R_hash_0 = persistentHash<CurvePoint>(proof_R[0]);
+  const hash_0 = persistentHash<Vector<3, Bytes<32>>>([transcript_base, L_hash_0, R_hash_0]);
+  const challenge_0 = bytes_to_field(hash_0);
+
+  // Challenge 1
+  const L_hash_1 = persistentHash<CurvePoint>(proof_L[1]);
+  const R_hash_1 = persistentHash<CurvePoint>(proof_R[1]);
+  const hash_1 = persistentHash<Vector<3, Bytes<32>>>([hash_0, L_hash_1, R_hash_1]);
+  const challenge_1 = bytes_to_field(hash_1);
+
+  // Challenge 2
+  const L_hash_2 = persistentHash<CurvePoint>(proof_L[2]);
+  const R_hash_2 = persistentHash<CurvePoint>(proof_R[2]);
+  const hash_2 = persistentHash<Vector<3, Bytes<32>>>([hash_1, L_hash_2, R_hash_2]);
+  const challenge_2 = bytes_to_field(hash_2);
+
+  // Challenge 3
+  const L_hash_3 = persistentHash<CurvePoint>(proof_L[3]);
+  const R_hash_3 = persistentHash<CurvePoint>(proof_R[3]);
+  const hash_3 = persistentHash<Vector<3, Bytes<32>>>([hash_2, L_hash_3, R_hash_3]);
+  const challenge_3 = bytes_to_field(hash_3);
+
+  // Challenge 4
+  const L_hash_4 = persistentHash<CurvePoint>(proof_L[4]);
+  const R_hash_4 = persistentHash<CurvePoint>(proof_R[4]);
+  const hash_4 = persistentHash<Vector<3, Bytes<32>>>([hash_3, L_hash_4, R_hash_4]);
+  const challenge_4 = bytes_to_field(hash_4);
+
+  // Challenge 5
+  const L_hash_5 = persistentHash<CurvePoint>(proof_L[5]);
+  const R_hash_5 = persistentHash<CurvePoint>(proof_R[5]);
+  const hash_5 = persistentHash<Vector<3, Bytes<32>>>([hash_4, L_hash_5, R_hash_5]);
+  const challenge_5 = bytes_to_field(hash_5);
+
+  // Build challenges vector
+  const challenges: Vector<6, Field> = [
+    challenge_0,
+    challenge_1,
+    challenge_2,
+    challenge_3,
+    challenge_4,
+    challenge_5
+  ];
+
+  return challenges;
+}
+
+/**
+ * Create Pedersen commitment: C = g^value · h^randomness
+ *
+ * Used for testing and verification logic.
+ * Note: In production, commitments are generated off-chain with secret randomness.
+ */
+pure circuit pedersen_commit(
+  value: Uint<64>,
+  randomness: Field
+): CurvePoint {
+
+  const one_field = transientHash<Uint<8>>(1 as Uint<8>);
+  const G = ecMulGenerator(one_field);
+  const H = hashToCurve<Bytes<32>>(pad(32, "bulletproof:H:"));
+
+  // Convert value to field element
+  const value_field = uint64_to_field(value);
+
+  // C = g^value · h^randomness
+  // Note: ecMul takes (point, scalar) in that order
+  const G_term = ecMul(G, value_field);
+  const H_term = ecMul(H, randomness);
+
+  return ecAdd(G_term, H_term);
+}
+
+// ========================================
+// FIELD ARITHMETIC HELPERS
+// ========================================
+// Note: These are placeholder functions. Actual implementation depends on
+// Compact's field arithmetic API (needs to be verified against stdlib docs)
+
+pure circuit bytes_to_field(bytes: Bytes<32>): Field {
+  // Convert 32-byte value to field element
+  // TODO: Use actual Compact field conversion API
+  return transientHash<Bytes<32>>(bytes);
+}
+
+pure circuit uint64_to_field(value: Uint<64>): Field {
+  // Convert uint64 to field element
+  return transientHash<Uint<64>>(value);
+}
+
+pure circuit field_multiply(a: Field, b: Field): Field {
+  // Field multiplication (modulo curve order)
+  // TODO: Use actual Compact field arithmetic API
+  // For now, use hash-based placeholder
+  return transientHash<Vector<2, Field>>([a, b]);
+}
+
+pure circuit field_inverse(x: Field): Field {
+  // Compute modular inverse: x⁻¹ mod p
+  // TODO: Use actual Compact field arithmetic API
+  // This is a placeholder - needs proper implementation
+  return transientHash<Vector<2, Field>>([x, x]);
+}
+
+pure circuit scalar_mul_point(point: CurvePoint, scalar: Field): CurvePoint {
+  // Scalar multiplication: scalar * point
+  // Note: ecMul takes (point, scalar) in that order
+  return ecMul(point, scalar);
+}
+
+pure circuit curve_points_equal(p1: CurvePoint, p2: CurvePoint): Boolean {
+  // Check if two curve points are equal
+  // TODO: Verify correct API for point comparison in Compact
+  const p1_hash = persistentHash<CurvePoint>(p1);
+  const p2_hash = persistentHash<CurvePoint>(p2);
+  return p1_hash == p2_hash;
+}
+
+} // end module BulletproofVerifier

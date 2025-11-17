@@ -2,11 +2,38 @@ pragma language_version >= 0.13.0;
 
 import CompactStandardLibrary;
 import "../../payroll-commons/PayrollCommons" prefix PC_;
+// BULLETPROOF SUPPORT - Commented out for MVP (signature-based auditor model)
+// Can be re-enabled later for premium tier with cryptographic threshold verification
+// import "../../payroll-commons/BulletproofVerifier" prefix BP_;
 
 // zkSalaria - Private Payroll System
 // Privacy-preserving payroll with real token operations
 
 export { CoinInfo };
+
+// ========================================
+// AUDITOR/VERIFIER STRUCTS
+// ========================================
+
+/**
+ * Trusted Verifier (Auditor) Record
+ * Stores metadata and reputation for licensed auditors who verify ZKML proofs
+ */
+struct TrustedVerifier {
+  pubkey: Bytes<32>,              // Auditor's public key
+  name: Bytes<64>,                // e.g., "Deloitte Crypto Audit Division"
+  license: Bytes<64>,             // e.g., "CPA #123456, Delaware"
+  verifier_type: Uint<8>,         // 1=Big4, 2=Regional, 3=CryptoNative
+  registration_date: Uint<32>,    // Unix timestamp when registered
+  is_active: Boolean,             // Can be deactivated if misbehaving
+
+  // Reputation tracking
+  total_verifications: Uint<32>,      // Total proofs verified
+  successful_verifications: Uint<32>, // Proofs that passed
+  failed_verifications: Uint<32>,     // Proofs that failed
+  reputation_score: Uint<16>,         // 0-1000 scale (success_rate * 1000)
+  last_verification_date: Uint<32>    // Last activity timestamp
+}
 
 // ========================================
 // LEDGER STATE (Public)
@@ -60,10 +87,10 @@ export ledger recurring_payment_by_employee: Map<Bytes<32>, Bytes<32>>;
 export ledger recurring_payment_ids: List<Bytes<32>>;
 
 // ZKML Attestation System (Phase 2: ZKML Integration)
-// Stores trusted verifier public keys and tracks used attestations
-// Using Map<Key, Uint<1>> pattern (0=false, 1=true) since Compact Sets have limited operations
-export ledger trusted_verifiers: Map<Bytes<32>, Uint<1>>;       // verifier_pubkey -> 1
-export ledger used_attestations: Map<Bytes<32>, Uint<1>>;       // attestation_hash -> 1
+// Stores trusted auditor/verifiers with reputation tracking
+// Tracks used attestations to prevent replay attacks
+export ledger trusted_verifiers: Map<Bytes<32>, TrustedVerifier>;  // verifier_pubkey -> TrustedVerifier
+export ledger used_attestations: Map<Bytes<32>, Uint<1>>;          // attestation_hash -> 1
 
 // ZKML Income Proofs (Section 2.1: Salary History Proofs)
 // Stores comprehensive income proofs for lender/landlord verification
@@ -1059,8 +1086,12 @@ export circuit process_recurring_payment(
  *
  * @returns Boolean - true if registered successfully, false if already exists
  */
-export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
-  // Company provides the verifier's PUBLIC key (no secret needed)
+export circuit register_trusted_verifier(
+  verifier_pubkey: Bytes<32>,
+  verifier_name: Bytes<64>,
+  verifier_license: Bytes<64>,
+  verifier_type: Uint<8>
+): Boolean {
   // TODO: Add owner check - only contract owner (company) should be able to register verifiers
   // For now, anyone can call this (MVP simplification)
 
@@ -1069,8 +1100,26 @@ export circuit register_trusted_verifier(verifier_pubkey: Bytes<32>): Boolean {
     return false; // Already registered
   }
 
-  // Register the verifier's public key
-  trusted_verifiers.insert(disclose(verifier_pubkey), 1 as Uint<1>);
+  // Create verifier record with perfect initial reputation
+  const verifier = TrustedVerifier {
+    pubkey: disclose(verifier_pubkey),
+    name: disclose(verifier_name),
+    license: disclose(verifier_license),
+    verifier_type: disclose(verifier_type),
+    registration_date: current_timestamp,
+    is_active: true,
+
+    // Initialize reputation (start with perfect score)
+    total_verifications: 0 as Uint<32>,
+    successful_verifications: 0 as Uint<32>,
+    failed_verifications: 0 as Uint<32>,
+    reputation_score: 1000 as Uint<16>,  // Perfect score (1000/1000)
+    last_verification_date: 0 as Uint<32>
+  };
+
+  // Store verifier record
+  trusted_verifiers.insert(disclose(verifier_pubkey), verifier);
+
   return true; // Successfully registered
 }
 
@@ -1133,9 +1182,14 @@ export circuit submit_income_proof(
     return false; // Invalid proof type
   }
 
-  // Step 4: Verify verifier is trusted
+  // Step 4: Verify verifier is trusted and active
   if (!trusted_verifiers.member(disclose(verifier_pubkey))) {
-    return false; // Verifier not trusted
+    return false; // Verifier not registered
+  }
+
+  const verifier_record = trusted_verifiers.lookup(disclose(verifier_pubkey));
+  if (!verifier_record.is_active) {
+    return false; // Verifier has been deactivated
   }
 
   // Step 5: Prevent replay attacks - check attestation hash hasn't been used
@@ -1220,7 +1274,39 @@ export circuit submit_income_proof(
 
   income_proofs.insert(employee_id_disclosed, income_proof);
 
+  // Step 11: Update auditor reputation (successful verification)
+  // Calculate new counters with explicit type casts
+  const new_total = (verifier_record.total_verifications + (1 as Uint<32>)) as Uint<32>;
+  const new_successful = (verifier_record.successful_verifications + (1 as Uint<32>)) as Uint<32>;
+
+  // Calculate reputation score: (successful / total) * 1000
+  // Simplified for now: just track counters, reputation calculated off-chain
+  const new_reputation = (1000 as Uint<16>);  // Placeholder: 1000 = perfect score
+
+  const updated_verifier = TrustedVerifier {
+    pubkey: verifier_record.pubkey,
+    name: verifier_record.name,
+    license: verifier_record.license,
+    verifier_type: verifier_record.verifier_type,
+    registration_date: verifier_record.registration_date,
+    is_active: verifier_record.is_active,
+
+    // Update reputation counters
+    total_verifications: new_total,
+    successful_verifications: new_successful,
+    failed_verifications: verifier_record.failed_verifications,  // No change
+
+    // Reputation score (0-1000 scale) - calculated off-chain for now
+    reputation_score: new_reputation,
+
+    last_verification_date: current_timestamp
+  };
+
+  // Save updated verifier record
+  trusted_verifiers.insert(disclose(verifier_pubkey), updated_verifier);
+
   // Success: Income proof stored with cryptographically bound threshold!
+  // Auditor reputation updated with successful verification
   return true;
 }
 
@@ -1285,6 +1371,197 @@ export circuit verify_income_proof(
   // Success: Income proof verified and meets requirements
   return true;
 }
+
+// ========================================
+// HYBRID EZKL + BULLETPROOF VERIFICATION
+// ========================================
+// COMMENTED OUT FOR MVP - SIGNATURE-BASED AUDITOR MODEL FIRST
+// Can be re-enabled later for premium tier with stronger cryptographic guarantees
+/*
+
+// Submit Income Proof with Bulletproof Range Verification (TRUSTLESS!)
+ *
+ * This is an enhanced version of submit_income_proof that achieves PARTIAL TRUSTLESSNESS
+ * by verifying threshold claims on-chain using Bulletproofs.
+ *
+ * Architecture:
+ * - EZKL proof: Verifies ZKML computation off-chain (still requires trusted verifier)
+ * - Bulletproof: Verifies threshold on-chain (TRUSTLESS - uses elliptic curves!)
+ * - History commitment: Binds both proofs to on-chain payment data
+ *
+ * Security Improvement over submit_income_proof:
+ * - Old: Verifier can lie about threshold passing
+ * - New: Threshold verification is cryptographically enforced on-chain!
+ *
+ * Example Flow:
+ * 1. Employee generates EZKL proof: "avg_income = f(payments)"
+ * 2. Verifier validates EZKL proof off-chain
+ * 3. Verifier generates Bulletproof: "avg_income >= threshold" (on payment data)
+ * 4. Contract verifies Bulletproof on-chain (trustless!)
+ * 5. Contract verifies history commitment binds everything together
+ *
+ * @param employee_id - Employee submitting proof
+ * @param proof_type - Type of income proof (1-5)
+ * @param threshold_min - Minimum threshold value
+ * @param threshold_max - Maximum threshold value (for range proofs)
+ * @param history_commitment - Hash of employee's payment history
+ * @param timestamp - Proof generation timestamp
+ * @param attestation_hash - Hash of EZKL attestation (off-chain verified)
+ * @param bulletproof_data - Bulletproof range proof (on-chain verified!)
+ * @param txids - Transaction IDs (reference only)
+ * @param expires_in - Seconds until proof expires
+ *
+ * @returns true if proof verified and stored, false otherwise
+
+export circuit submit_income_proof_bulletproof(
+  // Standard attestation fields (same as submit_income_proof)
+  employee_id: Bytes<32>,
+  proof_type: Uint<8>,
+  threshold_min: Uint<64>,
+  threshold_max: Uint<64>,
+  history_commitment: Bytes<32>,
+  timestamp: Uint<32>,
+  attestation_hash: Bytes<32>,
+  txids: Vector<12, Bytes<32>>,
+  expires_in: Uint<32>,
+
+  // NEW: Bulletproof range proof data (trustless verification!)
+  bulletproof_data: BP_BulletproofData
+): Boolean {
+
+  // ========================================
+  // PART 1: BULLETPROOF VERIFICATION (TRUSTLESS!)
+  // ========================================
+
+  // Step 1: Verify Bulletproof range proof on-chain
+  // This cryptographically proves: committed_value >= threshold_min
+  // WITHOUT trusting any verifier - pure mathematics!
+  const range_proof_valid = BP_verify_bulletproof_range(bulletproof_data);
+
+  // Disclose the verification result (it's public anyway - we want everyone to know if proof is valid)
+  if (!disclose(range_proof_valid)) {
+    return false; // Bulletproof is invalid - threshold claim is false!
+  }
+
+  // Step 2: Verify Bulletproof commitment is bound to EZKL attestation
+  // This prevents attacks where someone uses a valid Bulletproof for a different value
+  const commitment_bound = BP_verify_bulletproof_commitment(
+    bulletproof_data.commitment,
+    attestation_hash,
+    history_commitment
+  );
+
+  // Disclose the binding verification result (public information)
+  if (!disclose(commitment_bound)) {
+    return false; // Bulletproof not bound to this attestation!
+  }
+
+  // ========================================
+  // PART 2: STANDARD VALIDATION (from submit_income_proof)
+  // ========================================
+
+  // Extract disclosed values for use in subsequent checks
+  const employee_id_disclosed = disclose(employee_id);
+  const proof_type_disclosed = disclose(proof_type);
+  const threshold_min_disclosed = disclose(threshold_min);
+  const threshold_max_disclosed = disclose(threshold_max);
+  const history_commitment_disclosed = disclose(history_commitment);
+  const timestamp_disclosed = disclose(timestamp);
+
+  // Step 3: Verify proof type is valid (1-5)
+  if (proof_type_disclosed < (1 as Uint<8>) || proof_type_disclosed > (5 as Uint<8>)) {
+    return false;
+  }
+
+  // Step 4: Prevent replay attacks - check attestation hash hasn't been used
+  if (used_attestations.member(disclose(attestation_hash))) {
+    return false;
+  }
+  used_attestations.insert(disclose(attestation_hash), 1 as Uint<1>);
+
+  // Step 5: Verify timestamp is fresh (within 1 hour)
+  const current_time = current_timestamp;
+  const one_hour_ago = (current_time - (3600 as Uint<32>));
+  if (timestamp_disclosed <= one_hour_ago) {
+    return false;
+  }
+  if (timestamp_disclosed > current_time) {
+    return false;
+  }
+
+  // Step 6: Validate threshold values based on proof type
+  if (proof_type_disclosed == (2 as Uint<8>)) {
+    // INCOME_RANGE: threshold_max must be > threshold_min
+    if (threshold_max_disclosed <= threshold_min_disclosed) {
+      return false;
+    }
+  }
+
+  // Step 7: For TAX_BRACKET (type 5), validate bracket matches US federal brackets
+  if (proof_type_disclosed == (5 as Uint<8>)) {
+    if (threshold_max_disclosed <= threshold_min_disclosed) {
+      return false;
+    }
+
+    const bracket1 = (threshold_min_disclosed == (0 as Uint<64>) && threshold_max_disclosed == (11600 as Uint<64>));
+    const bracket2 = (threshold_min_disclosed == (11601 as Uint<64>) && threshold_max_disclosed == (47150 as Uint<64>));
+    const bracket3 = (threshold_min_disclosed == (47151 as Uint<64>) && threshold_max_disclosed == (100525 as Uint<64>));
+    const bracket4 = (threshold_min_disclosed == (100526 as Uint<64>) && threshold_max_disclosed == (191950 as Uint<64>));
+    const bracket5 = (threshold_min_disclosed == (191951 as Uint<64>) && threshold_max_disclosed == (243725 as Uint<64>));
+    const bracket6 = (threshold_min_disclosed == (243726 as Uint<64>) && threshold_max_disclosed == (609350 as Uint<64>));
+    const bracket7 = (threshold_min_disclosed == (609351 as Uint<64>) && threshold_max_disclosed == (999999999 as Uint<64>));
+
+    const bracket_valid = bracket1 || bracket2 || bracket3 || bracket4 || bracket5 || bracket6 || bracket7;
+
+    if (!bracket_valid) {
+      return false;
+    }
+  }
+
+  // Step 8: Verify history commitment matches employee's payment history
+  // This binds the proof to actual on-chain payment data
+  if (!employee_payment_history.member(employee_id_disclosed)) {
+    return false;
+  }
+
+  const payment_history = employee_payment_history.lookup(employee_id_disclosed);
+  const computed_commitment = persistentHash<Vector<6, PC_PaymentRecord>>(payment_history);
+
+  if (history_commitment_disclosed != computed_commitment) {
+    return false; // Payment history mismatch!
+  }
+
+  // ========================================
+  // PART 3: STORE VERIFIED PROOF
+  // ========================================
+
+  // Step 9: Calculate expiration time
+  const expiration_time = (current_timestamp + disclose(expires_in)) as Uint<32>;
+
+  // Step 10: Store income proof with verified threshold
+  const income_proof = PC_IncomeProof {
+    employee_id: employee_id_disclosed,
+    proof_type: proof_type_disclosed,
+    threshold_min: threshold_min_disclosed,
+    threshold_max: threshold_max_disclosed,
+    txids: disclose(txids),
+    history_commitment: history_commitment_disclosed,
+    attestation_hash: disclose(attestation_hash),
+    verifier_pubkey: 0x0000000000000000000000000000000000000000000000000000000000000000 as Bytes<32>, // No verifier needed for Bulletproof!
+    submitted_at: current_timestamp,
+    expires_at: expiration_time
+  };
+
+  income_proofs.insert(employee_id_disclosed, income_proof);
+
+  // ✅ SUCCESS: Hybrid verification complete!
+  // - EZKL proved ZKML computation (off-chain, still trusted)
+  // - Bulletproof proved threshold (on-chain, TRUSTLESS!)
+  // - History commitment bound everything to real payment data
+  return true;
+}
+*/
+// END OF COMMENTED BULLETPROOF CIRCUIT
 
 // ========================================
 // UTILITY FUNCTIONS

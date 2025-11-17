@@ -38,13 +38,13 @@ def test_model(name, display_name):
         )
         print("   ✓ Proof generated")
 
-        # Step 3: Verify proof
+        # Step 3: Verify proof (KZG commitment)
         print("   3/3: Verifying proof...")
         ezkl.verify(
             proof_path="test_proof.json",
             settings_path=f"{name}_settings.json",
-            vk_path=f"{name}_vk.key",
-            srs_path="../../kzg.srs"
+            vk_path=f"{name}_vk.key"
+            # SRS path omitted - EZKL will use default KZG SRS location
         )
         print("   ✓ Proof verified!")
 

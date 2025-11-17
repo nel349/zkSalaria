@@ -8,7 +8,7 @@ import sys
 import ezkl
 import json
 
-def verify_proof(proof_path: str, settings_path: str, vk_path: str, srs_path: str = "kzg.srs") -> bool:
+def verify_proof(proof_path: str, settings_path: str, vk_path: str, srs_path: str = "ipa.srs") -> bool:
     """Verify a proof using EZKL"""
     try:
         ezkl.verify(
