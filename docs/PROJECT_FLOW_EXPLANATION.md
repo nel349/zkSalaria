@@ -734,6 +734,241 @@ Auditors refer new auditors:
 
 ---
 
+### 🔮 Evolution to Fully Trustless Verification
+
+#### **Current Architecture: Auditor-Based (MVP)**
+```
+Employee → EZKL Proof → Auditor Verification → Contract
+                             ↑
+                    (Trust assumption)
+```
+
+**Why Auditors Now:**
+- Midnight doesn't yet support pairing functions on-chain
+- EZKL uses KZG commitments (requires pairings for verification)
+- Auditors provide trusted bridge between off-chain ZKML and on-chain verification
+
+---
+
+#### **Future Architecture: Fully On-Chain Verification**
+
+**When Midnight Adds Cryptographic Primitives:**
+```
+Desired Features from Midnight:
+```
+✓ Pairing functions
+✓ Elliptic curve operations
+✓ SNARK/PLONK verifiers on-chain
+✓ Recursive proof composition
+```
+
+**Fully Trustless Flow:**
+```
+Employee → EZKL Proof → Smart Contract Verifier → Verification ✓
+                              ↑
+                    (No trust assumption!)
+```
+
+**Benefits:**
+- **Pure cryptographic verification**: No human auditors needed
+- **Composability**: Combine multiple ZKML proofs on-chain
+- **Censorship resistance**: No auditor can block/approve proofs
+- **Maximum decentralization**: Trustless end-to-end
+
+---
+
+#### **Auditor Evolution: New Roles in Trustless System**
+
+**Even with on-chain verification, auditors remain valuable:**
+
+##### **1. Compliance & Regulatory Auditing**
+```
+Services:
+✓ Tax compliance verification
+✓ Financial statement audits
+✓ Regulatory reporting (SOC 2, ISO, etc.)
+✓ Cross-jurisdiction compliance
+
+Example:
+- Employee gets on-chain income proof verified (trustless)
+- Auditor provides separate compliance attestation for tax authorities
+- Both proofs submitted to bank/lender
+```
+
+##### **2. Advanced ML Model Validation**
+```
+Services:
+✓ Verify ML model training data quality
+✓ Audit model fairness/bias
+✓ Validate complex credit scoring models
+✓ Certify ONNX model correctness
+
+Example:
+- Protocol deploys new credit scoring model (Type 5 proof)
+- Auditor certifies model is fair and accurate
+- Employees trust certified models for credit applications
+```
+
+##### **3. Dispute Resolution & Forensics**
+```
+Services:
+✓ Investigate failed proof scenarios
+✓ Expert witness for disputes
+✓ Forensic analysis of verification failures
+✓ Smart contract security audits
+
+Example:
+- Employee claims proof should have passed but failed
+- Auditor panel investigates edge case
+- Protocol gets updated based on audit findings
+```
+
+##### **4. Enterprise Integration Services**
+```
+Services:
+✓ Help companies integrate zkSalaria
+✓ Custom proof type development
+✓ Payroll system migrations
+✓ Training and onboarding
+
+Example:
+- Large corporation wants to adopt zkSalaria
+- Auditor (Big 4 firm) provides integration consulting
+- Ongoing audit of payroll privacy compliance
+```
+
+##### **5. Proof-as-a-Service (PaaS)**
+```
+Services:
+✓ Run EZKL proof generation infrastructure
+✓ Hosted proof generation for employees
+✓ Bulk proof generation for companies
+✓ API services for verifiers
+
+Example:
+- Employee doesn't want to run EZKL locally
+- Auditor provides secure enclave for proof generation
+- Employee pays for convenience, still gets trustless verification
+```
+
+---
+
+#### **Hybrid Model: Best of Both Worlds**
+
+**Recommended Long-Term Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│ Trustless Tier (On-Chain Verification)         │
+├─────────────────────────────────────────────────┤
+│ ✓ Basic income proofs (Types 1-3)              │
+│ ✓ Standard ML models                            │
+│ ✓ Pure cryptographic verification               │
+│ ✓ Lowest cost                                   │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│ Premium Tier (Auditor-Enhanced)                 │
+├─────────────────────────────────────────────────┤
+│ ✓ Advanced ML models (credit scoring)          │
+│ ✓ Compliance attestations                       │
+│ ✓ Multi-jurisdiction proofs                     │
+│ ✓ Dispute resolution insurance                  │
+│ ✓ Higher cost, higher assurance                 │
+└─────────────────────────────────────────────────┘
+```
+
+**Example Use Cases:**
+
+**Trustless Tier:**
+- Rent application: "Prove income > $4,000/month"
+- Simple loan: "Prove average income > $5,000/month"
+- Credit card: "Prove income in range $50k-$100k/year"
+
+**Premium Tier:**
+- Mortgage: "Prove income + compliance + tax returns verified by CPA"
+- Business loan: "Prove income + audited financial statements"
+- International proof: "Prove income compliant with EU/US regulations"
+
+---
+
+#### **Migration Path: Auditor → Trustless**
+
+**Phase 1 (Now): MVP with Auditors**
+```
+Proofs: 100% auditor-verified
+Reason: Midnight lacks pairing functions
+Timeline: 2025
+```
+
+**Phase 2: Hybrid Introduction**
+```
+Proofs: 80% auditor, 20% on-chain
+Reason: Midnight adds basic pairing support
+Timeline: 2026
+```
+
+**Phase 3: Hybrid Maturity**
+```
+Proofs: 50% auditor, 50% on-chain
+Reason: Full cryptographic primitive support
+Timeline: 2026-2027
+```
+
+**Phase 4: Auditor Evolution**
+```
+Proofs: 10% auditor (premium only), 90% on-chain
+Reason: Auditors transition to new services
+Timeline: 2027+
+```
+
+**Auditors Never Disappear:**
+- They evolve from "verifiers" to "value-added services"
+- Higher-margin, specialized work
+- Regulatory compliance will always need human auditors
+- Premium tier guarantees ongoing revenue
+
+---
+
+#### **Technical Roadmap Dependencies**
+
+**Midnight Network Primitives Needed:**
+```
+Priority 1 (Basic Trustless):
+✓ BLS12-381 pairing operations
+✓ Point multiplication on G1/G2
+✓ Pairing checks (e(P1, Q1) = e(P2, Q2))
+
+Priority 2 (Advanced Trustless):
+✓ KZG commitment verification
+✓ Polynomial evaluation
+✓ Batch verification
+
+Priority 3 (Full Composability):
+✓ Recursive SNARK verification
+✓ Proof aggregation
+✓ Multi-proof composition
+```
+
+**zkSalaria Development Needed:**
+```
+Smart Contract Updates:
+✓ On-chain EZKL verifier circuit
+✓ KZG verification logic
+✓ Proof composition helpers
+
+API Changes:
+✓ Direct proof submission (bypass auditor)
+✓ Hybrid routing (auditor vs on-chain)
+✓ Fee structure updates
+
+Testing:
+✓ Gas cost analysis
+✓ Verification performance benchmarks
+✓ Security audits of on-chain verifiers
+```
+
+---
+
 ### ⚖️ Fair Market Principles
 
 **Designed for Long-Term Sustainability:**
@@ -744,6 +979,8 @@ Auditors refer new auditors:
 ✓ Transparent on-chain metrics
 ✓ Slashing/penalties for bad actors
 ✓ Governance for fee structure adjustments
+✓ Graceful evolution to trustless verification
+✓ Auditors remain valuable in new capacities
 ```
 
 ---
