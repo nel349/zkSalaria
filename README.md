@@ -334,6 +334,279 @@ Open http://localhost:5173 in Chrome with [Lace Wallet](https://docs.midnight.ne
 
 ---
 
+## 🧩 Modular ZKML Architecture - No Contract Redeployment Needed
+
+### 🚀 Key Innovation: Infinite Proof Types Without Smart Contract Changes
+
+**Unlike traditional systems, zkSalaria can add unlimited new ML models without redeploying smart contracts.**
+
+#### How It Works:
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ZKML Models (Off-Chain) - Can be added anytime             │
+├─────────────────────────────────────────────────────────────┤
+│ ✓ income_above_threshold.onnx                               │
+│ ✓ income_range.onnx                                         │
+│ ✓ average_income.onnx                                       │
+│ ✓ credit_score.onnx                                         │
+│ ✓ pay_bias_detector.onnx           ← Add without deployment│
+│ ✓ fraud_detection.onnx              ← Add without deployment│
+│ ✓ income_stability.onnx             ← Add without deployment│
+│ ✓ [any future model].onnx           ← Add without deployment│
+└─────────────────────────────────────────────────────────────┘
+                        ↓
+            (EZKL generates ZK proof)
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Smart Contract (On-Chain) - Never needs redeployment       │
+├─────────────────────────────────────────────────────────────┤
+│ ✓ Validates proof structure (generic)                       │
+│ ✓ Checks auditor signature                                  │
+│ ✓ Verifies history commitment                               │
+│ ✓ Stores proof metadata                                     │
+│                                                              │
+│ Contract is MODEL-AGNOSTIC! ✅                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why This Matters:**
+- ✅ **No upgrade risk**: Smart contract stays immutable and secure
+- ✅ **Fast innovation**: Deploy new models in hours, not months
+- ✅ **Lower costs**: No gas fees for contract redeployment
+- ✅ **Backward compatible**: Old proofs still work with new models
+- ✅ **Auditor specialization**: Different auditors can support different model types
+
+---
+
+### 🔬 Future ML Models (No Contract Changes Required)
+
+#### **Pay Equity & Fairness**
+**Model:** `pay_bias_detector.onnx`
+- **Use case**: Employee proves "I'm paid fairly compared to peers with similar experience"
+- **Input**: Employee's salary, years of experience, job role, industry benchmarks
+- **Output**: ZK proof that compensation is within ±15% of fair market value
+- **Beneficiary**: Employees fighting discrimination, companies proving fair pay practices
+
+**Example:**
+```
+Alice (5 years experience, Software Engineer):
+Proof: "My salary is within fair range for my role/experience"
+Bank/Court sees: ✅ TRUE (compensation is fair)
+Bank/Court NEVER sees: Exact salary ($95,000)
+```
+
+---
+
+#### **Fraud Detection & Risk Assessment**
+**Model:** `fraud_detection.onnx`
+- **Use case**: Verifier proves "This income pattern shows no fraud indicators"
+- **Input**: 12 months payment history, timing patterns, amount variance
+- **Output**: ZK proof that fraud score < 0.1 (no suspicious patterns)
+- **Beneficiary**: Lenders avoiding fraudulent loan applications
+
+**Fraud Signals Detected:**
+- Sudden income spikes before loan application
+- Round-number payments (e.g., exactly $5,000 every month)
+- Irregular payment timing
+- Inconsistent employer patterns
+
+**Example:**
+```
+Bob applies for mortgage:
+Proof: "My income has fraud_score < 0.1"
+Lender sees: ✅ TRUE (income pattern is legitimate)
+Lender NEVER sees: Individual payment dates or amounts
+```
+
+---
+
+#### **Income Stability Prediction**
+**Model:** `income_stability.onnx`
+- **Use case**: Landlord proves "Tenant's income is stable for next 12 months"
+- **Input**: Payment history, trend analysis, seasonal adjustments
+- **Output**: ZK proof that income_stability_score ≥ 0.85
+- **Beneficiary**: Landlords assessing long-term rental risk
+
+**Stability Factors:**
+- Income trend (increasing/decreasing/flat)
+- Payment consistency (variance < 10%)
+- Employment duration
+- Seasonal income patterns (freelancers, gig workers)
+
+**Example:**
+```
+Carol (freelancer, variable income):
+Proof: "My income stability score ≥ 0.85"
+Landlord sees: ✅ TRUE (income is stable despite fluctuations)
+Landlord NEVER sees: Exact monthly amounts or client details
+```
+
+---
+
+#### **Tax Bracket Verification**
+**Model:** `tax_bracket_verifier.onnx`
+- **Use case**: Prove "I'm in the 22% federal tax bracket" for tax planning
+- **Input**: Annual income, deductions, filing status
+- **Output**: ZK proof of tax bracket without revealing exact income
+- **Beneficiary**: Financial planners, tax optimization services
+
+**Example:**
+```
+David earns $89,000 (22% bracket):
+Proof: "I'm in 22% tax bracket"
+Financial advisor sees: ✅ Tax bracket confirmed
+Financial advisor NEVER sees: Exact income ($89,000)
+```
+
+---
+
+#### **Debt-to-Income Ratio**
+**Model:** `debt_to_income.onnx`
+- **Use case**: Mortgage lender proves "DTI ratio < 43%" without seeing debts or income
+- **Input**: Monthly income, existing debt payments (provided privately)
+- **Output**: ZK proof that DTI < 43%
+- **Beneficiary**: Lenders evaluating mortgage applications
+
+**Example:**
+```
+Emma applies for $400K mortgage:
+Proof: "My DTI ratio < 43%"
+Lender sees: ✅ TRUE (qualifies for mortgage)
+Lender NEVER sees: Exact income or debt amounts
+```
+
+---
+
+#### **Employment Gap Detection**
+**Model:** `employment_continuity.onnx`
+- **Use case**: Prove "No employment gaps > 3 months in last 2 years"
+- **Input**: Payment history timestamps, employment records
+- **Output**: ZK proof of continuous employment
+- **Beneficiary**: Employers during hiring, immigration applications
+
+**Example:**
+```
+Frank (job applicant):
+Proof: "No employment gaps > 3 months"
+Employer sees: ✅ TRUE (continuous work history)
+Employer NEVER sees: Previous employer names or exact dates
+```
+
+---
+
+#### **Savings Capacity Prediction**
+**Model:** `savings_capacity.onnx`
+- **Use case**: Investment advisor proves "Client can save ≥ $1,000/month"
+- **Input**: Income history, estimated living expenses (optional private input)
+- **Output**: ZK proof of savings capacity
+- **Beneficiary**: Financial advisors, retirement planning services
+
+**Example:**
+```
+Grace (retirement planning):
+Proof: "I can save ≥ $1,000/month for retirement"
+Advisor sees: ✅ TRUE (can afford retirement plan)
+Advisor NEVER sees: Exact income or current savings
+```
+
+---
+
+#### **Multi-Employer Income Aggregation**
+**Model:** `multi_employer_aggregator.onnx`
+- **Use case**: Gig worker proves "Combined income from all jobs ≥ $5,000/month"
+- **Input**: Payment histories from multiple employers/platforms
+- **Output**: ZK proof of aggregate income
+- **Beneficiary**: Gig workers with multiple income streams
+
+**Example:**
+```
+Hannah (Uber + DoorDash + Upwork):
+Proof: "Combined income ≥ $5,000/month"
+Lender sees: ✅ TRUE (meets income requirement)
+Lender NEVER sees: Individual platform earnings or employer count
+```
+
+---
+
+#### **Seasonal Income Adjustment**
+**Model:** `seasonal_income_normalizer.onnx`
+- **Use case**: Seasonal worker proves "Annualized income ≥ $60,000"
+- **Input**: Seasonal payment patterns, work months per year
+- **Output**: ZK proof of normalized annual income
+- **Beneficiary**: Teachers, construction workers, seasonal employees
+
+**Example:**
+```
+Ian (teacher, 9-month salary):
+Proof: "Annualized income ≥ $60,000"
+Lender sees: ✅ TRUE (meets annual threshold)
+Lender NEVER sees: Monthly salary or work schedule
+```
+
+---
+
+### 🎨 How to Add a New Model (3 Steps)
+
+**1. Train ONNX Model (Off-Chain)**
+```python
+# zkml/payroll/models/pay_bias_detector.py
+import onnx
+model = train_ml_model(training_data)
+onnx.save(model, "pay_bias_detector.onnx")
+```
+
+**2. Generate EZKL Proof Keys (Off-Chain)**
+```bash
+cd zkml/payroll
+python generate_all_models.py --model pay_bias_detector
+# Creates: pay_bias_detector_pk.key, pay_bias_detector_vk.key
+```
+
+**3. Deploy via API (No Smart Contract Changes!)**
+```typescript
+// Employees can immediately use new model
+const proof = await generateIncomeProof({
+  proofType: 5, // NEW: Pay bias detection
+  threshold: 0.85,
+  paymentHistory: employeePayments
+});
+
+// Auditor validates and signs
+await auditor.validateAndSign(proof);
+
+// Submit to SAME smart contract (no redeployment!)
+await contract.submit_income_proof(proof);
+```
+
+**That's it!** New proof type available to all users without touching the smart contract.
+
+---
+
+### 💡 Why This Architecture is Revolutionary
+
+**Traditional Smart Contract Systems:**
+```
+New feature → Redeploy contract → Audit code → Migrate data → Risk of bugs
+Timeline: 3-6 months
+Cost: $50,000 - $500,000 (audit + gas fees)
+```
+
+**zkSalaria Modular System:**
+```
+New ONNX model → Train & deploy → Users can immediately use
+Timeline: 1-3 days
+Cost: $0 (no contract changes)
+```
+
+**Benefits for Ecosystem:**
+- 🏢 **Companies**: Add custom models for specific industries
+- 👨‍💼 **Employees**: More proof types = more use cases
+- 🏦 **Verifiers**: Choose proof types that match requirements
+- 🔍 **Auditors**: Specialize in specific model types (fraud, bias, etc.)
+- 🌐 **Network**: Faster innovation without governance overhead
+
+---
+
 ## 🏗️ Project Structure
 
 ```
