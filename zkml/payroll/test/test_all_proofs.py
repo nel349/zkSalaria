@@ -43,8 +43,8 @@ def test_model(name, display_name):
         ezkl.verify(
             proof_path="test_proof.json",
             settings_path=f"{name}_settings.json",
-            vk_path=f"{name}_vk.key",
-            srs_path="../../ipa.srs"  # IPA commitment (trustless verification!)
+            vk_path=f"{name}_vk.key"
+            # SRS path omitted - EZKL will use default location based on commitment type in settings
         )
         print("   ✓ Proof verified!")
 

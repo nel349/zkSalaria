@@ -65,10 +65,16 @@ def run_ezkl_workflow(name, num_inputs):
     py_run_args.output_visibility = "public"
     py_run_args.param_visibility = "fixed"
     py_run_args.input_scale = 14  # Precision: 2^-14 ≈ 0.000061 (~$0.61 resolution)
-    py_run_args.commitment = "ipa"  # Use IPA commitment (no pairings, trustless on-chain verification!)
 
     ezkl.gen_settings(f"{name}.onnx", f"{name}_settings.json", py_run_args=py_run_args)
-    print(f"   ✓ Settings (IPA commitment)")
+
+    # Keep default KZG commitment (IPA was removed from EZKL in commit 8cf28456)
+    # KZG is the only supported commitment scheme in EZKL 22.2.4+
+    import json
+    with open(f"{name}_settings.json", "r") as f:
+        settings = json.load(f)
+
+    print(f"   ✓ Settings (KZG commitment - default)")
 
     print(f"   → calibrate (forcing input_scale: 14)...")
     # IMPORTANT: Force input_scale to 14 for better precision
@@ -88,9 +94,9 @@ def run_ezkl_workflow(name, num_inputs):
     ezkl.compile_circuit(f"{name}.onnx", f"{name}.compiled", f"{name}_settings.json")
     print(f"   ✓ Compiled")
 
-    print(f"   → setup keys (IPA commitment)...")
-    ezkl.setup(f"{name}.compiled", f"{name}_vk.key", f"{name}_pk.key", srs_path="../../ipa.srs")
-    print(f"   ✓ Keys (IPA)")
+    print(f"   → setup keys (KZG commitment)...")
+    ezkl.setup(f"{name}.compiled", f"{name}_vk.key", f"{name}_pk.key")
+    print(f"   ✓ Keys (KZG)")
 
 def main():
     print("\n" + "="*70)

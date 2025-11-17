@@ -7,8 +7,9 @@ Run this before generating models with IPA commitment
 import ezkl
 import json
 import sys
+import asyncio
 
-def main():
+async def main():
     print("\n" + "="*70)
     print("  Generating IPA SRS for zkSalaria Models")
     print("="*70)
@@ -20,23 +21,25 @@ def main():
     print("\n→ Creating temporary IPA settings...")
     temp_settings = {
         "run_args": {
-            "tolerance": {
-                "val": 0.0,
-                "scale": 1.0
-            },
             "input_scale": 14,
             "param_scale": 14,
+            "rebase_scale": None,
             "scale_rebase_multiplier": 10,
             "lookup_range": [-32768, 32768],
             "logrows": 17,  # Circuit size (2^17 rows should be sufficient)
             "num_inner_cols": 2,
             "variables": [["batch_size", 1]],
-            "input_visibility": "private",
-            "output_visibility": "public",
-            "param_visibility": "fixed",
-            "div_rebasing": false,
-            "rebase_frac_zero_constants": false,
-            "check_mode": "UNSAFE"
+            "input_visibility": "Private",
+            "output_visibility": "Public",
+            "param_visibility": "Fixed",
+            "rebase_frac_zero_constants": False,
+            "check_mode": "UNSAFE",
+            "commitment": "IPA",
+            "decomp_base": 16384,
+            "decomp_legs": 2,
+            "bounded_log_lookup": False,
+            "ignore_range_check_inputs_outputs": False,
+            "epsilon": 2.220446049250313e-16
         },
         "num_rows": 131072,
         "total_assignments": 8192,
@@ -45,17 +48,15 @@ def main():
         "model_output_scales": [14],
         "model_input_scales": [14],
         "module_sizes": {
-            "kzg": [],
-            "poseidon": [],
-            "elgamal": []
+            "polycommit": [],
+            "poseidon": [0, [0]]
         },
         "required_lookups": [],
         "required_range_checks": [],
         "check_mode": "UNSAFE",
-        "version": "11.0.0",
-        "num_blinding_factors": null,
-        "timestamp": 0,
-        "commitment": "IPA"  # KEY: Use IPA commitment!
+        "version": "22.2.4",
+        "num_blinding_factors": None,
+        "timestamp": 0
     }
 
     with open("temp_ipa_settings.json", "w") as f:
@@ -67,10 +68,10 @@ def main():
     print("  (This may take a few minutes...)")
 
     try:
-        ezkl.get_srs(
+        # get_srs will automatically use IPA commitment based on settings file
+        await ezkl.get_srs(
             settings_path="temp_ipa_settings.json",
-            srs_path="ipa.srs",
-            commitment="ipa"  # Explicitly request IPA
+            srs_path="ipa.srs"
         )
         print("✓ IPA SRS generated: ipa.srs")
 
@@ -94,4 +95,4 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(asyncio.run(main()))
