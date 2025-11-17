@@ -68,13 +68,17 @@ def run_ezkl_workflow(name, num_inputs):
 
     ezkl.gen_settings(f"{name}.onnx", f"{name}_settings.json", py_run_args=py_run_args)
 
-    # Keep default KZG commitment (IPA was removed from EZKL in commit 8cf28456)
-    # KZG is the only supported commitment scheme in EZKL 22.2.4+
+    # Use KZG commitment (works reliably in EZKL)
+    # On-chain verification will use Bulletproofs, ZKML is for complex off-chain computation
     import json
     with open(f"{name}_settings.json", "r") as f:
         settings = json.load(f)
+    # KZG is the default, but we'll explicitly set it for clarity
+    settings["run_args"]["commitment"] = "KZG"
+    with open(f"{name}_settings.json", "w") as f:
+        json.dump(settings, f, indent=2)
 
-    print(f"   ✓ Settings (KZG commitment - default)")
+    print(f"   ✓ Settings (KZG commitment)")
 
     print(f"   → calibrate (forcing input_scale: 14)...")
     # IMPORTANT: Force input_scale to 14 for better precision
