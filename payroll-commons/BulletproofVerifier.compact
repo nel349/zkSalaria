@@ -1,33 +1,34 @@
 pragma language_version >= 0.13.0;
 
-import CompactStandardLibrary;
+module BulletproofVerifier {
+  import CompactStandardLibrary;
 
-/**
- * Bulletproof Range Proof Verifier
- *
- * This module provides trustless on-chain verification of Bulletproof range proofs.
- * Bulletproofs allow proving that a committed value lies within a range [min, max]
- * without revealing the actual value.
- *
- * Key Properties:
- * - Only requires G1 elliptic curve operations (available in Compact!)
- * - No pairings needed (unlike Groth16)
- * - Logarithmic proof size in range size
- * - No trusted setup
- *
- * Use Case in zkSalaria:
- * - Prove income >= threshold without revealing exact income
- * - Trustless verification on-chain (replaces trusted verifier)
- * - Works in combination with EZKL proofs for ZKML verification
- */
+  /**
+   * Bulletproof Range Proof Verifier
+   *
+   * This module provides trustless on-chain verification of Bulletproof range proofs.
+   * Bulletproofs allow proving that a committed value lies within a range [min, max]
+   * without revealing the actual value.
+   *
+   * Key Properties:
+   * - Only requires G1 elliptic curve operations (available in Compact!)
+   * - No pairings needed (unlike Groth16)
+   * - Logarithmic proof size in range size
+   * - No trusted setup
+   *
+   * Use Case in zkSalaria:
+   * - Prove income >= threshold without revealing exact income
+   * - Trustless verification on-chain (replaces trusted verifier)
+   * - Works in combination with EZKL proofs for ZKML verification
+   */
 
-export {
-  BulletproofData,
-  verify_bulletproof_range,
-  verify_bulletproof_commitment,
-  generate_challenge_scalars,
-  pedersen_commit
-};
+  export {
+    BulletproofData,
+    verify_bulletproof_range,
+    verify_bulletproof_commitment,
+    generate_challenge_scalars,
+    pedersen_commit
+  };
 
 // ========================================
 // TYPES
@@ -330,3 +331,5 @@ pure circuit curve_points_equal(p1: CurvePoint, p2: CurvePoint): Boolean {
   const p2_hash = persistentHash<CurvePoint>(p2);
   return p1_hash == p2_hash;
 }
+
+} // end module BulletproofVerifier

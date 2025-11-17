@@ -1351,7 +1351,8 @@ export circuit submit_income_proof_bulletproof(
   // WITHOUT trusting any verifier - pure mathematics!
   const range_proof_valid = BP_verify_bulletproof_range(bulletproof_data);
 
-  if (!range_proof_valid) {
+  // Disclose the verification result (it's public anyway - we want everyone to know if proof is valid)
+  if (!disclose(range_proof_valid)) {
     return false; // Bulletproof is invalid - threshold claim is false!
   }
 
@@ -1363,7 +1364,8 @@ export circuit submit_income_proof_bulletproof(
     history_commitment
   );
 
-  if (!commitment_bound) {
+  // Disclose the binding verification result (public information)
+  if (!disclose(commitment_bound)) {
     return false; // Bulletproof not bound to this attestation!
   }
 
