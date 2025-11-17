@@ -529,6 +529,225 @@ Trust: ✅ Cryptographic proof (no documents needed)
 
 ---
 
+## 💰 Business Model & Auditor Incentives
+
+### Overview: Self-Sustaining Verification Marketplace
+
+zkSalaria creates a **three-sided marketplace** where employees, auditors, and verifiers all benefit from privacy-preserving income verification.
+
+---
+
+### 🎯 Value Proposition for Each Participant
+
+#### **For Employees:**
+```
+✅ Own your financial reputation
+✅ Prove income requirements without revealing exact salary
+✅ Reusable proofs for multiple verifiers (loans, leases, credit)
+✅ No document fraud risk
+✅ Instant verification (vs. days of waiting)
+```
+
+#### **For Auditors (Licensed CPAs/Firms):**
+```
+✅ New revenue stream from verification services
+✅ Flexible, remote work (verify proofs from anywhere)
+✅ Automated workflow (EZKL handles computation)
+✅ Build reputation in decentralized ecosystem
+✅ Earn fees proportional to reputation score
+✅ Low overhead (use existing credentials)
+```
+
+#### **For Verifiers (Banks/Landlords/Lenders):**
+```
+✅ 99% cost reduction vs. manual verification
+✅ Instant results (vs. 3-5 days)
+✅ Cryptographically certain (no document fraud)
+✅ No liability for storing sensitive data
+```
+
+---
+
+### 🏆 Auditor Incentive System
+
+#### **1. Direct Fee Revenue**
+Auditors earn fees for each proof they verify and submit to the contract.
+
+**Earning Potential:**
+- **Automation advantage**: EZKL verification takes ~30 seconds
+- **Throughput**: 60-120 proofs per hour possible
+- **Competitive rates**: Comparable to traditional CPA hourly rates
+- **Scalability**: Marginal cost near zero (software-based verification)
+
+#### **2. Reputation-Based Multiplier**
+```
+Auditor reputation score (0-1000) affects:
+- Fee percentage share
+- Visibility in marketplace
+- Access to premium proof types
+- Volume of verification requests
+
+Reputation Formula:
+reputation_score = (successful_verifications / total_verifications) × 1000
+```
+
+**Reputation Tiers:**
+- **⭐⭐⭐⭐⭐ (900-1000)**: Top tier, featured listing, highest fees
+- **⭐⭐⭐⭐ (700-899)**: High quality, standard listing
+- **⭐⭐⭐ (500-699)**: Acceptable, with performance warnings
+- **⭐⭐ (<500)**: Auto-deactivated, reputation recovery required
+
+#### **3. Market Dynamics**
+```
+Supply & Demand:
+- High-reputation auditors → Premium fees
+- Fast turnaround → Higher volume
+- Specialization → Niche markets
+
+Employees choose auditors based on:
+✓ Reputation score
+✓ Verification speed
+✓ Specialization (Big 4, crypto-native, regional)
+✓ Price competitiveness
+```
+
+#### **4. Quality Assurance Mechanisms**
+```
+✓ Random audits (5% sample) for quality control
+✓ Reputation loss for invalid proofs
+✓ Slashing mechanism (future: staking)
+✓ Dispute resolution via auditor panel
+✓ Community governance (future)
+```
+
+---
+
+### 💡 Why Auditors Participate
+
+#### **Comparison to Traditional CPA Work:**
+```
+Traditional Income Verification:
+- Manual review: 30 minutes per verification
+- Requires physical documents
+- Liability for errors
+- Hourly billing only
+
+zkSalaria Auditor Model:
+- Automated verification: 30 seconds per proof
+- Remote, software-based work
+- Reputation system handles quality
+- High-volume, low-friction workflow
+```
+
+#### **Network Effects:**
+```
+More Employees → More Proofs → More Auditor Revenue
+                     ↓
+More Auditors → Faster Verification → Better UX
+                     ↓
+           More Employee Adoption
+```
+
+---
+
+### 🚀 Revenue Model (Simplified)
+
+#### **Three Payment Streams:**
+1. **Employees**: Pay for proof generation (or company-subsidized)
+2. **Verifiers**: Pay per query to check proofs
+3. **Protocol**: Takes small percentage for development/maintenance
+
+#### **Fee Distribution Example:**
+```
+Total value per proof lifecycle:
+├─ Auditor: ~60-70% (largest share for verification work)
+├─ Protocol: ~25-30% (infrastructure, development)
+└─ Staking Rewards: ~5-10% (future incentive layer)
+```
+
+#### **Pricing Philosophy:**
+- **Micro-fees**: Leverage Midnight's low gas costs
+- **Volume over margin**: Better to have millions of $1 proofs than thousands of $100 proofs
+- **99% cost reduction**: Compete on value, not just privacy
+- **Freemium model**: Free basic tier, premium for advanced features
+
+---
+
+### 🎁 Future Incentive Mechanisms
+
+#### **Token Rewards ($SALARIA - Future)**
+```
+Utility:
+✓ Staking for reputation boost
+✓ Governance voting rights
+✓ Fee discounts for holding
+✓ Liquidity provision rewards
+```
+
+#### **Staking System (Future)**
+```
+Auditors stake tokens:
+✓ Higher stake → Higher reputation multiplier
+✓ Slashing for fraudulent proofs
+✓ Staking rewards for honest behavior
+✓ Unlock premium proof types
+```
+
+#### **Performance Bounties**
+```
+Protocol-funded incentives:
+✓ Fastest verifications
+✓ Highest volume auditors
+✓ Perfect reputation scores
+✓ Early adopter bonuses
+```
+
+#### **Referral Program**
+```
+Auditors refer new auditors:
+✓ Earn percentage of referee's fees
+✓ Build network effects
+✓ Accelerate marketplace growth
+```
+
+---
+
+### 📊 Growth Strategy
+
+#### **Phase 1: MVP (Year 1)**
+- Free/subsidized for all participants
+- Build auditor network (first 100 auditors)
+- Establish proof-of-concept
+- Test market pricing
+
+#### **Phase 2: Market Rate Discovery (Year 2)**
+- Introduce micro-fees
+- Reputation system in full effect
+- Competitive auditor marketplace
+- Volume incentives
+
+#### **Phase 3: Scale (Year 3+)**
+- Token launch and staking
+- Governance by community
+- Premium tier with advanced ML models
+- Enterprise partnerships
+
+---
+
+### ⚖️ Fair Market Principles
+
+**Designed for Long-Term Sustainability:**
+```
+✓ Market-driven pricing (not protocol-dictated)
+✓ Reputation aligns incentives (quality over quantity)
+✓ Open marketplace (any licensed auditor can join)
+✓ Transparent on-chain metrics
+✓ Slashing/penalties for bad actors
+✓ Governance for fee structure adjustments
+```
+
+---
+
 ## 📚 Technical Stack Summary
 
 | Layer | Technology | Status |
