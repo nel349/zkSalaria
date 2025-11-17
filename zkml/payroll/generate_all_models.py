@@ -65,9 +65,10 @@ def run_ezkl_workflow(name, num_inputs):
     py_run_args.output_visibility = "public"
     py_run_args.param_visibility = "fixed"
     py_run_args.input_scale = 14  # Precision: 2^-14 ≈ 0.000061 (~$0.61 resolution)
+    py_run_args.commitment = "ipa"  # Use IPA commitment (no pairings, trustless on-chain verification!)
 
     ezkl.gen_settings(f"{name}.onnx", f"{name}_settings.json", py_run_args=py_run_args)
-    print(f"   ✓ Settings")
+    print(f"   ✓ Settings (IPA commitment)")
 
     print(f"   → calibrate (forcing input_scale: 14)...")
     # IMPORTANT: Force input_scale to 14 for better precision
@@ -87,9 +88,9 @@ def run_ezkl_workflow(name, num_inputs):
     ezkl.compile_circuit(f"{name}.onnx", f"{name}.compiled", f"{name}_settings.json")
     print(f"   ✓ Compiled")
 
-    print(f"   → setup keys...")
-    ezkl.setup(f"{name}.compiled", f"{name}_vk.key", f"{name}_pk.key", srs_path="../../kzg.srs")
-    print(f"   ✓ Keys")
+    print(f"   → setup keys (IPA commitment)...")
+    ezkl.setup(f"{name}.compiled", f"{name}_vk.key", f"{name}_pk.key", srs_path="../../ipa.srs")
+    print(f"   ✓ Keys (IPA)")
 
 def main():
     print("\n" + "="*70)

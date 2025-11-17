@@ -44,7 +44,7 @@ def test_model(name, display_name):
             proof_path="test_proof.json",
             settings_path=f"{name}_settings.json",
             vk_path=f"{name}_vk.key",
-            srs_path="../../kzg.srs"
+            srs_path="../../ipa.srs"  # IPA commitment (trustless verification!)
         )
         print("   ✓ Proof verified!")
 
