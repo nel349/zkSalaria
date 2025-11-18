@@ -14,17 +14,21 @@ import {
   Alert,
   Chip,
   Paper,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
 import BusinessIcon from '@mui/icons-material/Business';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import BugReportIcon from '@mui/icons-material/BugReport';
 import { useTheme, useThemeValues } from '../theme';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { getCompany, saveCompany, type SavedCompany } from '../utils/CompaniesLocalState';
 import { type EmployeeMetadata } from '../types/payment';
 import { toast } from 'react-hot-toast';
+import { getDeveloperSettings, saveDeveloperSettings } from '../utils/devSettings';
 
 interface ProfileSettingsModalProps {
   open: boolean;
@@ -59,6 +63,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [employeeEmail, setEmployeeEmail] = useState('');
   const [employeeRole, setEmployeeRole] = useState('');
 
+  // Developer settings (only for company)
+  const [showDebugPanel, setShowDebugPanel] = useState(true);
+
   const [hasChanges, setHasChanges] = useState(false);
 
   // Load saved metadata
@@ -73,6 +80,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setCompanySize(company.size || '');
         setCompanyEmail(company.email || '');
       }
+
+      // Load developer settings
+      const devSettings = getDeveloperSettings();
+      setShowDebugPanel(devSettings.showDebugPanel);
     } else {
       // Load employee metadata from localStorage
       if (walletAddress) {
@@ -107,6 +118,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             email: companyEmail,
           };
           saveCompany(updatedCompany);
+
+          // Save developer settings
+          saveDeveloperSettings({
+            showDebugPanel: showDebugPanel,
+          });
+
           toast.success('Company profile updated');
         }
       } else {
@@ -389,6 +406,57 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </Stack>
             )}
           </Box>
+
+          {/* Developer Settings (Company Only) */}
+          {isCompany && (
+            <>
+              <Divider />
+              <Box>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                  <BugReportIcon sx={{ color: theme.colors.warning[600], fontSize: 20 }} />
+                  <Typography
+                    variant="subtitle2"
+                    fontWeight={theme.typography.fontWeight.semibold}
+                    color={theme.colors.text.secondary}
+                  >
+                    Developer Settings
+                  </Typography>
+                </Stack>
+
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    bgcolor: mode === 'dark' ? `${theme.colors.warning[500]}10` : theme.colors.warning[50],
+                    borderColor: theme.colors.warning[500],
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={showDebugPanel}
+                        onChange={(e) => {
+                          setShowDebugPanel(e.target.checked);
+                          setHasChanges(true);
+                        }}
+                        color="warning"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight={theme.typography.fontWeight.medium} color={theme.colors.text.primary}>
+                          Show Debug Panel
+                        </Typography>
+                        <Typography variant="caption" color={theme.colors.text.secondary}>
+                          Display the 6-month test data generator panel on the dashboard (development/testing only)
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </Paper>
+              </Box>
+            </>
+          )}
         </Stack>
       </DialogContent>
 

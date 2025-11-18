@@ -285,7 +285,7 @@ export const VerifyProofPage: React.FC = () => {
               px: 4,
             }}
           >
-            Connect Wallet
+            <Typography>Connect Wallet</Typography>
           </Button>
         </Paper>
       </Container>

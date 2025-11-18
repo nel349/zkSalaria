@@ -21,6 +21,7 @@ import { useThemeValues } from '../theme';
 import { toast } from 'react-hot-toast';
 import { type DeployedPayrollAPI } from '@zksalaria/payroll-api';
 import { type PaymentMetadata } from '../types/payment';
+import { shouldShowDebugPanel } from '../utils/devSettings';
 
 interface DebugPanelProps {
   api: DeployedPayrollAPI | null;
@@ -109,8 +110,9 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ api, employees, contract
     }
   };
 
-  if (!api) {
-    return null; // Don't show debug panel if API not available
+  // Don't show debug panel if API not available or if disabled in settings
+  if (!api || !shouldShowDebugPanel()) {
+    return null;
   }
 
   return (

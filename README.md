@@ -9,6 +9,124 @@
 
 ---
 
+## 📸 zkSalaria User Flows
+
+<table>
+<tr>
+<td width="33%" align="center">
+
+### 👤 **Employee Portal**
+**Private Salary Management**
+
+![Employee Dashboard](docs/screenshots/employee-dashboard.png)
+
+**Key Features:**
+- View encrypted salary balance
+- Generate income proofs (4 types)
+- Withdraw earned salary
+- Payment history timeline
+
+</td>
+<td width="33%" align="center">
+
+### 🏢 **Company Dashboard**
+**Privacy-First Payroll**
+
+![Company Dashboard](docs/screenshots/company-dashboard.png)
+
+**Key Features:**
+- Deposit funds & pay employees
+- Set up recurring payments
+- Track encrypted balances
+- Manage employment records
+
+</td>
+<td width="33%" align="center">
+
+### 🔍 **Auditor Workspace**
+**ZKML Proof Verification**
+
+![Auditor Dashboard](docs/screenshots/auditor-dashboard.png)
+
+**Key Features:**
+- Validate EZKL income proofs
+- Sign attestations (~30 sec)
+- Build reputation score
+- Earn verification fees
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>🎯 See Complete User Journey (Click to Expand)</b></summary>
+
+### **1. Company Flow: Setting Up Payroll**
+```
+Company Login → Deposit Funds → Add Employees → Create Recurring Payments
+```
+
+**Company Dashboard - Main View**
+
+![Company Dashboard](docs/screenshots/company-dashboard.png)
+
+**Adding New Employee**
+
+![Add Employee Form](docs/screenshots/add-new-employee-form.png)
+
+**Paying Employee**
+
+![Pay Employee Form](docs/screenshots/pay-employee-form.png)
+
+**Setting Up Recurring Payments**
+
+![Setup Recurring Payment](docs/screenshots/setup-recurring-form.png)
+
+---
+
+### **2. Employee Flow: Generating Income Proof**
+```
+Employee Login → View Payment History → Generate Proof → Submit to Auditor
+```
+
+**Generate Income Proof Form**
+
+![Generate Income Proof](docs/screenshots/generate-income-proof-form.png)
+
+**Proof Generated - Details View**
+
+![Proof Generated Details](docs/screenshots/proof-generated-details.png)
+
+**Downloadable PDF Proof**
+
+![PDF Income Proof](docs/screenshots/pdf-income-proof.png)
+
+---
+
+### **3. Auditor Flow: Verifying & Signing Proofs**
+```
+Auditor Login → Receive Proof → Validate EZKL → Sign Attestation → Earn Fee
+```
+- Auditors receive employee proof requests
+- Validate EZKL proof structure and history commitment
+- Sign attestation with private key
+- Earn 60-70% of verification fee + build reputation
+
+---
+
+### **4. Verifier Flow: Checking Income Eligibility**
+```
+Bank/Lender → Call Smart Contract → Verify Proof → Approve Loan
+```
+- Banks/landlords call `verifyIncomeProof()` on smart contract
+- Contract returns TRUE/FALSE (threshold met or not)
+- Verifier NEVER sees exact salary amount
+- Instant verification (~20ms on-chain)
+
+</details>
+
+---
+
 ## 🎯 The Problem We're Solving
 
 **Today's broken income verification:**

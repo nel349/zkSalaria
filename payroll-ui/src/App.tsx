@@ -17,6 +17,7 @@ import {
   AuditorLandingPage,
   AuditorApplicationPage,
   AuditorStatusPage,
+  AuditorDashboardPage,
 } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
@@ -95,6 +96,7 @@ export const App: React.FC = () => {
           <Route path="/auditor" element={<AuditorLandingPage />} />
           <Route path="/auditor/apply" element={<AuditorApplicationPage />} />
           <Route path="/auditor/status" element={<AuditorStatusPage />} />
+          <Route path="/auditor/dashboard" element={<AuditorDashboardPage />} />
 
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

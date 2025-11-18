@@ -23,3 +23,4 @@ export { VerifyProofPage } from './VerifyProofPage';
 export { AuditorLandingPage } from './AuditorLandingPage';
 export { AuditorApplicationPage } from './AuditorApplicationPage';
 export { AuditorStatusPage } from './AuditorStatusPage';
+export { AuditorDashboardPage } from './AuditorDashboardPage';
