@@ -90,6 +90,12 @@ export const RoleDetectionPage: React.FC = () => {
             navigate('/onboarding/role');
             break;
 
+          case 'auditor':
+            // Auditor → Status page to check application/registration status
+            console.log('[RoleDetection] Auditor detected, redirecting to auditor status page');
+            navigate('/auditor/status');
+            break;
+
           case 'company':
             // Company only → Account selector (user must choose which company)
             console.log('[RoleDetection] Company accounts found, redirecting to account selector');

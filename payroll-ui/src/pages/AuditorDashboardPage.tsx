@@ -422,7 +422,7 @@ export const AuditorDashboardPage: React.FC = () => {
                   {trustedAtCompanies.map((companyName, index) => (
                     <Chip
                       key={index}
-                      label={companyName}
+                      label={<Typography>{companyName}</Typography>}
                       color="success"
                       icon={<CheckCircleIcon />}
                       sx={{ fontWeight: 600 }}
@@ -520,7 +520,7 @@ export const AuditorDashboardPage: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <Chip
-                            label={getProofTypeLabel(request.proofType)}
+                            label={<Typography>{getProofTypeLabel(request.proofType)}</Typography>}
                             color={getProofTypeColor(request.proofType)}
                             size="small"
                           />

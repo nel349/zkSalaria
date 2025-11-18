@@ -3,14 +3,16 @@ import { listCompanies, getCurrentCompany } from '../utils/CompaniesLocalState';
 import { listEmployers } from '../utils/EmployerContractsLocalState';
 import pino from 'pino';
 
-export type UserRole = 'new' | 'company' | 'employee' | 'both';
+export type UserRole = 'new' | 'company' | 'employee' | 'both' | 'auditor';
 
 export interface RoleDetectionResult {
   role: UserRole;
   isCompany: boolean;
   isEmployee: boolean;
+  isAuditor?: boolean;
   companyData?: CompanyInfo;
   employeeData?: EmployeeInfo;
+  auditorPubkey?: string;
 }
 
 // Create pino logger for role detection
@@ -55,6 +57,28 @@ const detectUserRoleInternal = async (
 ): Promise<RoleDetectionResult> => {
 
   try {
+    // PRIORITY 1: Check for auditor role first (explicit role markers)
+    // Auditors have localStorage markers but shouldn't be confused with company owners
+    const auditorApplicationId = localStorage.getItem('auditorApplicationId');
+    const auditorPubkey = localStorage.getItem('auditorPubkey');
+    const auditorApplicationStatus = localStorage.getItem('auditorApplicationStatus');
+
+    if (auditorApplicationId || auditorPubkey || auditorApplicationStatus) {
+      console.log('[RoleDetection] Auditor detected - found auditor localStorage markers:', {
+        applicationId: auditorApplicationId,
+        pubkey: auditorPubkey ? `${auditorPubkey.slice(0, 8)}...` : null,
+        status: auditorApplicationStatus,
+      });
+      return {
+        role: 'auditor',
+        isCompany: false,
+        isEmployee: false,
+        isAuditor: true,
+        auditorPubkey: auditorPubkey || undefined,
+      };
+    }
+
+    // PRIORITY 2: Check for company/employee roles
     // Get all companies and employers from local storage
     const companies = listCompanies();
     const employers = listEmployers(walletAddress);
