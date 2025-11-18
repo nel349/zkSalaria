@@ -276,6 +276,466 @@ npm run compile
 
 ---
 
+## Auditor Frontend & UI/UX Requirements
+
+### Overview
+Auditors need a complete dashboard to onboard, verify proofs, track reputation, and manage their profile. This section details the full auditor experience.
+
+---
+
+### 🎯 Auditor Onboarding Flow
+
+#### **Step 1: Landing Page**
+```
+Route: /auditor
+
+UI Elements:
+┌─────────────────────────────────────────────┐
+│  zkSalaria Auditor Program                  │
+├─────────────────────────────────────────────┤
+│                                             │
+│  💼 Join the Verification Marketplace       │
+│                                             │
+│  Benefits:                                  │
+│  ✓ Earn fees for verification services     │
+│  ✓ Flexible, remote work                   │
+│  ✓ Build on-chain reputation               │
+│  ✓ Automated EZKL workflow                 │
+│                                             │
+│  Requirements:                              │
+│  • Licensed CPA or equivalent               │
+│  • Valid professional license               │
+│  • Midnight wallet                          │
+│                                             │
+│  [Apply to Become an Auditor] ──────────→   │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+#### **Step 2: Application Form**
+```
+Route: /auditor/apply
+
+Form Fields:
+┌─────────────────────────────────────────────┐
+│  Auditor Application                        │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Personal Information:                      │
+│  • Full Name*                               │
+│  • Email*                                   │
+│  • Organization Name*                       │
+│                                             │
+│  Professional Credentials:                  │
+│  • License Type* [CPA / CA / Other]         │
+│  • License Number*                          │
+│  • License Jurisdiction*                    │
+│  • License Expiration Date*                 │
+│  • Upload License Document (PDF)*           │
+│                                             │
+│  Auditor Type:                              │
+│  ○ Big 4 Firm                               │
+│  ○ Regional CPA Firm                        │
+│  ● Crypto-Native Auditor                    │
+│                                             │
+│  Midnight Wallet:                           │
+│  • Public Key (auto-populated)              │
+│  • [Connect Wallet] button                  │
+│                                             │
+│  [Submit Application]                       │
+│                                             │
+└─────────────────────────────────────────────┘
+
+Validation:
+- All fields required
+- License document verified (manual review for MVP)
+- Wallet connected and valid
+```
+
+#### **Step 3: Application Review**
+```
+Status Page: /auditor/application-status
+
+┌─────────────────────────────────────────────┐
+│  Application Status                         │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Status: ⏳ Under Review                    │
+│                                             │
+│  Submitted: Nov 17, 2025                    │
+│  Estimated Review Time: 2-3 business days   │
+│                                             │
+│  Next Steps:                                │
+│  1. Our team is verifying your credentials  │
+│  2. You'll receive email notification       │
+│  3. Contract registration (on approval)     │
+│                                             │
+│  Questions? Contact: auditors@zksalaria.io  │
+│                                             │
+└─────────────────────────────────────────────┘
+
+Approval Flow:
+- Admin reviews application
+- Verifies license authenticity
+- Calls register_trusted_verifier() on contract
+- Sends approval email with dashboard link
+```
+
+#### **Step 4: Dashboard Onboarding**
+```
+First login: /auditor/dashboard (first-time tutorial)
+
+┌─────────────────────────────────────────────┐
+│  Welcome to zkSalaria Auditor Dashboard! 🎉 │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Quick Start Tutorial (5 steps):            │
+│                                             │
+│  ✓ 1. Your profile is active                │
+│  ○ 2. Review how EZKL verification works    │
+│  ○ 3. See a sample proof verification       │
+│  ○ 4. Set your availability preferences     │
+│  ○ 5. Start accepting proof requests        │
+│                                             │
+│  [Skip] [Continue Tutorial]                 │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+### 📊 Auditor Dashboard (Main UI)
+
+#### **Dashboard Home**
+```
+Route: /auditor/dashboard
+
+Layout:
+┌─────────────────────────────────────────────────────────────────┐
+│  zkSalaria Auditor Dashboard                    [Profile] [⚙️]  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
+│  │ Pending     │  │ Today's     │  │ Reputation  │            │
+│  │ Requests    │  │ Earnings    │  │ Score       │            │
+│  │             │  │             │  │             │            │
+│  │     8       │  │   $24.50    │  │   998/1000  │            │
+│  │             │  │             │  │   ⭐⭐⭐⭐⭐   │            │
+│  └─────────────┘  └─────────────┘  └─────────────┘            │
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
+│  │ Total       │  │ Success     │  │ This Month  │            │
+│  │ Verified    │  │ Rate        │  │ Verified    │            │
+│  │             │  │             │  │             │            │
+│  │    1,247    │  │   99.8%     │  │     156     │            │
+│  │             │  │             │  │             │            │
+│  └─────────────┘  └─────────────┘  └─────────────┘            │
+│                                                                 │
+│  Pending Proof Requests:                                       │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │ #1247  │ INCOME_ABOVE_THRESHOLD │ $3.00 │ 15 min ago     │ │
+│  │        │ Employee: 0x8a3f...    │       │ [Review Proof] │ │
+│  ├───────────────────────────────────────────────────────────┤ │
+│  │ #1246  │ INCOME_RANGE           │ $3.50 │ 42 min ago     │ │
+│  │        │ Employee: 0x2f1a...    │       │ [Review Proof] │ │
+│  ├───────────────────────────────────────────────────────────┤ │
+│  │ #1245  │ AVERAGE_INCOME         │ $3.00 │ 1 hour ago     │ │
+│  │        │ Employee: 0x9c4b...    │       │ [Review Proof] │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  [View All Requests (8)]                                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### **Proof Verification UI**
+```
+Route: /auditor/proof/:proofId
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Proof Verification #1247                       [Back to Queue] │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Proof Details:                                                 │
+│  ├─ Type: INCOME_ABOVE_THRESHOLD                               │
+│  ├─ Employee ID: 0x8a3f2b1c...                                 │
+│  ├─ Threshold: $4,000/month                                    │
+│  ├─ History Commitment: 0x9f2a...                              │
+│  ├─ Attestation Hash: 0x3c1b...                                │
+│  ├─ Submitted: Nov 17, 2025 10:23 AM                           │
+│  └─ Fee: $3.00                                                 │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ EZKL Proof File                                         │   │
+│  │ proof.json (12.3 KB)                                    │   │
+│  │                                                         │   │
+│  │ [Automatic Verification Running...]                     │   │
+│  │                                                         │   │
+│  │ ✅ EZKL proof cryptographically valid                   │   │
+│  │ ✅ Model: income_above_threshold.onnx                   │   │
+│  │ ✅ Output: TRUE (income ≥ $4,000)                       │   │
+│  │ ✅ Verification time: 1.2 seconds                       │   │
+│  │                                                         │   │
+│  │ [View Raw Proof JSON]  [Download Proof]                │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  History Commitment Check:                                     │
+│  ├─ Provided: 0x9f2a3c1b...                                    │
+│  ├─ On-Chain: 0x9f2a3c1b... ✅ Match                           │
+│  └─ Status: Bound to valid payment history                     │
+│                                                                 │
+│  Decision:                                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │  ✅ Verification Successful                             │   │
+│  │                                                         │   │
+│  │  The EZKL proof is mathematically valid and bound      │   │
+│  │  to the employee's on-chain payment history.           │   │
+│  │                                                         │   │
+│  │  [Approve & Submit to Contract]                        │   │
+│  │  [Reject Proof] (requires reason)                      │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+Actions:
+- Approve: Signs attestation, calls submit_income_proof()
+- Reject: Records reason, notifies employee
+- View Details: Expands technical proof data
+```
+
+#### **Reputation & Analytics**
+```
+Route: /auditor/reputation
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Reputation & Performance                                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Current Reputation Score: 998/1000 ⭐⭐⭐⭐⭐                    │
+│  Rank: #12 of 247 auditors                                     │
+│                                                                 │
+│  ┌────────────────────────────────────────┐                    │
+│  │  Reputation Score Over Time            │                    │
+│  │                                        │                    │
+│  │  1000 ├─────────────────*────*────*    │                    │
+│  │   900 ├──────────*──*──                │                    │
+│  │   800 ├────*─*──                       │                    │
+│  │   700 ├─*──                            │                    │
+│  │       └──────────────────────────────  │                    │
+│  │        Oct   Nov   Dec   Jan   Feb     │                    │
+│  └────────────────────────────────────────┘                    │
+│                                                                 │
+│  Statistics:                                                    │
+│  ├─ Total Verifications: 1,247                                 │
+│  ├─ Successful: 1,245 (99.8%)                                  │
+│  ├─ Failed: 2 (0.2%)                                           │
+│  ├─ Average Response Time: 12 minutes                          │
+│  ├─ Total Earnings: $3,741.00                                  │
+│  └─ Member Since: Sept 15, 2025                                │
+│                                                                 │
+│  Recent Activity:                                              │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │ Nov 17 │ 23 proofs verified │ +23 reputation │ $69.00    │ │
+│  │ Nov 16 │ 31 proofs verified │ +31 reputation │ $93.00    │ │
+│  │ Nov 15 │ 18 proofs verified │ +18 reputation │ $54.00    │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  Reputation Breakdown:                                         │
+│  ├─ Quality Score: 999/1000 (failure rate: 0.2%)               │
+│  ├─ Speed Score: 995/1000 (avg 12 min response)                │
+│  ├─ Volume Bonus: +50 (>1000 verifications)                    │
+│  └─ Early Adopter Bonus: +25 (founding auditor)                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### **Earnings & Payouts**
+```
+Route: /auditor/earnings
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Earnings & Payouts                                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Available Balance: $124.50                                    │
+│  Pending Settlements: $48.00 (16 proofs in transit)            │
+│                                                                 │
+│  [Withdraw to Wallet]                                          │
+│                                                                 │
+│  Earnings Summary:                                             │
+│  ├─ This Week: $124.50 (42 proofs)                             │
+│  ├─ This Month: $487.00 (156 proofs)                           │
+│  ├─ All Time: $3,741.00 (1,247 proofs)                         │
+│  └─ Average per proof: $3.00                                   │
+│                                                                 │
+│  ┌────────────────────────────────────────┐                    │
+│  │  Monthly Earnings Chart                │                    │
+│  │                                        │                    │
+│  │  $500 ├──────────────────────*         │                    │
+│  │  $400 ├────────────────*──*──          │                    │
+│  │  $300 ├──────────*──*──                │                    │
+│  │  $200 ├────*─*──                       │                    │
+│  │       └──────────────────────────────  │                    │
+│  │        Oct   Nov   Dec   Jan   Feb     │                    │
+│  └────────────────────────────────────────┘                    │
+│                                                                 │
+│  Transaction History:                                          │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │ Nov 17 10:45 AM │ Proof #1247 verified  │ +$3.00         │ │
+│  │ Nov 17 10:23 AM │ Proof #1246 verified  │ +$3.50         │ │
+│  │ Nov 17 09:12 AM │ Proof #1245 verified  │ +$3.00         │ │
+│  │ Nov 16 08:00 PM │ Withdrawal processed  │ -$150.00       │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  [View Full Transaction History]                               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### **Settings & Profile**
+```
+Route: /auditor/settings
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Auditor Settings                                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Profile Information:                                           │
+│  ├─ Name: Deloitte Crypto Audit Division                       │
+│  ├─ License: CPA #123456, Delaware                             │
+│  ├─ Type: Big 4 Firm                                           │
+│  ├─ Public Key: 0x7f3a2b1c...                                  │
+│  ├─ Status: ✅ Active                                          │
+│  └─ Member Since: Sept 15, 2025                                │
+│                                                                 │
+│  [Edit Profile]                                                │
+│                                                                 │
+│  Availability:                                                  │
+│  ├─ Auto-Accept Proofs: [ON]                                   │
+│  ├─ Max Queue Size: [10] proofs                                │
+│  ├─ Working Hours: [9 AM - 6 PM EST]                           │
+│  └─ Notification Preferences:                                  │
+│      ☑ Email on new proof                                     │
+│      ☐ SMS alerts                                             │
+│      ☑ Daily summary email                                    │
+│                                                                 │
+│  Fee Structure:                                                │
+│  ├─ Base Fee: Market rate (auto)                               │
+│  ├─ Premium Multiplier: 1.0x (neutral)                         │
+│  └─ Expedited Fee (+50%): [Enabled]                            │
+│                                                                 │
+│  [Save Settings]                                               │
+│                                                                 │
+│  Security:                                                     │
+│  ├─ Connected Wallet: Midnight Wallet                          │
+│  ├─ Two-Factor Auth: [Enabled]                                 │
+│  └─ API Keys: [Generate API Key] (for integrations)            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 🔧 Technical Implementation
+
+#### **Frontend Stack**
+```
+Framework: React 18
+UI Library: Material-UI or Chakra UI
+State Management: Zustand or Redux Toolkit
+API Layer: React Query
+Wallet: Midnight Wallet SDK
+Charts: Recharts or Chart.js
+```
+
+#### **API Endpoints Needed**
+```typescript
+// Auditor registration
+POST /api/auditor/apply
+  Body: { name, email, license, licenseType, walletPubkey }
+  Response: { applicationId, status: "pending" }
+
+// Get auditor profile
+GET /api/auditor/profile/:pubkey
+  Response: { name, license, reputation, stats }
+
+// Get pending proofs
+GET /api/auditor/proofs/pending
+  Response: [ { proofId, type, fee, submitted, employeeId } ]
+
+// Verify proof
+POST /api/auditor/proof/:proofId/verify
+  Body: { decision: "approve" | "reject", signature }
+  Response: { txHash, success }
+
+// Get earnings
+GET /api/auditor/earnings
+  Response: { available, pending, history }
+
+// Withdraw earnings
+POST /api/auditor/withdraw
+  Body: { amount }
+  Response: { txHash, success }
+```
+
+#### **Real-Time Features**
+```
+WebSocket Connection: /ws/auditor/:pubkey
+
+Events:
+- new_proof_request: Notifies of pending proof
+- proof_verified: Confirmation of successful verification
+- reputation_update: Real-time reputation score changes
+- earnings_update: Payment received notifications
+```
+
+---
+
+### 📝 Auditor Workflow Example
+
+**Complete Flow:**
+```
+1. Auditor applies via /auditor/apply
+   └─> Fills form, uploads license, connects wallet
+
+2. Admin reviews application (manual for MVP)
+   └─> Verifies credentials
+   └─> Calls register_trusted_verifier() on contract
+
+3. Auditor receives approval email
+   └─> Link to dashboard: /auditor/dashboard
+
+4. Employee submits EZKL proof request
+   └─> Proof appears in auditor's pending queue
+
+5. Auditor clicks "Review Proof"
+   └─> Auto-verification runs (EZKL verify)
+   └─> Shows result: ✅ Valid or ❌ Invalid
+
+6. Auditor clicks "Approve & Submit"
+   └─> Signs attestation with private key
+   └─> Calls submit_income_proof() on contract
+   └─> Transaction submitted to blockchain
+
+7. Contract updates auditor reputation
+   └─> total_verifications++
+   └─> successful_verifications++
+   └─> reputation_score recalculated
+
+8. Auditor sees confirmation
+   └─> Earnings updated: +$3.00
+   └─> Reputation updated: 998 → 999
+   └─> Proof removed from queue
+
+9. Employee notified
+   └─> Proof verified and on-chain
+   └─> Can now share with bank/landlord
+```
+
+---
+
 ## Conclusion
 
 The **signature-based auditor model with reputation tracking** is now fully implemented and ready for testing. This provides:
@@ -286,4 +746,4 @@ The **signature-based auditor model with reputation tracking** is now fully impl
 4. **Incentive for honesty** (reputation system)
 5. **Upgrade path** (can add Bulletproofs later)
 
-The contract is ready for compilation testing. Once tests pass, the next step is API integration.
+The contract is ready for compilation testing. Once tests pass, the next step is API integration and auditor dashboard implementation.
