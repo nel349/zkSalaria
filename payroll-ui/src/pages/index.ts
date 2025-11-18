@@ -18,3 +18,8 @@ export { EmployeeListPage } from './EmployeeListPage';
 
 // Proof verification (Phase 4.7)
 export { VerifyProofPage } from './VerifyProofPage';
+
+// Auditor pages
+export { AuditorLandingPage } from './AuditorLandingPage';
+export { AuditorApplicationPage } from './AuditorApplicationPage';
+export { AuditorStatusPage } from './AuditorStatusPage';

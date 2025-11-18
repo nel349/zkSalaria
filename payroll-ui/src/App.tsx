@@ -14,6 +14,9 @@ import {
   CompanySelectorPage,
   EmployeeListPage,
   VerifyProofPage,
+  AuditorLandingPage,
+  AuditorApplicationPage,
+  AuditorStatusPage,
 } from './pages';
 import { useRuntimeConfiguration } from './config/RuntimeConfiguration';
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
@@ -87,6 +90,11 @@ export const App: React.FC = () => {
 
           {/* Public Proof Verification */}
           <Route path="/verify/:employeeId/:attestationHash" element={<VerifyProofPage />} />
+
+          {/* Auditor routes */}
+          <Route path="/auditor" element={<AuditorLandingPage />} />
+          <Route path="/auditor/apply" element={<AuditorApplicationPage />} />
+          <Route path="/auditor/status" element={<AuditorStatusPage />} />
 
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
