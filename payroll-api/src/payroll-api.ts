@@ -99,7 +99,12 @@ export interface DeployedPayrollAPI {
 
   // ZKML Income Proofs (Phase 2.1)
   // Company registers verifier by PUBLIC key (no secret needed)
-  registerTrustedVerifier(verifierPubkey: string): Promise<boolean>;
+  registerTrustedVerifier(
+    verifierPubkey: string,
+    verifierName?: string,
+    verifierLicense?: string,
+    verifierType?: number
+  ): Promise<boolean>;
   isTrustedVerifier(verifierPubkey: string): Promise<boolean>;
   submitIncomeProof(
     employeeId: string,
@@ -1106,13 +1111,26 @@ export class PayrollAPI implements DeployedPayrollAPI {
     );
   }
 
-  async registerTrustedVerifier(verifierPubkey: string): Promise<boolean> {
-    this.logger?.info({ registerTrustedVerifier: { verifierPubkey } });
+  async registerTrustedVerifier(
+    verifierPubkey: string,
+    verifierName: string = 'Unknown Auditor',
+    verifierLicense: string = 'CPA',
+    verifierType: number = 1
+  ): Promise<boolean> {
+    this.logger?.info({ registerTrustedVerifier: { verifierPubkey, verifierName, verifierLicense, verifierType } });
 
     // Company provides verifier's PUBLIC key (no secret needed for registration)
     const verifierPubkeyBytes = utils.hexToBytes32(verifierPubkey);
+    const verifierNameBytes = utils.stringToBytes64(verifierName);
+    const verifierLicenseBytes = utils.stringToBytes64(verifierLicense);
+    const verifierTypeUint = BigInt(verifierType);
 
-    const result = await this.circuits.register_trusted_verifier(verifierPubkeyBytes);
+    const result = await this.circuits.register_trusted_verifier(
+      verifierPubkeyBytes,
+      verifierNameBytes,
+      verifierLicenseBytes,
+      verifierTypeUint
+    );
     // Extract boolean from CircuitResults - circuits returning Boolean wrap result in transaction metadata
     return result.private.result;
   }
@@ -1132,12 +1150,36 @@ export class PayrollAPI implements DeployedPayrollAPI {
     // Check if verifier pubkey exists in trusted_verifiers map
     const isTrusted = ledgerState.trusted_verifiers.member(verifierPubkeyBytes);
 
+    // Debug logging
     this.logger?.info({
       isTrustedVerifier: {
-        verifierPubkey,
+        contractAddress: this.deployedContractAddress,
+        verifierPubkey_hex: verifierPubkey,
+        verifierPubkey_bytes_length: verifierPubkeyBytes.length,
+        trusted_verifiers_size: ledgerState.trusted_verifiers.size(),
         isTrusted,
       }
     });
+
+    // Log all registered verifiers for debugging
+    if (!isTrusted && ledgerState.trusted_verifiers.size() > 0) {
+      const allVerifiers: string[] = [];
+      const verifiersMap = ledgerState.trusted_verifiers as any;
+
+      // Try to extract keys from the map
+      try {
+        for (const [keyBytes, _value] of verifiersMap.entries()) {
+          const keyHex = utils.bytes32ToHex(keyBytes as Uint8Array);
+          allVerifiers.push(keyHex);
+        }
+        this.logger?.info({
+          registered_verifiers: allVerifiers,
+          searching_for: verifierPubkey,
+        });
+      } catch (err) {
+        this.logger?.warn('Could not enumerate trusted_verifiers map');
+      }
+    }
 
     return isTrusted;
   }

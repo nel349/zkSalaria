@@ -11,6 +11,7 @@ import {
   Alert,
   CircularProgress,
   Stack,
+  MenuItem,
 } from '@mui/material';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { useTheme, useThemeValues } from '../theme';
@@ -41,9 +42,27 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
   const theme = useThemeValues();
 
   const [verifierPubkey, setVerifierPubkey] = useState('');
+  const [verifierName, setVerifierName] = useState('');
+  const [verifierLicense, setVerifierLicense] = useState('CPA');
+  const [verifierType, setVerifierType] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const licenseTypes = [
+    { value: 'CPA', label: 'CPA (Certified Public Accountant)' },
+    { value: 'CA', label: 'CA (Chartered Accountant)' },
+    { value: 'ACCA', label: 'ACCA (Association of Chartered Certified Accountants)' },
+    { value: 'CIA', label: 'CIA (Certified Internal Auditor)' },
+    { value: 'Other', label: 'Other Professional License' },
+  ];
+
+  const verifierTypes = [
+    { value: 1, label: 'Independent Auditor' },
+    { value: 2, label: 'Verification Service' },
+    { value: 3, label: 'Government Agency' },
+    { value: 4, label: 'Financial Institution' },
+  ];
 
   const handleRegister = async () => {
     if (!api) {
@@ -53,6 +72,11 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
 
     if (!verifierPubkey.trim()) {
       setError('Please enter verifier public key');
+      return;
+    }
+
+    if (!verifierName.trim()) {
+      setError('Please enter verifier name');
       return;
     }
 
@@ -69,14 +93,27 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
       // Normalize pubkey (remove 0x prefix if present)
       const normalizedPubkey = verifierPubkey.trim().replace(/^0x/, '');
 
-      console.log('[RegisterVerifier] Registering trusted verifier:', normalizedPubkey);
+      console.log('[RegisterVerifier] 📝 Registering trusted verifier:');
+      console.log(`  Pubkey (hex): ${normalizedPubkey}`);
+      console.log(`  Pubkey length: ${normalizedPubkey.length} chars (should be 64 for 32 bytes)`);
+      console.log(`  Name: ${verifierName}`);
+      console.log(`  License: ${verifierLicense}`);
+      console.log(`  Type: ${verifierType}`);
 
-      const result = await api.registerTrustedVerifier(normalizedPubkey);
+      const result = await api.registerTrustedVerifier(
+        normalizedPubkey,
+        verifierName,
+        verifierLicense,
+        verifierType
+      );
 
       if (result) {
         console.log('[RegisterVerifier] ✅ Verifier registered successfully');
         setSuccess(true);
         setVerifierPubkey('');
+        setVerifierName('');
+        setVerifierLicense('CPA');
+        setVerifierType(1);
 
         // Auto-close after 2 seconds
         setTimeout(() => {
@@ -98,6 +135,9 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
   const handleClose = () => {
     if (!loading) {
       setVerifierPubkey('');
+      setVerifierName('');
+      setVerifierLicense('CPA');
+      setVerifierType(1);
       setError(null);
       setSuccess(false);
       onClose();
@@ -139,6 +179,54 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
             </Typography>
           </Alert>
 
+          {/* Verifier Name Input */}
+          <TextField
+            label="Verifier Name"
+            placeholder="Enter verifier or organization name"
+            value={verifierName}
+            onChange={(e) => setVerifierName(e.target.value)}
+            fullWidth
+            disabled={loading || success}
+            required
+            helperText="Name of the auditor or verification service"
+          />
+
+          {/* License Type Dropdown */}
+          <TextField
+            select
+            label="License Type"
+            value={verifierLicense}
+            onChange={(e) => setVerifierLicense(e.target.value)}
+            fullWidth
+            disabled={loading || success}
+            required
+            helperText="Professional license or certification type"
+          >
+            {licenseTypes.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          {/* Verifier Type Dropdown */}
+          <TextField
+            select
+            label="Verifier Type"
+            value={verifierType}
+            onChange={(e) => setVerifierType(Number(e.target.value))}
+            fullWidth
+            disabled={loading || success}
+            required
+            helperText="Category of verification entity"
+          >
+            {verifierTypes.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+
           {/* Verifier Public Key Input */}
           <TextField
             label="Verifier Public Key"
@@ -150,6 +238,7 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
             rows={3}
             disabled={loading || success}
             error={!!error && !success}
+            required
             helperText={
               error && !success
                 ? error
@@ -210,7 +299,7 @@ export const RegisterVerifierModal: React.FC<RegisterVerifierModalProps> = ({
         <Button
           variant="contained"
           onClick={handleRegister}
-          disabled={loading || success || !verifierPubkey.trim()}
+          disabled={loading || success || !verifierPubkey.trim() || !verifierName.trim()}
           startIcon={loading ? <CircularProgress size={16} /> : <VerifiedUserIcon />}
           sx={{
             bgcolor: theme.colors.primary[500],

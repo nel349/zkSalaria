@@ -1,6 +1,6 @@
 {
   "installCommand": "cd .. && npm install && cd payroll-ui && npm install",
-  "buildCommand": "cd ../payroll-api && npm run build && cd ../payroll-ui && npm run build:testnet",
+  "buildCommand": "cd ../payroll-contract && npm run build && cd ../payroll-api && npm run build:vercel && cd ../payroll-ui && npm run build:testnet",
   "outputDirectory": "dist",
   "framework": null,
   "git": {

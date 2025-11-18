@@ -48,3 +48,4 @@ payroll-ui/public/
 payroll-api/managed/
 zkml/payroll/generated/*/test_*.json
 zkml/payroll/test_kzg/test_model_input.json
+.vercel

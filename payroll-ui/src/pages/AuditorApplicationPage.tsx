@@ -19,6 +19,8 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import { usePayrollWallet } from '../contexts/PayrollWalletContext';
 import { useTheme, useThemeValues, createGlassMorphism, createPrimaryCTA } from '../theme';
+import { computeVerifierPubkey } from '../utils/verifierPubkey';
+import { saveCompany } from '../utils/CompaniesLocalState';
 import pino from 'pino';
 
 // Create logger for auditor application
@@ -38,6 +40,7 @@ interface AuditorFormData {
   licenseState: string;
   firmName: string;
   yearsExperience: string;
+  companyContractAddress: string;
 }
 
 /**
@@ -59,6 +62,7 @@ export const AuditorApplicationPage: React.FC = () => {
     licenseState: '',
     firmName: '',
     yearsExperience: '',
+    companyContractAddress: '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof AuditorFormData, string>>>({});
@@ -121,6 +125,11 @@ export const AuditorApplicationPage: React.FC = () => {
       newErrors.yearsExperience = 'Years of experience is required';
     }
 
+    // Company contract address validation
+    if (!formData.companyContractAddress.trim()) {
+      newErrors.companyContractAddress = 'Company contract address is required';
+    }
+
     // License file validation
     if (!licenseFile) {
       setError('Please upload a copy of your professional license');
@@ -164,6 +173,11 @@ export const AuditorApplicationPage: React.FC = () => {
       return;
     }
 
+    if (!walletAddress) {
+      setError('Wallet not connected');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -176,27 +190,39 @@ export const AuditorApplicationPage: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      // TODO: Call API to submit application
-      // const response = await auditorAPI.submitApplication({
-      //   ...formData,
-      //   walletAddress,
-      //   licenseFile,
-      // });
+      // Compute verifier public key using domain-separated hash
+      // This matches the contract's verifier_public_key circuit with domain separation
+      const auditorPubkey = await computeVerifierPubkey(providers.walletProvider.coinPublicKey);
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      logger.info(`Auditor public key (domain-separated hash): ${auditorPubkey}`);
 
-      // Save application ID to localStorage
+      // Save the company to localStorage so the status page can check it
+      saveCompany({
+        contractAddress: formData.companyContractAddress.trim(),
+        name: 'Applied Company', // Placeholder name
+        walletAddress: walletAddress,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Save application data to localStorage
       const applicationId = `APP-${Date.now()}`;
+
+      // Application starts in "pending" status
+      // Company admins must review and register the auditor as a trusted verifier
       localStorage.setItem('auditorApplicationId', applicationId);
       localStorage.setItem('auditorApplicationStatus', 'pending');
+      localStorage.setItem('auditorPubkey', auditorPubkey);
       localStorage.setItem('auditorApplicationData', JSON.stringify({
         ...formData,
         walletAddress,
+        auditorPubkey,
         submittedAt: new Date().toISOString(),
       }));
 
       logger.info(`Application submitted successfully: ${applicationId}`);
+      logger.info(`Auditor pubkey: ${auditorPubkey}`);
+      logger.info(`Company address: ${formData.companyContractAddress}`);
+      logger.info('Application is pending. Company admins must register this auditor as a trusted verifier.');
 
       // Navigate to status page
       navigate('/auditor/status');
@@ -255,7 +281,7 @@ export const AuditorApplicationPage: React.FC = () => {
           </Typography>
           {walletAddress && (
             <Chip
-              label={`Wallet: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+              label={<Typography>{`Wallet: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}</Typography>}
               color="success"
               variant="outlined"
             />
@@ -290,6 +316,31 @@ export const AuditorApplicationPage: React.FC = () => {
                 </Button>
               </Alert>
             )}
+
+            {/* Company Information */}
+            <Box>
+              <Typography variant="h6" fontWeight="600" mb={3}>
+                Company Information
+              </Typography>
+              <Stack spacing={3}>
+                <TextField
+                  fullWidth
+                  label="Company Contract Address"
+                  value={formData.companyContractAddress}
+                  onChange={handleChange('companyContractAddress')}
+                  error={!!errors.companyContractAddress}
+                  helperText={errors.companyContractAddress || 'Paste the company\'s payroll contract address from their dashboard URL'}
+                  required
+                  placeholder="0x..."
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      fontFamily: 'monospace',
+                      fontSize: '0.9rem',
+                    },
+                  }}
+                />
+              </Stack>
+            </Box>
 
             {/* Personal Information */}
             <Box>
@@ -442,7 +493,7 @@ export const AuditorApplicationPage: React.FC = () => {
                 onClick={() => navigate('/auditor')}
                 disabled={isSubmitting}
               >
-                Cancel
+                <Typography>Cancel</Typography>
               </Button>
               <Button
                 variant="contained"

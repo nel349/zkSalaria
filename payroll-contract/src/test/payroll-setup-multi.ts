@@ -733,10 +733,19 @@ export class PayrollMultiPartyTestSetup {
     console.log(`🔐 Registering trusted verifier: ${verifierPubkey}`);
 
     const verifierPubkeyBytes = hexToBytes32(verifierPubkey);
+    const verifierName = new Uint8Array(64); // Empty name for test
+    const verifierLicense = new Uint8Array(64); // Empty license for test
+    const verifierType = 1n; // Type 1: ZKML verifier
 
     this.executeAsParticipant(
       this.companyId,
-      (ctx) => this.contract.impureCircuits.register_trusted_verifier(ctx, verifierPubkeyBytes)
+      (ctx) => this.contract.impureCircuits.register_trusted_verifier(
+        ctx,
+        verifierPubkeyBytes,
+        verifierName,
+        verifierLicense,
+        verifierType
+      )
     );
 
     return this.getLedgerState();

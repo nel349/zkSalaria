@@ -109,7 +109,7 @@ export const ProofAttemptCard: React.FC<ProofAttemptCardProps> = ({
             </Box>
           </Stack>
           <Chip
-            label={success ? 'SUCCESS' : 'FAILED'}
+            label={<Typography>{success ? 'SUCCESS' : 'FAILED'}</Typography>}
             color={success ? 'success' : 'error'}
             sx={{ fontWeight: theme.typography.fontWeight.semibold }}
           />
